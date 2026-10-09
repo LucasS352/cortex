@@ -1,0 +1,241 @@
+import copy
+import json
+import tempfile
+import time
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+import httpx
+from fastapi.testclient import TestClient
+import movidesk_webhook as receiver
+import movidesk_note_worker as worker
+
+
+def ticket():
+    return {'id': 42, 'type': 2, 'subject': 'Erro na etiqueta', 'baseStatus': 'New',
+            'clients': [{'id': 'client', 'organization': {'id': '464', 'businessName': 'Empresa teste'}}],
+            'actions': [{'id': 1, 'type': 2, 'description': 'Não consigo emitir a etiqueta.',
+                         'createdDate': '2026-10-09T10:00:00Z',
+                         'createdBy': {'id': 'client', 'profileType': 2}}]}
+
+
+class FakeApi:
+    def __init__(self):
+        self.data = ticket()
+        self.writes = []
+        self.timeout_after_write = False
+
+    def ticket(self, _id):
+        return copy.deepcopy(self.data)
+
+    def internal_note(self, tid, content):
+        self.writes.append((tid, content))
+        self.data['actions'].append({'id': len(self.data['actions']) + 1, 'type': 1,
+                                    'description': content, 'createdDate': '2026-10-09T11:00:00Z',
+                                    'createdBy': {'id': 'bot', 'profileType': 1}})
+        if self.timeout_after_write:
+            raise httpx.ReadTimeout('timeout')
+        return SimpleNamespace(status_code=200)
+
+
+class WorkerTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db_patch = patch.object(receiver, 'WEBHOOK_DB', Path(self.tmp.name) / 'queue.sqlite3')
+        self.secret_patch = patch.object(receiver, 'MOVIDESK_WEBHOOK_SECRET', 'x' * 40)
+        self.db_patch.start()
+        self.secret_patch.start()
+        self.client = TestClient(receiver.app)
+        self.settings = worker.Settings('internal_note', 'bot', frozenset({'464'}))
+        self.api = FakeApi()
+        self.generate = Mock(return_value={'reply': 'Confira o campo com o técnico antes de alterar.', 'sources': []})
+
+    def tearDown(self):
+        self.db_patch.stop()
+        self.secret_patch.stop()
+        self.tmp.cleanup()
+
+    def enqueue(self, **fields):
+        result = self.client.post('/webhooks/movidesk/tickets/' + 'x' * 40, json={'Id': 42, **fields})
+        self.assertEqual(result.status_code, 200)
+
+    def retry_now(self):
+        with receiver._connect() as db:
+            db.execute('UPDATE webhook_events SET available_at=0')
+
+    def states(self):
+        return [r['state'] for r in receiver.receipt_summary()['recent']]
+
+    def test_webhook_to_private_note_deduplicates_different_events_and_bot_loop(self):
+        self.enqueue(Actions=[{'Id': 1}])
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(self.states(), ['completed'])
+        self.enqueue(Actions=[{'Id': 2}], Status='Em atendimento')
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(len(self.api.writes), 1)
+        self.generate.assert_called_once()
+        self.assertIn(worker.PREFIX, self.api.writes[0][1])
+
+    def test_runtime_control_requires_selected_company_active_pilot_and_private_toggle(self):
+        state_file = Path(self.tmp.name) / 'agent-state.json'
+        base = worker.Settings('internal_note', 'bot', runtime_control=True)
+        state_file.write_text(json.dumps({'pilot_organization_ids': ['464'], 'pilot_paused': False,
+                                          'auto_internal_note': True}), encoding='utf-8')
+        active = worker.effective_settings(base, state_file)
+        self.assertEqual(active.mode, 'internal_note')
+        self.assertEqual(active.organizations, frozenset({'464'}))
+        for update in ({'pilot_organization_ids': [], 'pilot_paused': False, 'auto_internal_note': True},
+                       {'pilot_organization_ids': ['464'], 'pilot_paused': True, 'auto_internal_note': True},
+                       {'pilot_organization_ids': ['464'], 'pilot_paused': False, 'auto_internal_note': False}):
+            state_file.write_text(json.dumps(update), encoding='utf-8')
+            guarded = worker.effective_settings(base, state_file)
+            self.assertEqual(guarded.mode, 'dry_run')
+
+    def test_missing_or_invalid_runtime_control_never_publishes(self):
+        base = worker.Settings('internal_note', 'bot', runtime_control=True)
+        missing = worker.effective_settings(base, Path(self.tmp.name) / 'missing.json')
+        self.assertEqual(missing.mode, 'dry_run')
+        self.assertFalse(missing.organizations)
+        bad = Path(self.tmp.name) / 'bad.json'
+        bad.write_text('{invalid', encoding='utf-8')
+        self.assertEqual(worker.effective_settings(base, bad).mode, 'dry_run')
+
+    def test_runtime_company_selection_cannot_be_bypassed_by_environment_ticket(self):
+        state_file = Path(self.tmp.name) / 'agent-state.json'
+        state_file.write_text(json.dumps({'pilot_organization_ids': ['464'], 'pilot_paused': False,
+                                          'auto_internal_note': True}), encoding='utf-8')
+        base = worker.Settings('internal_note', 'bot', frozenset({'other'}), frozenset({'42'}),
+                               runtime_control=True)
+        controlled = worker.effective_settings(base, state_file)
+        self.assertEqual(controlled.organizations, frozenset({'464'}))
+        self.assertFalse(controlled.tickets)
+
+    def test_new_customer_message_gets_a_new_note(self):
+        self.enqueue(Actions=[{'Id': 1}])
+        worker.run_once(self.settings, self.api, self.generate)
+        self.api.data['actions'].append({'id': 3, 'type': 2, 'description': 'Continua após conferir.',
+                                        'createdDate': '2026-10-09T12:00:00Z',
+                                        'createdBy': {'id': 'client', 'profileType': 2}})
+        self.enqueue(Actions=[{'Id': 3}])
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(len(self.api.writes), 2)
+
+    def test_dry_run_keeps_reviewable_note_without_patch(self):
+        self.enqueue()
+        settings = worker.Settings('dry_run', 'bot', frozenset({'464'}))
+        worker.run_once(settings, self.api, self.generate)
+        self.assertEqual(self.api.writes, [])
+        self.assertEqual(self.states(), ['preview'])
+        self.assertIn('Confira o campo', receiver.receipt_summary()['notes'][0]['text'])
+
+    def test_unknown_company_is_not_in_pilot(self):
+        self.api.data['clients'][0]['organization']['id'] = '999'
+        self.enqueue()
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_not_called()
+        self.assertEqual(self.states(), ['skipped'])
+
+    def test_recent_agent_reply_prevents_automated_followup(self):
+        self.api.data['actions'].append({'id': 2, 'type': 2, 'description': 'Já estou verificando.',
+                                        'createdDate': '2026-10-09T12:00:00Z',
+                                        'createdBy': {'id': 'agent', 'profileType': 1}})
+        self.enqueue()
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_not_called()
+
+    def test_customer_reply_during_generation_does_not_receive_old_draft(self):
+        def generate(*_):
+            self.api.data['actions'][0]['description'] = 'Na verdade é outro erro.'
+            return {'reply': 'Sugestão antiga'}
+        self.enqueue()
+        worker.run_once(self.settings, self.api, generate)
+        self.assertEqual(self.api.writes, [])
+        self.assertEqual(self.states(), ['skipped'])
+
+    def test_timeout_after_write_reconciles_without_second_patch(self):
+        self.enqueue()
+        self.api.timeout_after_write = True
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(self.states(), ['retry'])
+        self.retry_now()
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(self.states(), ['completed'])
+        self.assertEqual(len(self.api.writes), 1)
+
+    def test_uncertain_write_never_repeats_without_confirmation(self):
+        self.enqueue()
+        self.api.internal_note = Mock(side_effect=httpx.ReadTimeout('timeout'))
+        worker.run_once(self.settings, self.api, self.generate)
+        for _ in range(4):
+            self.retry_now()
+            worker.run_once(self.settings, self.api, self.generate)
+        self.api.internal_note.assert_called_once()
+        self.assertEqual(self.states(), ['needs_review'])
+
+    def test_webhook_ahead_of_api_retries_instead_of_using_old_conversation(self):
+        self.enqueue(Actions=[{'Id': 20}])
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_not_called()
+        self.assertEqual(self.states(), ['retry'])
+
+    def test_edited_action_waits_for_updated_text_even_when_id_is_unchanged(self):
+        self.enqueue(Actions=[{'Id': 1, 'Description': 'Texto editado pelo cliente'}])
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_not_called()
+        self.assertEqual(self.states(), ['retry'])
+
+    def test_model_failure_does_not_publish_error_as_a_note(self):
+        self.enqueue()
+        self.generate.side_effect = worker.RetryJob('Gemini indisponível')
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(self.api.writes, [])
+        self.assertEqual(self.states(), ['retry'])
+
+    def test_claim_serializes_workers_and_recovers_expired_lease(self):
+        self.enqueue(Actions=[{'Id': 1}])
+        self.enqueue(Actions=[{'Id': 2}])
+        first = worker.claim(self.settings)
+        self.assertIsNotNone(first)
+        self.assertIsNone(worker.claim(self.settings))
+        with receiver._connect() as db:
+            db.execute('UPDATE webhook_events SET lease_until=0')
+        self.assertIsNotNone(worker.claim(self.settings))
+
+    def test_http_contract_only_appends_internal_action(self):
+        api = worker.Api(self.settings)
+        try:
+            api.request = Mock(return_value=SimpleNamespace(status_code=200))
+            api.internal_note(42, '<p>Teste</p>')
+            call = api.request.call_args
+            self.assertEqual(call.args, ('PATCH', '/tickets'))
+            self.assertEqual(call.kwargs['json'], {'actions': [{'type': 1, 'description': '<p>Teste</p>',
+                                                              'createdBy': {'id': 'bot'}}]})
+        finally:
+            api.client.close()
+
+    def test_render_does_not_execute_generated_html(self):
+        result = worker.render_note({'reply': '<script>alert(1)</script>'}, 'marker')
+        self.assertNotIn('<script>', result)
+        self.assertIn('&lt;script&gt;', result)
+
+    def test_render_appends_company_similar_tickets_with_status(self):
+        result = worker.render_note({'reply': 'Confira o cadastro.', 'similar_tickets': [
+            {'ticket': 131549, 'title': 'Erro de etiqueta', 'status': 'Resolvido', 'active': False},
+            {'ticket': 140000, 'title': 'Falha recorrente', 'status': 'Em atendimento', 'active': True},
+        ]}, 'marker')
+        self.assertIn('Tickets semelhantes:', result)
+        self.assertIn('/131549', result)
+        self.assertIn('#140000 — Em atendimento', result)
+
+    def test_refinery_does_not_learn_from_ai_suggestions(self):
+        from refine_tickets_v2 import process_ticket_v2
+        data = ticket()
+        data['actions'].append({'id': 2, 'type': 1, 'description': 'Procedimento não executado ' + worker.PREFIX + '123'})
+        record = process_ticket_v2('raw', 'tenant', 42, data)
+        self.assertNotIn('Procedimento não executado', record['solution_statement'])
+
+
+if __name__ == '__main__':
+    unittest.main()

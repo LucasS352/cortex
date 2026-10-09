@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal do Cliente — Alternativa Sistemas (Movidesk)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .tab-active { border-bottom: 3px solid #0078d4; color: #0078d4; font-weight: 700; background-color: #ffffff; }
+        #editor-description:empty:before {
+            content: "Explique o que aconteceu, qual operação estava realizando, e cole os prints com Ctrl+V diretamente aqui no meio do texto...";
+            color: #94a3b8;
+            pointer-events: none;
+        }
+        .inline-print-box {
+            user-select: none;
+        }
+        .rich-content img, #editor-description img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.375rem;
+        }
+    </style>
+</head>
+<body class="bg-[#f0f2f5] text-slate-800 min-h-screen flex flex-col selection:bg-blue-100">
+
+    <!-- Top Header (Portal do Cliente) -->
+    <header class="bg-[#0078d4] text-white px-5 py-2.5 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 font-bold tracking-wide text-lg">
+                <i data-lucide="headphones" class="w-5 h-5"></i>
+                <span>movidesk</span>
+            </div>
+            <span class="text-xs bg-white/20 px-2.5 py-0.5 rounded text-white/95 font-medium">Portal do Cliente • Alternativa Sistemas</span>
+        </div>
+        <div class="flex items-center gap-4 text-xs">
+            <div class="flex items-center gap-2 bg-white/10 px-3 py-1 rounded">
+                <i data-lucide="building-2" class="w-3.5 h-3.5 text-blue-200"></i>
+                <span id="header-company-display" class="font-bold">AR15 Sport</span>
+            </div>
+            <div class="flex items-center gap-2 border-l border-white/25 pl-3">
+                <div class="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-bold text-white text-xs">CL</div>
+                <span id="header-user-display">Lucas Souza (Cliente)</span>
+            </div>
+            <a href="/tecnico" target="_blank" class="bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded text-[11px] font-semibold text-blue-100 flex items-center gap-1 transition" title="Abrir mesa do técnico em nova aba para demonstração">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                <span>Visão do Técnico</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- Navigation Bar / Tabs -->
+    <div class="bg-[#e4e7eb] border-b border-[#cbd5e1] px-6 pt-2 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <button onclick="switchTab('new-ticket')" id="tab-btn-new" class="tab-active text-xs px-5 py-2.5 rounded-t font-semibold flex items-center gap-2 border-t border-x border-[#cbd5e1] transition">
+                <i data-lucide="plus-circle" class="w-4 h-4 text-[#0078d4]"></i>
+                <span>Abrir Novo Chamado</span>
+            </button>
+            <button onclick="switchTab('my-tickets')" id="tab-btn-my" class="text-slate-600 bg-[#d5d9df] hover:bg-white/60 text-xs px-5 py-2.5 rounded-t font-semibold flex items-center gap-2 border-t border-x border-[#cbd5e1] transition">
+                <i data-lucide="inbox" class="w-4 h-4 text-slate-500"></i>
+                <span>Meus Chamados</span>
+                <span id="my-tickets-badge" class="ml-1 bg-[#0078d4] text-white px-1.5 py-0.2 rounded-full text-[10px]">0</span>
+            </button>
+        </div>
+        <div class="text-[11px] text-slate-500 pb-1 flex items-center gap-1.5">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i>
+            <span>Ambiente Seguro do Cliente • Visualização restrita aos seus chamados</span>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-[1200px] w-full mx-auto p-6">
+
+        <!-- ========================================== -->
+        <!-- ABA 1: FORMULÁRIO DE ABERTURA DE CHAMADO -->
+        <!-- ========================================== -->
+        <section id="view-new-ticket" class="space-y-6">
+            
+            <div class="bg-white border border-[#cbd5e1] rounded-lg shadow-sm overflow-hidden">
+                
+                <div class="bg-gradient-to-r from-blue-50 to-white px-6 py-4 border-b border-[#cbd5e1] flex items-center justify-between">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="file-plus-2" class="w-5 h-5 text-[#0078d4]"></i>
+                            <span>Nova Solicitação de Atendimento</span>
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Preencha os dados do chamado. Nossa equipe técnica analisará seu caso com suporte da I.A. DeskCortex.</p>
+                    </div>
+                    <span class="text-xs font-semibold px-2.5 py-1 bg-blue-100 text-[#0078d4] rounded-full border border-blue-200 flex items-center gap-1">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                        Triagem Automática Ativa
+                    </span>
+                </div>
+
+                <form id="client-ticket-form" onsubmit="handleTicketSubmit(event)" class="p-6 space-y-6">
+                    
+                    <!-- Bloco 1: Solicitante (Preenchido com dados do Master) -->
+                    <div class="border-b border-slate-200 pb-5">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
+                            <i data-lucide="user-check" class="w-4 h-4 text-[#0078d4]"></i>
+                            <span>Identificação do Solicitante</span>
+                        </h3>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 text-xs">
+                            
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">
+                                    Empresa / Organização <span class="text-rose-500">*</span>
+                                </label>
+                                <input type="text" id="inp-company" value="AR15 Sport" required oninput="updateHeaderDisplay()" class="w-full border border-slate-300 rounded px-3 py-2 bg-slate-50 font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-[#0078d4]">
+                                <p class="text-[10px] text-slate-400 mt-1">Identificação no ERP Master</p>
+                            </div>
+
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">
+                                    Hospedado: <span class="text-rose-500">*</span>
+                                </label>
+                                <select id="inp-hosting" class="w-full border border-slate-300 rounded px-2.5 py-2 bg-slate-50 font-semibold text-[#0078d4] focus:bg-white focus:outline-none focus:border-[#0078d4]">
+                                    <option value="Vault" selected>Vault</option>
+                                    <option value="Dalla">Dalla</option>
+                                    <option value="NVirtual">NVirtual</option>
+                                    <option value="Localhost">Localhost (Servidor Próprio)</option>
+                                </select>
+                                <p class="text-[10px] text-slate-400 mt-1">Ambiente / Datacenter</p>
+                            </div>
+
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">
+                                    Nome do Solicitante <span class="text-rose-500">*</span>
+                                </label>
+                                <input type="text" id="inp-user" value="Lucas Souza" required oninput="updateHeaderDisplay()" class="w-full border border-slate-300 rounded px-3 py-2 bg-slate-50 font-semibold text-slate-800 focus:bg-white focus:outline-none focus:border-[#0078d4]">
+                                <p class="text-[10px] text-slate-400 mt-1">Usuário logado no sistema</p>
+                            </div>
+
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">
+                                    E-mail de Contato <span class="text-slate-400 text-[10px]">(opcional)</span>
+                                </label>
+                                <input type="email" id="inp-email" value="lucas@ar15sport.com.br" placeholder="seuemail@empresa.com.br" class="w-full border border-slate-300 rounded px-3 py-2 bg-white text-slate-800 focus:outline-none focus:border-[#0078d4]">
+                                <p class="text-[10px] text-slate-400 mt-1">Para receber alerta de resposta</p>
+                            </div>
+
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">
+                                    Telefone / WhatsApp <span class="text-slate-400 text-[10px]">(opcional)</span>
+                                </label>
+                                <input type="tel" id="inp-phone" value="(11) 98765-4321" placeholder="(11) 90000-0000" class="w-full border border-slate-300 rounded px-3 py-2 bg-white text-slate-800 focus:outline-none focus:border-[#0078d4]">
+                                <p class="text-[10px] text-slate-400 mt-1">Para contato rápido do técnico</p>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- Bloco 2: A Solicitação -->
+                    <div class="space-y-4">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                            <i data-lucide="message-square" class="w-4 h-4 text-[#0078d4]"></i>
+                            <span>Dados do Chamado</span>
+                        </h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                            <div class="md:col-span-2">
+                                <label class="block font-semibold text-slate-700 mb-1">
+                                    Assunto da Solicitação <span class="text-rose-500">*</span>
+                                </label>
+                                <input type="text" id="inp-subject" placeholder="Ex: Rejeição 481 ao emitir NF-e ou Erro no Sincronizador Wehub" required class="w-full border border-slate-300 rounded px-3 py-2 bg-white text-slate-800 text-xs font-medium focus:outline-none focus:border-[#0078d4]">
+                            </div>
+
+                            <div>
+                                <label class="block font-semibold text-slate-700 mb-1">
+                                    Urgência
+                                </label>
+                                <select id="inp-urgency" class="w-full border border-slate-300 rounded px-3 py-2 bg-white text-slate-800 text-xs focus:outline-none focus:border-[#0078d4]">
+                                    <option value="Normal">Normal</option>
+                                    <option value="Alta">Alta</option>
+                                    <option value="Crítica">Crítica / Urgente</option>
+                                    <option value="Baixa">Baixa</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Exemplos rápidos para preenchimento de teste -->
+                        <div class="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-slate-500">
+                            <span class="font-semibold">Exemplos rápidos:</span>
+                            <button type="button" onclick="fillExample('481')" class="bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-[#0078d4] border border-slate-200 px-2.5 py-1 rounded transition">
+                                Rejeição 481 (CRT SEFAZ)
+                            </button>
+                            <button type="button" onclick="fillExample('10060')" class="bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-[#0078d4] border border-slate-200 px-2.5 py-1 rounded transition">
+                                Erro 10060 Firebird
+                            </button>
+                            <button type="button" onclick="fillExample('sinc')" class="bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-[#0078d4] border border-slate-200 px-2.5 py-1 rounded transition">
+                                Sincronizador Pedidos Nuvemshop
+                            </button>
+                        </div>
+
+                        <!-- Descrição / Ação do Cliente com Editor WYSIWYG e Prints Inline -->
+                        <div class="text-xs space-y-1.5">
+                            <div class="flex items-center justify-between">
+                                <label class="font-semibold text-slate-700">
+                                    O que está acontecendo? (Descreva sua solicitação com o máximo de detalhes) <span class="text-rose-500">*</span>
+                                </label>
+                                <span class="text-[11px] text-[#0078d4] font-medium flex items-center gap-1">
+                                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                                    <span>Cole prints com <b>Ctrl + V</b> diretamente no meio do texto</span>
+                                </span>
+                            </div>
+
+                            <!-- Editor Container com Barra de Ferramentas -->
+                            <div class="border border-slate-300 rounded-lg overflow-hidden focus-within:border-[#0078d4] focus-within:ring-1 focus-within:ring-[#0078d4] transition bg-white shadow-xs">
+                                <!-- Toolbar -->
+                                <div class="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-slate-600 select-none">
+                                    <div class="flex items-center gap-1">
+                                        <button type="button" onclick="formatDoc('bold')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700 font-bold" title="Negrito (Ctrl+B)">
+                                            <i data-lucide="bold" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <button type="button" onclick="formatDoc('italic')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Itálico (Ctrl+I)">
+                                            <i data-lucide="italic" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <button type="button" onclick="formatDoc('underline')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Sublinhado (Ctrl+U)">
+                                            <i data-lucide="underline" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+                                        <button type="button" onclick="formatDoc('insertUnorderedList')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Lista com marcadores">
+                                            <i data-lucide="list" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <button type="button" onclick="formatDoc('insertOrderedList')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Lista numerada">
+                                            <i data-lucide="list-ordered" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+                                        <button type="button" onclick="triggerInlineImageUpload()" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#0078d4] border border-blue-200 rounded font-semibold flex items-center gap-1 text-[11px] transition shadow-2xs" title="Inserir Print / Imagem na posição do cursor">
+                                            <i data-lucide="image-plus" class="w-3.5 h-3.5"></i>
+                                            <span>Inserir Print</span>
+                                        </button>
+                                        <input type="file" id="inline-image-file-inp" accept="image/*" class="hidden" onchange="handleInlineImageUpload(event)">
+                                        <button type="button" onclick="clearEditor()" class="p-1.5 hover:bg-slate-200 rounded text-slate-500 hover:text-rose-600" title="Limpar editor">
+                                            <i data-lucide="eraser" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                    </div>
+                                    <div class="text-[10px] text-slate-500 hidden sm:flex items-center gap-1">
+                                        <kbd class="px-1.5 py-0.5 bg-slate-200 border border-slate-300 rounded font-mono text-[9px] text-slate-700">Ctrl+V</kbd>
+                                        <span>cola prints direto onde o cursor estiver</span>
+                                    </div>
+                                </div>
+
+                                <!-- Área Editável WYSIWYG -->
+                                <div id="editor-description" contenteditable="true" class="p-3.5 min-h-[160px] max-h-[480px] overflow-y-auto text-xs text-slate-800 focus:outline-none leading-relaxed" style="font-family: inherit;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Área de Anexos: Prints, Imagens e GIFs com suporte a Ctrl+V -->
+                        <div class="text-xs space-y-2">
+                            <label class="block font-semibold text-slate-700">
+                                Anexar Prints, Fotos ou GIFs da Tela
+                                <span class="text-[11px] text-blue-600 font-normal ml-2">💡 Dica: Você pode dar Print Screen no Windows e pressionar <b>Ctrl + V</b> diretamente aqui!</span>
+                            </label>
+
+                            <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-300 hover:border-[#0078d4] rounded-lg p-5 text-center cursor-pointer bg-slate-50 hover:bg-blue-50/40 transition">
+                                <i data-lucide="image" class="w-8 h-8 mx-auto text-slate-400 mb-2"></i>
+                                <p class="font-semibold text-slate-700">Clique para selecionar fotos/prints ou arraste os arquivos aqui</p>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Suporta PNG, JPG, JPEG e GIFs (Max 10MB)</p>
+                                <input type="file" id="file-input" multiple accept="image/*" class="hidden" onchange="handleFileSelect(event)">
+                            </div>
+
+                            <!-- Pré-visualização dos Anexos -->
+                            <div id="attachments-preview" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 pt-2"></div>
+                        </div>
+
+                    </div>
+
+                    <!-- Botão de Envio -->
+                    <div class="pt-4 border-t border-slate-200 flex items-center justify-between">
+                        <div class="text-[11px] text-slate-500">
+                            Ao enviar, o chamado cairá imediatamente na <b>Triagem dos Técnicos</b> com apoio da I.A.
+                        </div>
+                        <button type="submit" id="btn-submit-ticket" class="bg-[#0078d4] hover:bg-[#106ebe] text-white px-6 py-2.5 rounded-md font-bold text-xs flex items-center gap-2 shadow-sm transition">
+                            <i data-lucide="send" class="w-4 h-4"></i>
+                            <span>Abrir Chamado</span>
+                        </button>
+                    </div>
+
+                </form>
+
+            </div>
+
+        </section>
+
+        <!-- ========================================== -->
+        <!-- ABA 2: MEUS CHAMADOS (ÁREA DO CLIENTE) -->
+        <!-- ========================================== -->
+        <section id="view-my-tickets" class="hidden space-y-6">
+            
+            <div class="bg-white border border-[#cbd5e1] rounded-lg shadow-sm overflow-hidden">
+                
+                <div class="p-4 bg-slate-50 border-b border-[#cbd5e1] flex items-center justify-between">
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <i data-lucide="inbox" class="w-4 h-4 text-[#0078d4]"></i>
+                            <span>Chamados de <span id="client-company-title">AR15 Sport</span></span>
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Acompanhe as respostas e o status das suas solicitações abertas.</p>
+                    </div>
+                    <button onclick="loadMyTickets()" class="text-xs text-[#0078d4] hover:text-blue-800 font-semibold flex items-center gap-1 border border-blue-200 bg-blue-50 px-3 py-1.5 rounded transition">
+                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        <span>Atualizar</span>
+                    </button>
+                </div>
+
+                <!-- Tabela de Chamados do Cliente -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 font-semibold border-b border-slate-200">
+                                <th class="py-2.5 px-4">Protocolo</th>
+                                <th class="py-2.5 px-4">Assunto</th>
+                                <th class="py-2.5 px-4">Abertura</th>
+                                <th class="py-2.5 px-4">Status</th>
+                                <th class="py-2.5 px-4">Responsável</th>
+                                <th class="py-2.5 px-4 text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="my-tickets-tbody" class="divide-y divide-slate-200">
+                            <!-- Inserido dinamicamente via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="no-tickets-msg" class="hidden p-8 text-center text-slate-400 text-xs">
+                    <i data-lucide="ticket" class="w-8 h-8 mx-auto text-slate-300 mb-2"></i>
+                    <p>Nenhum chamado encontrado para este solicitante.</p>
+                </div>
+
+            </div>
+
+            <!-- Modal / Visualizador de Detalhes do Chamado do Cliente -->
+            <div id="ticket-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+                    <div class="bg-[#0078d4] text-white px-5 py-3 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="ticket" class="w-4 h-4"></i>
+                            <span id="modal-ticket-id" class="font-bold">#130064</span>
+                            <span class="text-white/60">•</span>
+                            <span id="modal-ticket-subject" class="font-medium truncate max-w-md">Assunto do chamado</span>
+                        </div>
+                        <button onclick="closeModal()" class="text-white/80 hover:text-white">
+                            <i data-lucide="x" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+
+                    <div class="p-5 flex-1 overflow-y-auto space-y-4 text-xs custom-scroll">
+                        
+                        <!-- Status e Detalhes -->
+                        <div class="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded">
+                            <div>
+                                <span class="text-slate-500">Status Atual:</span>
+                                <span id="modal-ticket-status" class="ml-1 font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">Em atendimento</span>
+                            </div>
+                            <div id="modal-ticket-dates" class="text-slate-500">
+                                Aberto em: 10/09/2026 14:00
+                            </div>
+                        </div>
+
+                        <!-- Relato do Cliente -->
+                        <div class="border border-slate-200 rounded-lg p-3.5">
+                            <h4 class="font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+                                <i data-lucide="user" class="w-3.5 h-3.5 text-slate-500"></i>
+                                <span>Sua Solicitação Original:</span>
+                            </h4>
+                            <p id="modal-ticket-description" class="text-slate-800 whitespace-pre-wrap bg-slate-50 p-2.5 rounded border border-slate-200">
+                                Descrição...
+                            </p>
+                            <div id="modal-attachments-box" class="mt-2 space-y-1">
+                                <span class="font-semibold text-slate-600 text-[11px]">Prints Anexados:</span>
+                                <div id="modal-attachments-grid" class="flex flex-wrap gap-2 pt-1"></div>
+                            </div>
+                        </div>
+
+                        <!-- Linha do Tempo de Respostas da Equipe Técnica -->
+                        <div class="space-y-3">
+                            <h4 class="font-bold text-slate-700 flex items-center gap-1.5">
+                                <i data-lucide="message-square" class="w-3.5 h-3.5 text-[#0078d4]"></i>
+                                <span>Respostas do Suporte Técnico Alternativa Sistemas:</span>
+                            </h4>
+                            
+                            <div id="modal-responses-list" class="space-y-3">
+                                <!-- Preenchido dinamicamente -->
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="p-3 bg-slate-100 border-t border-slate-200 flex justify-end">
+                        <button onclick="closeModal()" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded font-semibold text-xs transition">
+                            Fechar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Toast de Notificação -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-lg text-xs font-semibold flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toast-message">Notificação</span>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        let attachedFiles = [];
+
+        // Atualizar headers dinamicamente
+        function updateHeaderDisplay() {
+            const comp = document.getElementById('inp-company').value.trim() || 'AR15 Sport';
+            const user = document.getElementById('inp-user').value.trim() || 'Lucas Souza';
+            document.getElementById('header-company-display').innerText = comp;
+            document.getElementById('header-user-display').innerText = user + ' (Cliente)';
+            document.getElementById('client-company-title').innerText = comp;
+        }
+
+        // Troca de abas
+        function switchTab(tabId) {
+            const btnNew = document.getElementById('tab-btn-new');
+            const btnMy = document.getElementById('tab-btn-my');
+            const viewNew = document.getElementById('view-new-ticket');
+            const viewMy = document.getElementById('view-my-tickets');
+
+            if (tabId === 'new-ticket') {
+                btnNew.className = 'tab-active text-xs px-5 py-2.5 rounded-t font-semibold flex items-center gap-2 border-t border-x border-[#cbd5e1] transition';
+                btnMy.className = 'text-slate-600 bg-[#d5d9df] hover:bg-white/60 text-xs px-5 py-2.5 rounded-t font-semibold flex items-center gap-2 border-t border-x border-[#cbd5e1] transition';
+                viewNew.classList.remove('hidden');
+                viewMy.classList.add('hidden');
+            } else {
+                btnMy.className = 'tab-active text-xs px-5 py-2.5 rounded-t font-semibold flex items-center gap-2 border-t border-x border-[#cbd5e1] transition';
+                btnNew.className = 'text-slate-600 bg-[#d5d9df] hover:bg-white/60 text-xs px-5 py-2.5 rounded-t font-semibold flex items-center gap-2 border-t border-x border-[#cbd5e1] transition';
+                viewMy.classList.remove('hidden');
+                viewNew.classList.add('hidden');
+                loadMyTickets();
+            }
+            lucide.createIcons();
+        }
+
+        // ============================================================
+        // EDITOR WYSIWYG & SUPORTE A PRINTS INLINE (CTRL+V NO TEXTO)
+        // ============================================================
+
+        function formatDoc(cmd, val = null) {
+            document.execCommand(cmd, false, val);
+            document.getElementById('editor-description').focus();
+        }
+
+        function clearEditor() {
+            if (confirm('Deseja limpar todo o texto e os prints colados no editor?')) {
+                document.getElementById('editor-description').innerHTML = '';
+            }
+        }
+
+        function triggerInlineImageUpload() {
+            document.getElementById('inline-image-file-inp').click();
+        }
+
+        function handleInlineImageUpload(e) {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                Array.from(files).forEach(file => {
+                    if (!file.type.startsWith('image/')) return;
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        insertInlineImage(evt.target.result, file.name);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+            e.target.value = '';
+        }
+
+        // Inserção da imagem inline na exata posição do cursor
+        function insertInlineImage(dataUrl, name) {
+            const editor = document.getElementById('editor-description');
+            editor.focus();
+
+            const container = document.createElement('div');
+            container.className = 'inline-print-box my-3 p-2 bg-slate-50 border border-slate-200 rounded-lg inline-block max-w-full relative shadow-xs text-left select-none';
+            container.contentEditable = 'false';
+
+            const header = document.createElement('div');
+            header.className = 'flex items-center justify-between pb-1 px-1 text-[10px] text-slate-500 border-b border-slate-200 mb-1.5 gap-4';
+            header.innerHTML = `
+                <span class="font-semibold text-slate-700 flex items-center gap-1">
+                    <i data-lucide="image" class="w-3.5 h-3.5 text-[#0078d4]"></i>
+                    ${name || 'Print da Tela'}
+                </span>
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] text-slate-400">Clique para ampliar</span>
+                    <button type="button" onclick="this.closest('.inline-print-box').remove()" class="text-rose-500 hover:text-rose-700 font-bold p-0.5" title="Remover este print">✕</button>
+                </div>
+            `;
+
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.className = 'max-h-80 max-w-full rounded border border-slate-200 cursor-zoom-in hover:brightness-95 transition shadow-2xs';
+            img.title = 'Clique para ampliar o print';
+            img.onclick = () => openImageZoom(dataUrl);
+
+            container.appendChild(header);
+            container.appendChild(img);
+
+            const p = document.createElement('p');
+            p.innerHTML = '<br>';
+
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                if (editor.contains(range.commonAncestorContainer)) {
+                    range.deleteContents();
+                    range.insertNode(p);
+                    range.insertNode(container);
+
+                    const newRange = document.createRange();
+                    newRange.setStart(p, 0);
+                    newRange.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(newRange);
+                } else {
+                    editor.appendChild(container);
+                    editor.appendChild(p);
+                }
+            } else {
+                editor.appendChild(container);
+                editor.appendChild(p);
+            }
+
+            // Sincronizar na lista de anexos
+            addAttachment({
+                name: name || `print_${Date.now()}.png`,
+                data: dataUrl,
+                type: 'image/png'
+            });
+
+            lucide.createIcons();
+            showToast('Print colado com sucesso! Continue digitando seu relato logo abaixo.');
+        }
+
+        // Listener de Colagem (Paste) do Editor
+        const editorDesc = document.getElementById('editor-description');
+        editorDesc.addEventListener('paste', function(e) {
+            const items = (e.clipboardData || window.clipboardData)?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    const blob = items[i].getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        insertInlineImage(evt.target.result, `print_${Date.now()}.png`);
+                    };
+                    reader.readAsDataURL(blob);
+                    return;
+                }
+            }
+        });
+
+        // Suporte a arrastar imagens para o editor
+        editorDesc.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            editorDesc.classList.add('ring-2', 'ring-[#0078d4]', 'bg-blue-50/20');
+        });
+        editorDesc.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            editorDesc.classList.remove('ring-2', 'ring-[#0078d4]', 'bg-blue-50/20');
+        });
+        editorDesc.addEventListener('drop', (e) => {
+            e.preventDefault();
+            editorDesc.classList.remove('ring-2', 'ring-[#0078d4]', 'bg-blue-50/20');
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0) {
+                Array.from(files).forEach(file => {
+                    if (!file.type.startsWith('image/')) return;
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        insertInlineImage(evt.target.result, file.name);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+        });
+
+        // Captura global de Ctrl+V na página direcionando para o editor
+        document.addEventListener('paste', function(e) {
+            if (document.activeElement === editorDesc) return;
+            const viewNew = document.getElementById('view-new-ticket');
+            if (viewNew.classList.contains('hidden')) return;
+
+            const items = (e.clipboardData || window.clipboardData)?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    const blob = items[i].getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        insertInlineImage(evt.target.result, `print_${Date.now()}.png`);
+                    };
+                    reader.readAsDataURL(blob);
+                    break;
+                }
+            }
+        });
+
+        // Exemplos rápidos
+        function fillExample(type) {
+            const editor = document.getElementById('editor-description');
+            if (type === '481') {
+                document.getElementById('inp-subject').value = 'Rejeição 481: Código Regime Tributário do emitente divergente do cadastro na SEFAZ';
+                document.getElementById('inp-urgency').value = 'Alta';
+                editor.innerHTML = `
+<p>Bom dia, equipe de suporte!</p>
+<p><br></p>
+<p>Ao tentar emitir e autorizar a <b>NF-e 2419</b> no ERP Master (Menu <i>Vendas &gt; Faturamento</i>), o sistema retorna o erro Rejeição 481 conforme print abaixo:</p>
+<div class="inline-print-box my-3 p-2 bg-slate-900 text-white rounded-lg inline-block max-w-full relative shadow-md select-none" contenteditable="false">
+    <div class="flex items-center justify-between pb-1 text-[10px] text-slate-300 border-b border-slate-700 mb-2 gap-4">
+        <span class="font-bold text-amber-400">🚨 [ERP Master 12.4.2] Validação SEFAZ</span>
+        <span class="text-slate-400">NF-e 2419 | CRT</span>
+    </div>
+    <div class="p-2.5 bg-slate-950 rounded border border-rose-500/50 font-mono text-[11px] text-rose-300">
+        <b>Erro de Validação SEFAZ:</b><br>
+        Rejeição: Código Regime Tributário do emitente diverge do cadastro na SEFAZ.<br>
+        Nota(s) não confirmadas: <b>8-&gt;481-Rejeição: Código Regime Tributário do emitente diverge do cadastro na SEFAZ</b>
+    </div>
+</div>
+<p><br></p>
+<p>Verificamos que a empresa migrou recentemente para o Regime Normal, mas a SEFAZ ainda rejeita a emissão. Como devemos parametrizar no Master para liberar a emissão?</p>
+                `.trim();
+            } else if (type === '10060') {
+                document.getElementById('inp-subject').value = 'Erro 10060: Conexão recusada ao tentar abrir o ERP Master nos caixas';
+                document.getElementById('inp-urgency').value = 'Crítica';
+                editor.innerHTML = `
+<p>Houve uma queda de energia no escritório. Após reiniciar o servidor, nenhum terminal consegue abrir o Master, exibindo o Erro 10060 de comunicação com o Firebird no IP 192.168.0.5:</p>
+<div class="inline-print-box my-3 p-2 bg-slate-900 text-white rounded-lg inline-block max-w-full relative shadow-md select-none" contenteditable="false">
+    <div class="flex items-center justify-between pb-1 text-[10px] text-slate-300 border-b border-slate-700 mb-2 gap-4">
+        <span class="font-bold text-rose-400">🚨 [ERP Master] Erro de Comunicação Firebird</span>
+        <span class="text-slate-400">IP 192.168.0.5:3050</span>
+    </div>
+    <div class="p-2 bg-slate-950 rounded font-mono text-[11px] text-rose-300">
+        <b>Unable to complete network request to host "192.168.0.5".</b><br>
+        Failed to establish a connection. Error 10060 (Connection timed out).
+    </div>
+</div>
+<p><br></p>
+<p>O que devemos conferir no serviço do Firebird ou no firewall do servidor?</p>
+                `.trim();
+            } else if (type === 'sinc') {
+                document.getElementById('inp-subject').value = 'Sincronizador não baixa pedidos da Nuvemshop desde o início da manhã';
+                document.getElementById('inp-urgency').value = 'Normal';
+                editor.innerHTML = `
+<p>O sincronizador Nuvemshop está rodando, mas não identifica os pedidos aprovados de hoje. Constam 8 vendas pendentes no painel da Nuvemshop que não entram no ERP Master.</p>
+<p><br></p>
+<p>Segue print do log do sincronizador:</p>
+<div class="inline-print-box my-3 p-2 bg-slate-900 text-white rounded-lg inline-block max-w-full relative shadow-md select-none" contenteditable="false">
+    <div class="p-2 bg-slate-950 rounded font-mono text-[11px] text-amber-300">
+        [10/09/2026 13:42:10] [Nuvemshop] Verificando novos pedidos pendentes...<br>
+        [10/09/2026 13:42:11] [Nuvemshop] Token ativo. 0 novos pedidos mapeados na thread.
+    </div>
+</div>
+<p><br></p>
+<p>Como forçar o remapeamento desses pedidos?</p>
+                `.trim();
+            }
+            lucide.createIcons();
+        }
+
+        // Suporte ao Dropzone inferior
+        const dropZone = document.getElementById('drop-zone');
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-[#0078d4]', 'bg-blue-50/50');
+            }, false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-[#0078d4]', 'bg-blue-50/50');
+            }, false);
+        });
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }, false);
+
+        function handleFileSelect(e) {
+            handleFiles(e.target.files);
+        }
+
+        function handleFiles(files) {
+            Array.from(files).forEach(file => {
+                if (!file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    insertInlineImage(event.target.result, file.name);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function addAttachment(att) {
+            if (!attachedFiles.some(a => a.data === att.data)) {
+                attachedFiles.push(att);
+                renderAttachments();
+            }
+        }
+
+        function removeAttachment(idx) {
+            attachedFiles.splice(idx, 1);
+            renderAttachments();
+        }
+
+        function renderAttachments() {
+            const container = document.getElementById('attachments-preview');
+            container.innerHTML = '';
+            attachedFiles.forEach((att, idx) => {
+                const div = document.createElement('div');
+                div.className = 'relative group border border-slate-200 rounded-md overflow-hidden bg-white p-1 shadow-xs';
+                div.innerHTML = `
+                    <img src="${att.data}" class="w-full h-20 object-cover rounded cursor-zoom-in" onclick="openImageZoom('${att.data}')" alt="Print">
+                    <button type="button" onclick="removeAttachment(${idx})" class="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-1 opacity-90 hover:opacity-100 transition shadow">
+                        <i data-lucide="x" class="w-3 h-3"></i>
+                    </button>
+                    <span class="block text-[10px] text-slate-500 truncate mt-1 px-1">${att.name}</span>
+                `;
+                container.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+
+        // Submissão do Formulário de Chamado
+        async function handleTicketSubmit(e) {
+            e.preventDefault();
+            const editor = document.getElementById('editor-description');
+            const descHtml = editor.innerHTML.trim();
+            const descText = editor.innerText.trim();
+            const hasImages = editor.querySelectorAll('img').length > 0 || attachedFiles.length > 0;
+
+            if (!descText && !hasImages) {
+                alert('Por favor, descreva sua solicitação ou cole um print do erro antes de abrir o chamado.');
+                editor.focus();
+                return;
+            }
+
+            const btn = document.getElementById('btn-submit-ticket');
+            btn.disabled = true;
+            btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Enviando e Gerando Triagem...</span>`;
+            lucide.createIcons();
+
+            const payload = {
+                company: document.getElementById('inp-company').value.trim(),
+                hosting: document.getElementById('inp-hosting').value,
+                requester: document.getElementById('inp-user').value.trim(),
+                email: document.getElementById('inp-email').value.trim(),
+                phone: document.getElementById('inp-phone').value.trim(),
+                subject: document.getElementById('inp-subject').value.trim(),
+                urgency: document.getElementById('inp-urgency').value,
+                description: descHtml,
+                attachments: attachedFiles
+            };
+
+            try {
+                const resp = await fetch('/api/client/ticket', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await resp.json();
+
+                if (data.success) {
+                    showToast(`Chamado #${data.ticket_id} aberto com sucesso!`);
+                    // Limpar formulário
+                    document.getElementById('inp-subject').value = '';
+                    editor.innerHTML = '';
+                    attachedFiles = [];
+                    renderAttachments();
+
+                    // Ir para Meus Chamados
+                    switchTab('my-tickets');
+                } else {
+                    alert('Erro ao abrir chamado: ' + (data.error || 'Tente novamente.'));
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Falha na comunicação com o servidor DeskCortex.');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = `<i data-lucide="send" class="w-4 h-4"></i><span>Abrir Chamado</span>`;
+                lucide.createIcons();
+            }
+        }
+
+        // Carregar Meus Chamados
+        async function loadMyTickets() {
+            const comp = document.getElementById('inp-company').value.trim();
+            const user = document.getElementById('inp-user').value.trim();
+            const email = document.getElementById('inp-email').value.trim();
+
+            try {
+                const url = `/api/client/my-tickets?company=${encodeURIComponent(comp)}&user=${encodeURIComponent(user)}&email=${encodeURIComponent(email)}`;
+                const resp = await fetch(url);
+                const tickets = await resp.json();
+
+                const tbody = document.getElementById('my-tickets-tbody');
+                const noMsg = document.getElementById('no-tickets-msg');
+                const badge = document.getElementById('my-tickets-badge');
+
+                badge.innerText = tickets.length;
+                tbody.innerHTML = '';
+
+                if (tickets.length === 0) {
+                    noMsg.classList.remove('hidden');
+                    return;
+                }
+                noMsg.classList.add('hidden');
+
+                tickets.forEach(t => {
+                    let statusBadge = '';
+                    if (t.status === 'Resolvido') {
+                        statusBadge = `<span class="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded text-[11px]">Resolvido</span>`;
+                    } else if (t.status === 'Em atendimento') {
+                        statusBadge = `<span class="bg-blue-100 text-blue-800 border border-blue-300 font-bold px-2 py-0.5 rounded text-[11px]">Em atendimento</span>`;
+                    } else {
+                        statusBadge = `<span class="bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2 py-0.5 rounded text-[11px]">${t.status}</span>`;
+                    }
+
+                    const tr = document.createElement('tr');
+                    tr.className = 'hover:bg-blue-50/40 transition cursor-pointer';
+                    tr.onclick = () => openModal(t.id);
+                    tr.innerHTML = `
+                        <td class="py-3 px-4 font-mono font-bold text-[#0078d4]">#${t.id}</td>
+                        <td class="py-3 px-4 font-semibold text-slate-800">${t.subject}</td>
+                        <td class="py-3 px-4 text-slate-500">${t.opened_at || 'Hoje'}</td>
+                        <td class="py-3 px-4">${statusBadge}</td>
+                        <td class="py-3 px-4 text-slate-600">${t.responsible || 'Equipe Suporte'}</td>
+                        <td class="py-3 px-4 text-center">
+                            <button onclick="event.stopPropagation(); openModal(${t.id})" class="text-[#0078d4] hover:underline font-bold">
+                                Ver Detalhes
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error('Erro ao carregar meus chamados:', err);
+            }
+        }
+
+        // Modal de Detalhes
+        async function openModal(ticketId) {
+            try {
+                const resp = await fetch(`/api/tickets/${ticketId}`);
+                const t = await resp.json();
+
+                document.getElementById('modal-ticket-id').innerText = '#' + t.id;
+                document.getElementById('modal-ticket-subject').innerText = t.subject;
+                document.getElementById('modal-ticket-status').innerText = t.status;
+                document.getElementById('modal-ticket-dates').innerText = `Aberto em: ${t.opened_at}`;
+                
+                // Renderizar HTML rico com prints inline no relato do cliente
+                const modalDesc = document.getElementById('modal-ticket-description');
+                modalDesc.innerHTML = t.description || '';
+                modalDesc.querySelectorAll('img').forEach(img => {
+                    img.classList.add('cursor-zoom-in');
+                    img.onclick = () => openImageZoom(img.src);
+                });
+
+                // Anexos
+                const attGrid = document.getElementById('modal-attachments-grid');
+                attGrid.innerHTML = '';
+                if (t.attachments && t.attachments.length > 0) {
+                    document.getElementById('modal-attachments-box').classList.remove('hidden');
+                    t.attachments.forEach(att => {
+                        const img = document.createElement('img');
+                        img.src = att.data;
+                        img.className = 'h-16 w-16 object-cover rounded border border-slate-300 cursor-zoom-in hover:scale-105 transition';
+                        img.onclick = () => openImageZoom(att.data);
+                        attGrid.appendChild(img);
+                    });
+                } else {
+                    document.getElementById('modal-attachments-box').classList.add('hidden');
+                }
+
+                // Respostas Públicas
+                const respList = document.getElementById('modal-responses-list');
+                respList.innerHTML = '';
+                const publicActions = (t.actions || []).filter(a => a.type === 'public');
+
+                if (publicActions.length === 0) {
+                    respList.innerHTML = `
+                        <div class="p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-[11px] flex items-center gap-2">
+                            <i data-lucide="clock" class="w-4 h-4 text-amber-600"></i>
+                            <span>Seu chamado está na fila de triagem da nossa equipe técnica. Assim que um especialista responder, você verá a mensagem aqui.</span>
+                        </div>
+                    `;
+                } else {
+                    publicActions.forEach(act => {
+                        const div = document.createElement('div');
+                        div.className = 'p-3.5 bg-blue-50/60 border border-blue-200 rounded-lg space-y-2';
+                        div.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <span class="font-bold text-[#0078d4] flex items-center gap-1.5">
+                                    <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+                                    ${act.author}
+                                </span>
+                                <span class="text-slate-400 text-[10px]">${act.created_at}</span>
+                            </div>
+                            <div class="text-slate-800 rich-content text-xs leading-relaxed">${act.content}</div>
+                        `;
+                        div.querySelectorAll('img').forEach(img => {
+                            img.classList.add('cursor-zoom-in');
+                            img.onclick = () => openImageZoom(img.src);
+                        });
+                        respList.appendChild(div);
+                    });
+                }
+
+                document.getElementById('ticket-modal').classList.remove('hidden');
+                lucide.createIcons();
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao carregar detalhes do chamado.');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('ticket-modal').classList.add('hidden');
+        }
+
+        // ============================================================
+        // MODAL DE ZOOM DE IMAGENS (LIGHTBOX FULLSCREEN)
+        // ============================================================
+        function openImageZoom(src) {
+            const modal = document.getElementById('image-zoom-modal');
+            const img = document.getElementById('image-zoom-img');
+            img.src = src;
+            modal.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeImageZoom() {
+            const modal = document.getElementById('image-zoom-modal');
+            modal.classList.add('hidden');
+            document.getElementById('image-zoom-img').src = '';
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeImageZoom();
+                closeModal();
+            }
+        });
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+
+        // Auto polling a cada 8 segundos para atualizar meus chamados se a aba estiver aberta
+        setInterval(() => {
+            const viewMy = document.getElementById('view-my-tickets');
+            if (!viewMy.classList.contains('hidden')) {
+                loadMyTickets();
+            }
+        }, 8000);
+
+        // Inicializar
+        updateHeaderDisplay();
+        loadMyTickets();
+    </script>
+
+    <!-- Modal de Zoom de Imagens (Lightbox) -->
+    <div id="image-zoom-modal" class="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 transition-all" onclick="closeImageZoom()">
+        <div class="relative max-w-6xl max-h-[92vh] bg-slate-900 rounded-lg p-2 shadow-2xl flex flex-col items-center" onclick="event.stopPropagation()">
+            <div class="w-full flex items-center justify-between pb-2 border-b border-slate-700 text-white px-2">
+                <span class="text-xs font-semibold flex items-center gap-1.5 text-blue-300">
+                    <i data-lucide="zoom-in" class="w-4 h-4 text-[#0078d4]"></i> Visualização do Print / Imagem Ampliada
+                </span>
+                <button type="button" onclick="closeImageZoom()" class="text-slate-400 hover:text-white p-1 rounded transition text-sm">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="overflow-auto max-h-[82vh] p-2 flex items-center justify-center">
+                <img id="image-zoom-img" src="" class="max-w-full max-h-[80vh] object-contain rounded border border-slate-700 shadow" alt="Zoom Print">
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

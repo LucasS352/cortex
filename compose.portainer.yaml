@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: deskcortex
+      POSTGRES_USER: deskcortex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD na Stack}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/schema-current.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./infra/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ./infra/005_company_workbench.sql:/docker-entrypoint-initdb.d/03-company-workbench.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deskcortex -d deskcortex"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    image: ${CORTEX_IMAGE:?Defina CORTEX_IMAGE na Stack}
+    environment: &app_env
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: deskcortex
+      POSTGRES_USER: deskcortex
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD na Stack}
+      MOVIDESK_TOKEN: ${MOVIDESK_TOKEN:?Defina MOVIDESK_TOKEN na Stack}
+      MOVIDESK_WEBHOOK_SECRET: ${MOVIDESK_WEBHOOK_SECRET:?Defina MOVIDESK_WEBHOOK_SECRET na Stack}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      CORTEX_AUTONOTE_MODE: ${CORTEX_AUTONOTE_MODE:-disabled}
+      MOVIDESK_BOT_PERSON_ID: ${MOVIDESK_BOT_PERSON_ID:-}
+      MOVIDESK_TICKET_UI_BASE: ${MOVIDESK_TICKET_UI_BASE:-https://helpdesk.alternativasistemas.com.br/Ticket/Edit}
+      CORTEX_PILOT_ORGANIZATION_IDS: ${CORTEX_PILOT_ORGANIZATION_IDS:-}
+      CORTEX_PILOT_TICKET_IDS: ${CORTEX_PILOT_TICKET_IDS:-}
+      CORTEX_MOVIDESK_INTERVAL_SECONDS: ${CORTEX_MOVIDESK_INTERVAL_SECONDS:-7}
+      CORTEX_RUNTIME_PILOT_CONTROL: "true"
+      CORTEX_AUTH_REQUIRED: "true"
+      CORTEX_ADMIN_USERNAME: ${CORTEX_ADMIN_USERNAME:?Defina CORTEX_ADMIN_USERNAME na Stack}
+      CORTEX_ADMIN_PASSWORD_HASH: ${CORTEX_ADMIN_PASSWORD_HASH:?Defina CORTEX_ADMIN_PASSWORD_HASH na Stack}
+      CORTEX_SESSION_SECRET: ${CORTEX_SESSION_SECRET:?Defina CORTEX_SESSION_SECRET na Stack}
+      CORTEX_PUBLIC_URL: https://${CORTEX_DOMAIN:?Defina CORTEX_DOMAIN na Stack}
+      CORTEX_ALLOWED_HOSTS: ${CORTEX_DOMAIN:?Defina CORTEX_DOMAIN na Stack},localhost,127.0.0.1
+    volumes:
+      - cortex_output:/app/scripts/output
+      - manual_media:/app/Instrucoes_master:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3).read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  webhook:
+    image: ${CORTEX_IMAGE:?Defina CORTEX_IMAGE na Stack}
+    command: ["uvicorn", "movidesk_webhook:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "1", "--no-access-log"]
+    environment: *app_env
+    volumes:
+      - cortex_output:/app/scripts/output
+    restart: unless-stopped
+
+  note-worker:
+    image: ${CORTEX_IMAGE:?Defina CORTEX_IMAGE na Stack}
+    command: ["python", "movidesk_note_worker.py"]
+    working_dir: /app/scripts
+    environment: *app_env
+    volumes:
+      - cortex_output:/app/scripts/output
+      - manual_media:/app/Instrucoes_master:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 60s
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      CORTEX_DOMAIN: ${CORTEX_DOMAIN:?Defina CORTEX_DOMAIN na Stack}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+      - webhook
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  cortex_output:
+  manual_media:
+  caddy_data:
+  caddy_config:

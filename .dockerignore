@@ -1,0 +1,11 @@
+**
+!Dockerfile
+!requirements-deploy.txt
+!scripts/
+!scripts/**
+!infra/
+!infra/*.sql
+scripts/output/
+scripts/**/__pycache__/
+scripts/**/*.pyc
+scripts/*.db

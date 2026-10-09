@@ -1,0 +1,9 @@
+{$CORTEX_DOMAIN} {
+    encode zstd gzip
+    handle /webhooks/movidesk/tickets/* {
+        reverse_proxy webhook:8003
+    }
+    handle {
+        reverse_proxy app:8001
+    }
+}

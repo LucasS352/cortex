@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101a2d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Cortex">
+  <title>Cortex · Central de Inteligência</title>
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('cortex-theme')==='light'?'light':'dark'}catch(_){document.documentElement.dataset.theme='dark'}</script>
+  <link rel="icon" type="image/png" href="/tech-assets/cortex-brain-v2.png">
+  <link rel="apple-touch-icon" href="/tech-assets/cortex-brain-v2.png">
+  <link rel="manifest" href="/tech-assets/cortex.webmanifest">
+  <link rel="stylesheet" href="/tech-assets/admin-console.css?v=20261005-11">
+  <link rel="stylesheet" href="/tech-assets/overview-dashboard.css?v=20261005-1">
+  <link rel="stylesheet" href="/tech-assets/admin-theme.css?v=20261005-2">
+  <link rel="stylesheet" href="/tech-assets/cortex-polish.css?v=20261006-10">
+  <link rel="stylesheet" href="/tech-assets/agent-center.css?v=20261006-enterprise">
+  <link rel="stylesheet" href="/tech-assets/technician-workbench.css?v=5">
+</head>
+<body class="overview-page">
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="/admin" aria-label="Cortex Business Intelligence, início"><span class="brand-wordmark"><img src="/tech-assets/cortex-wordmark.png" alt="Cortex Business Intelligence" width="260" height="146"></span></a>
+    <div class="workspace"><span class="workspace-icon">A</span><span><b>Alternativa Sistemas</b><small>Ambiente local · Admin</small></span><span class="chevron">⌄</span></div>
+    <div class="nav-label">OPERAÇÃO</div>
+    <nav>
+      <button class="nav-item active" data-view="overview" aria-label="Visão geral"><span class="nav-icon">◫</span><span class="nav-text"><span class="nav-full">Visão geral</span><span class="nav-mobile">Início</span></span></button>
+      <button class="nav-item" data-view="flow" aria-label="Vazão de chamados"><span class="nav-icon">↗</span><span class="nav-text"><span class="nav-full">Vazão e backlog</span><span class="nav-mobile">Vazão</span></span></button>
+      <button class="nav-item" data-view="tickets" aria-label="Chamados abertos"><span class="nav-icon">▤</span><span class="nav-text"><span class="nav-full">Chamados abertos</span><span class="nav-mobile">Fila</span></span><span class="nav-count" id="nav-open">—</span></button>
+      <button class="nav-item" data-view="knowledge" aria-label="Base de conhecimento"><span class="nav-icon">◈</span><span class="nav-text"><span class="nav-full">Base de conhecimento</span><span class="nav-mobile">Base</span></span></button>
+      <button class="nav-item" data-view="performance" aria-label="Desempenho"><span class="nav-icon">▥</span><span class="nav-text"><span class="nav-full">Desempenho</span><span class="nav-mobile">Métricas</span></span></button>
+      <button class="nav-item" data-view="audit" aria-label="Histórico de alterações"><span class="nav-icon">≡</span><span class="nav-text"><span class="nav-full">Histórico de alterações</span><span class="nav-mobile">Histórico</span></span></button>
+      <button class="nav-item" data-view="agent" aria-label="Agente e políticas"><span class="nav-icon">✳</span><span class="nav-text"><span class="nav-full">Agente e políticas</span><span class="nav-mobile">Agente</span></span></button>
+      <button class="nav-item" data-view="workbench" aria-label="Assistente do técnico"><span class="nav-icon">✦</span><span class="nav-text"><span class="nav-full">Assistente do técnico</span><span class="nav-mobile">Assistente</span></span></button>
+    </nav>
+    <div class="sidebar-bottom"><div class="online-dot"></div><span>Conectado ao banco local</span><button id="refresh" title="Recarregar painel">↻</button></div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar"><a class="mobile-brand" href="/admin" aria-label="Cortex Business Intelligence, início"><img src="/tech-assets/cortex-wordmark.png" alt="Cortex" width="160" height="90"></a><div class="crumb">Cortex <span>/</span> <b id="crumb-title">Visão geral</b></div><div class="top-actions"><div class="theme-switch" role="group" aria-label="Tema do painel"><button type="button" data-theme-choice="light" aria-pressed="false">☀ Claro</button><button type="button" data-theme-choice="dark" aria-pressed="false">☾ Escuro</button></div><span class="snapshot"><i></i> Base local</span><a class="logout-link" href="/logout">Sair</a><div class="avatar">AD</div></div></header>
+    <div class="content">
+      <section class="page-head"><div><div class="eyebrow">ALTERNATIVA SISTEMAS <span id="snapshot-date">· sincronizando</span></div><h1 id="page-title">Visão geral</h1><p id="page-subtitle">Priorize o atendimento, acompanhe dependências e investigue os assuntos que concentram chamados.</p></div><div class="page-actions"><button class="button button-primary" id="sync-now" type="button">↻ Atualizar chamados</button><button class="button button-light" id="head-refresh" type="button"><span>↻</span> Recarregar painel</button></div></section>
+      <section class="sync-strip panel" aria-label="Atualização de chamados"><div class="sync-strip-main"><span class="sync-dot" id="sync-dot" aria-hidden="true"></span><div><strong id="sync-run-label">Consultando atualização…</strong><small id="sync-run-detail">O painel mostra a última carga concluída.</small></div></div><details class="sync-schedule" id="sync-schedule"><summary id="sync-schedule-summary">Agendar atualização</summary><div class="sync-schedule-fields"><label class="sync-enabled"><input id="sync-enabled" type="checkbox"> Atualizar automaticamente</label><label>Horário de Brasília <input id="sync-time" type="time" value="06:00"></label><button class="button button-quiet" id="sync-schedule-save" type="button">Salvar horário</button><p>Executa enquanto o servidor Cortex estiver ligado. A atualização do painel não aprova conteúdo para o agente.</p></div></details></section>
+      <div id="notice" class="notice" role="status" hidden></div>
+
+      <section class="view active" id="view-overview">
+        <div class="snapshot-banner" id="overview-freshness" role="status">Carregando a fotografia da operação…</div>
+        <section class="department-section"><div class="department-heading"><h2>Equipes e dependências</h2><button class="text-button" id="export-departments" type="button">Baixar métricas por grupo ↓</button><p>O card Suporte exclui os chamados aguardando desenvolvimento. Eles aparecem em um grupo próprio; Desenvolvimento inclui a subequipe DEV.</p></div><div id="department-cards" class="department-cards"></div><div id="department-others" class="department-others"></div></section>
+        <div class="decision-toolbar"><div><span class="section-label">FILA POR STATUS</span><p class="queue-explainer">Classificação pelo status, independente da equipe responsável; os totais podem diferir dos cards acima.</p><div id="queue-tabs" class="queue-tabs" aria-label="Filtrar visão geral por fila"></div></div></div>
+        <div class="decision-kpis" id="decision-kpis"></div>
+        <div class="decision-grid">
+          <article class="panel decision-topics"><div class="panel-head"><div><h2>Onde se concentra a demanda</h2><p>Assuntos do recorte selecionado · clique para investigar</p></div><span class="mini-pill">CHAMADOS ABERTOS</span></div><div id="topic-bars"></div><p class="chart-note">Agrupamento por palavras-chave. Indica volume por assunto; a causa precisa ser investigada.</p></article>
+          <article class="panel decision-actions"><div class="panel-head"><div><h2>Agenda de decisão</h2><p>Próximas análises sugeridas pelos dados</p></div></div><div id="decision-actions"></div></article>
+        </div>
+        <article class="panel table-panel decision-priority"><div class="panel-head"><div><h2 id="priority-title">Analisar primeiro no suporte</h2><p>Prioridade alta/urgente, retorno recebido e, depois, maior tempo desde a abertura.</p></div><button class="text-button" id="priority-all">Ver fila ordenada →</button></div><div class="table-scroll"><table><thead><tr><th>CHAMADO / CLIENTE</th><th>STATUS</th><th>ABERTO HÁ</th><th>MOTIVO DA POSIÇÃO</th><th></th></tr></thead><tbody id="priority-tickets"></tbody></table></div></article>
+        <div class="decision-grid lower-grid"><article class="panel"><div class="panel-head"><div><h2>Tempo desde a abertura</h2><p>Idade dos chamados na data da carga · não representa SLA</p></div></div><div id="age-bars"></div></article><article class="panel"><div class="panel-head"><div><h2>Clientes com mais chamados</h2><p>Concentração da fila selecionada por organização</p></div></div><div id="client-ranking"></div></article></div>
+        <section class="intake-section" aria-labelledby="intake-title">
+          <div class="intake-heading"><div><span class="section-label">HISTÓRICO DE ENTRADAS</span><h2 id="intake-title">Compare os meses</h2><p>Chamados abertos no período, inclusive os já resolvidos. Esta análise é independente da fila aberta acima.</p></div></div>
+          <div class="intake-filter panel"><div class="intake-presets" id="intake-presets" aria-label="Períodos rápidos"></div><form id="intake-form" class="intake-date-form"><label>De <input type="date" id="intake-start" required></label><label>Até <input type="date" id="intake-end" required></label><button class="button button-primary" type="submit">Aplicar período</button></form></div>
+          <div id="intake-status" class="intake-status" role="status">Carregando histórico…</div>
+          <div class="intake-summary" id="intake-summary"></div>
+          <div class="intake-grid"><article class="panel"><div class="panel-head"><div><h2>Entradas por mês</h2><p>Variação versus o mês anterior completo. Selecione um mês para investigar.</p></div></div><div id="intake-months" class="intake-months"></div></article><article class="panel"><div class="panel-head"><div><h2 id="intake-month-title">Temas do mês</h2><p>Classificação por palavras no assunto do chamado.</p></div></div><div id="intake-topics" class="intake-topics"></div></article></div>
+          <article class="panel intake-recurring"><div class="panel-head"><div><h2>Assuntos recorrentes <span id="intake-recurring-month"></span></h2><p>Títulos iguais no help desk. Abra os exemplos para confirmar o contexto antes de decidir.</p></div><div class="intake-switch"><button class="active" type="button" data-intake-kind="errors">Erros relatados</button><button type="button" data-intake-kind="all">Todos os assuntos</button></div></div><div id="intake-recurring"></div></article>
+          <p class="intake-method">Dados locais da última importação. As contagens representam abertura de chamados, não erros confirmados nem causa raiz. O mês em curso é parcial.</p>
+        </section>
+        <details class="decision-method"><summary>Como os indicadores são calculados</summary><p>Incluímos todos os chamados da última carga concluída que não estão fechados, resolvidos ou cancelados. Nos cards de equipes, chamados da equipe Suporte com status “Aguardando Desenvolvimento” são contados apenas no grupo “Suporte aguardando desenvolvimento”, não no card Suporte ou Desenvolvimento. A fila por status é outra classificação: reúne todos os chamados com dependência de desenvolvimento, independentemente da equipe. A prioridade é uma sugestão de análise, não comprova facilidade de resolução. Sem histórico de movimentações e metas de SLA, não calculamos tendência, inatividade ou atraso contratual.</p></details>
+      </section>
+
+      <section class="view" id="view-flow">
+        <div class="flow-intro"><div><span class="section-label">RITMO DA OPERAÇÃO</span><h2>Entradas, resoluções e estoque</h2><p>Compare os chamados recebidos com a capacidade de resolução. Números históricos ficam identificados como provisórios até concluir a reconciliação.</p></div><div class="flow-selectors"><label>Chamados<select id="flow-type"><option value="public" selected>Públicos · clientes</option><option value="internal">Internos</option><option value="all">Todos</option></select></label><label>Período<select id="flow-days"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option></select></label></div></div>
+        <div class="flow-alert" id="flow-alert" role="status">Carregando a vazão da base local…</div>
+        <div class="flow-kpis" id="flow-kpis"></div>
+        <div class="flow-visuals"><article class="panel flow-panel"><div class="panel-head"><div><h2>Entrada × resolução × fechamento</h2><p>Eventos por dia · horário de Brasília</p></div><div class="flow-legend"><span><i class="entry"></i> Entraram</span><span><i class="resolved"></i> Resolvidos</span><span><i class="closed"></i> Fechados</span></div></div><div class="flow-chart-scroll"><div id="flow-daily-bars" class="flow-daily-bars"></div></div></article><article class="panel flow-panel"><div class="panel-head"><div><h2>Backlog observado</h2><p>Última carga completa de cada dia; lacunas indicam ausência de fotografia.</p></div></div><div id="flow-backlog-chart" class="flow-backlog-chart"></div></article></div>
+        <article class="panel flow-panel"><div class="panel-head"><div><h2>Detalhamento diário</h2><p>Selecione um número para conferir os chamados que o compõem.</p></div></div><div class="table-scroll"><table class="flow-table"><thead><tr><th>DIA</th><th>ENTRARAM</th><th>RESOLVIDOS</th><th>FECHADOS</th><th>REABERTOS*</th><th>BACKLOG OBSERVADO</th></tr></thead><tbody id="flow-rows"></tbody></table></div></article>
+        <article class="panel flow-detail" id="flow-detail" hidden><div class="panel-head"><div><h2 id="flow-detail-title">Chamados do dia</h2><p id="flow-detail-count"></p></div><button class="button button-quiet" id="flow-detail-close" type="button">Fechar</button></div><div id="flow-detail-list" class="flow-detail-list"></div></article>
+        <article class="panel flow-ai-panel"><div><span class="section-label">IMPACTO DA IA</span><h2>Medição em preparação</h2><p>As pré-respostas ainda não registram um vínculo verificável entre geração, uso pelo técnico e ID do chamado. Quando esse fluxo estiver instrumentado, poderemos comparar tempo de resolução, reabertura e qualidade em casos semelhantes. Até lá, não atribuímos aumento de vazão à IA.</p></div><span>Sem atribuição causal</span></article>
+        <details class="decision-method flow-method"><summary>Como calculamos a vazão</summary><p>Entradas usam a data de abertura; resolvidos usam a data de resolução; fechados usam a data de encerramento. Resolvido e fechado são estágios diferentes do mesmo chamado e não são somados. A taxa é resolvidos ÷ entradas. Reaberturas mostram somente a última data disponível por chamado (*), portanto são um mínimo. O backlog usa a última carga completa do dia com cobertura das rotas recente e histórica, sem interpolação; fotografias anteriores a essa correção não entram na curva. Os eventos históricos são provisórios até a reconciliação dos registros antigos; filtros por responsável e setor exigem histórico de atribuição no momento de cada evento.</p></details>
+      </section>
+
+      <section class="view" id="view-tickets">
+        <div id="ticket-scope-bar" class="ticket-scope-bar" hidden><div><span>RECORTE ATIVO</span><strong id="ticket-scope-label">Chamados filtrados</strong></div><button type="button" class="button ticket-back" id="ticket-back">← Voltar para todos os chamados</button></div>
+        <div id="ticket-freshness" class="snapshot-banner" role="status">Carregando a fila da última sincronização…</div>
+        <div class="ticket-kpis" id="ticket-kpis"></div>
+        <div class="filter-panel panel ticket-filters"><div class="ticket-filter-heading"><div><h2>Filtrar chamados</h2><p>Combine os campos para investigar um grupo específico.</p></div><span>FILTROS DA FILA</span><button type="button" class="button button-quiet ticket-filter-toggle" id="ticket-filter-toggle" aria-expanded="true" aria-controls="ticket-filter-fields">Mostrar filtros</button></div><div id="ticket-filter-fields"><div class="ticket-filter-grid">
+          <label class="ticket-search-label">Buscar chamado<input id="ticket-query" type="search" placeholder="Número, assunto, relato, cliente ou responsável"></label>
+          <label>Empresa<select id="company-filter"><option value="">Todas as empresas</option></select></label>
+          <label>Localizar empresa<input id="company-option-search" type="search" placeholder="Digite parte do nome"></label>
+          <label>Responsável<select id="owner-filter"><option value="">Todos os responsáveis</option></select></label>
+          <label>Equipe<select id="team-filter"><option value="">Todas as equipes</option></select></label>
+          <label>Status<select id="status-filter"><option value="">Todos os status</option></select></label>
+          <label>Tema sugerido<select id="topic-filter"><option value="">Todos os temas</option></select></label>
+          <label>Prioridade<select id="priority-filter"><option value="">Todas</option><option value="high">Alta / urgente</option></select></label>
+          <label>Aberto há<select id="age-filter"><option value="">Qualquer tempo</option><option value="0-7">Até 7 dias</option><option value="8-30">8 a 30 dias</option><option value="31-90">31 a 90 dias</option><option value="91+">Mais de 90 dias</option><option value="unknown">Sem data</option></select></label>
+          <label>Ordenar<select id="order-filter"><option value="recent">Mais recentes</option><option value="oldest">Mais antigos</option><option value="priority">Prioridade sugerida</option></select></label>
+        </div><div class="ticket-filter-actions"><button class="button button-primary" id="ticket-search">Aplicar filtros</button><button class="button button-quiet" id="ticket-clear">Limpar filtros</button></div><div id="ticket-drilldown" class="drilldown-note" hidden></div><div class="filter-caption" id="ticket-count">Carregando…</div></div></div>
+        <div class="ticket-breakdowns"><article class="panel"><div class="panel-head"><div><h2>Chamados por empresa</h2><p>Uma empresa por chamado; colaboradores da Alternativa não tornam ambíguo o vínculo com o cliente.</p></div></div><div id="ticket-company-breakdown" class="ticket-breakdown-list"></div></article><article class="panel"><div class="panel-head"><div><h2>Chamados por responsável</h2><p>Proprietário atual registrado no Movidesk.</p></div></div><div id="ticket-owner-breakdown" class="ticket-breakdown-list"></div></article></div>
+        <article class="panel table-panel ticket-table"><div class="panel-head"><div><h2>Chamados do recorte</h2><p>Selecione um indicador ou combine filtros para investigar.</p></div></div><div class="table-scroll"><table><thead><tr><th>CHAMADO</th><th>EMPRESA</th><th>RESPONSÁVEL / EQUIPE</th><th>TEMA</th><th>STATUS</th><th>PRIORIDADE</th><th>ABERTO HÁ</th><th>DATA</th></tr></thead><tbody id="ticket-rows"><tr><td colspan="8" class="empty">Carregando…</td></tr></tbody></table></div><div id="ticket-mobile-cards" class="ticket-mobile-cards" aria-label="Chamados do recorte"></div><div class="pagination"><button class="button button-quiet" id="ticket-prev">← Anterior</button><span id="ticket-page">Página 1</span><button class="button button-quiet" id="ticket-next">Próxima →</button></div></article>
+        <details class="decision-method"><summary>Como os números são calculados</summary><p>Incluímos chamados da última sincronização concluída que não estão resolvidos, fechados ou cancelados. Cada chamado conta uma vez no total e na distribuição por responsável. A empresa vem da organização vinculada ao cliente ou do próprio cliente quando ele é do tipo Empresa no Movidesk. Se houver vínculo com a Alternativa Sistemas e com um cliente externo, prevalece o cliente externo; duas empresas externas distintas aparecem como “Empresa ambígua”. Sem vínculo de empresa, aparece como “Não identificada”; o painel distingue ausência de cliente de pessoa sem empresa vinculada. O tempo é contado desde a abertura até a carga e não indica SLA. O tema é uma sugestão por palavras-chave, não uma causa confirmada. Recarregar o painel relê a base local.</p></details>
+      </section>
+
+      <section class="view" id="view-knowledge">
+        <div class="library-intro"><div><h2>Mapa de conhecimento</h2><p>Escolha um módulo para consultar seus assuntos e revisar fontes. A classificação inicial é automática e pode ser corrigida em cada registro. O botão “Atualizar chamados” renova a fila operacional do Movidesk; ele não importa novos registros para esta base.</p></div><div class="library-status"><span id="library-total">—</span> registros indexados</div></div>
+        <div class="module-grid" id="module-grid"><div class="panel empty">Carregando módulos…</div></div>
+        <div id="subtopic-filter" class="subtopic-filter" hidden></div><div class="library-heading"><h2 id="selected-module-title">Todas as fontes</h2><span id="selected-module-subtitle">Registros disponíveis na base</span></div>
+        <div class="panel filter-panel"><div class="filter-row"><label class="search-box"><span>⌕</span><input id="knowledge-query" type="search" placeholder="Buscar artigo, erro ou procedimento…"></label><select id="knowledge-state-filter"><option value="active">Em uso e em revisão</option><option value="draft">Pendente de revisão</option><option value="videos_pending">Vídeos sem procedimento</option><option value="videos">Todos os artigos com vídeo</option><option value="needs_procedure">Sem procedimento estruturado</option><option value="needs_version">Sem versão registrada</option><option value="approved">Procedimento aprovado</option><option value="excluded">Excluído do agente</option><option value="all">Todos os estados</option></select><select id="source-filter"><option value="">Todas as fontes</option><option value="OFFICIAL_KB">Artigo oficial</option><option value="MANUAL">Manual</option><option value="VALIDATED_TICKET">Chamado validado</option><option value="PROBABLE_TICKET">Histórico para investigação</option></select><button class="button button-primary" id="knowledge-search">Buscar</button></div><div class="filter-caption">Registros pendentes precisam de conferência. Excluídos não participam da busca do agente.</div></div>
+        <div id="knowledge-list" class="knowledge-list"><div class="panel empty">Carregando fontes…</div></div>
+        <div class="pagination panel"><button class="button button-quiet" id="knowledge-prev">← Anterior</button><span id="knowledge-page">Página 1</span><button class="button button-quiet" id="knowledge-next">Próxima →</button></div>
+      </section>
+
+      <dialog id="knowledge-editor" class="knowledge-dialog"><form id="knowledge-form" method="dialog"><div class="editor-head"><div><span class="eyebrow">CURADORIA DE CONHECIMENTO</span><h2 id="editor-title">Revisar fonte</h2><p id="editor-source"></p></div><button type="button" id="editor-close" class="editor-close" aria-label="Fechar editor">×</button></div><div class="editor-body"><div class="editor-summary"><b>Como funciona</b><p>Enquanto esta revisão estiver pendente, o agente ainda encontra a versão original. Ao aprovar, passa a usar o texto revisado; ao excluir, a fonte sai da busca. O registro importado permanece preservado.</p><button type="button" class="button button-quiet" id="editor-extract" hidden>Extrair quadros do vídeo</button><button type="button" class="button button-quiet" id="editor-suggest">Gerar rascunho com IA a partir da fonte</button><small id="editor-suggest-note">A sugestão fica neste editor até você revisar e salvar; não é aprovada automaticamente.</small></div><div class="editor-fields"><label>Módulo<select id="editor-module"></select></label><label>Assunto<select id="editor-subtopic"></select></label><label>Estado<select id="editor-status"><option value="draft">Pendente de revisão</option><option value="approved">Procedimento aprovado</option><option value="excluded">Excluído do agente</option></select></label><label class="wide">Palavras-chave e sinônimos<input id="editor-keywords" maxlength="2400" placeholder="Ex.: grade, variação, subvariação, cor, tamanho"><small>Separe por vírgulas. Os termos ajudam a localizar a fonte mesmo durante a revisão.</small></label><label class="wide">Título revisado<input id="editor-title-input" maxlength="500"></label><label class="wide">Cenário / quando se aplica<textarea id="editor-problem" maxlength="12000" rows="4"></textarea></label><label class="wide">Pré-requisitos / conferências iniciais<textarea id="editor-prerequisites" maxlength="8000" rows="3" placeholder="Dados necessários, versão, permissões ou verificações antes de começar."></textarea></label><label class="wide">Passo a passo revisado<textarea id="editor-solution" maxlength="20000" rows="8" placeholder="Descreva os passos conferidos, resultado esperado e eventuais limites."></textarea></label><div class="procedure-preview wide"><div class="annotation-toolbar"><label>Indicação no print<input id="editor-annotation-label" type="text" maxlength="120" placeholder="Ex.: clique em Confirmar"></label><span>Clique na imagem da prévia para marcar o ponto. Clique no círculo para remover.</span></div><div class="procedure-preview-head"><b>Prévia do procedimento e imagens</b><span>Rascunho para conferência</span></div><div id="editor-procedure-preview"></div></div><label class="wide">Resultado esperado<textarea id="editor-expected" maxlength="8000" rows="3" placeholder="O que o técnico deve confirmar após executar os passos?"></textarea></label><label>Versão ou vigência<input id="editor-version" maxlength="500" placeholder="Ex.: versão 3.0; confirmar em versões anteriores"></label><label>Motivo da alteração<input id="editor-reason" maxlength="2000" minlength="8" required placeholder="O que foi verificado ou corrigido?"></label></div><section class="source-preview"><div class="source-preview-head"><b>Conteúdo original e evidências</b><span id="editor-media-count"></span></div><p id="editor-preview-note"></p><div id="editor-media" class="source-media"></div><pre id="editor-content-text"></pre></section><details class="original-source"><summary>Ver campos importados e indexação</summary><pre id="editor-original"></pre></details><details class="original-source"><summary>Histórico de alterações</summary><div id="editor-history"></div></details></div><div class="editor-actions"><span id="editor-message">Fonte importada preservada.</span><button type="button" class="button button-quiet" id="editor-cancel">Cancelar</button><button type="submit" class="button button-primary" id="editor-save">Salvar revisão</button></div></form></dialog>
+
+      <section class="view" id="view-agent">
+        <!-- Studio Header -->
+        <div class="agent-studio-header">
+          <div class="studio-title-block">
+            <div class="studio-badge-row">
+              <span class="studio-badge-pulse" id="studio-status-badge">● CARREGANDO CONTROLES</span>
+              <span class="studio-mode-pill" id="studio-mode-pill">Verificando publicação</span>
+            </div>
+            <h2>Central de Inteligência & Especialistas</h2>
+            <p>Controle quais empresas participam do piloto de notas internas, configure as contas de simulação e acompanhe o raciocínio da IA em tempo real.</p>
+          </div>
+          <div class="studio-header-actions">
+            <button class="button button-quiet" id="reset-default-specialists" type="button" title="Restaura os 6 especialistas padrão">Restaurar Padrões</button>
+            <button class="button button-primary" id="save-studio-btn" type="button">Salvar Configurações</button>
+          </div>
+        </div>
+
+        <!-- Sub-Tabs Navigation -->
+        <div class="studio-tabs-bar">
+          <button type="button" class="studio-tab-btn active" data-tab="tab-sandbox">
+            <span class="tab-icon">🛡️</span> Piloto & Sandbox
+          </button>
+          <button type="button" class="studio-tab-btn" data-tab="tab-specialists">
+            <span class="tab-icon">🧠</span> Subagentes & Prompts (<span id="active-specialists-count">6</span>)
+          </button>
+          <button type="button" class="studio-tab-btn" data-tab="tab-knowledge">
+            <span class="tab-icon">📚</span> Fontes de Conhecimento
+          </button>
+          <button type="button" class="studio-tab-btn" data-tab="tab-playground">
+            <span class="tab-icon">⚡</span> Playground & Raio-X
+          </button>
+        </div>
+
+        <!-- TAB 1: Políticas & Sandbox -->
+        <div class="studio-tab-content active" id="tab-sandbox">
+          <div class="studio-grid-2col">
+            <!-- Sandbox Card -->
+            <article class="panel studio-card highlight-card">
+              <div class="studio-card-head">
+                <div class="studio-icon-circle blue">🛡️</div>
+                <div>
+                  <h3>Piloto controlado de notas internas</h3>
+                  <p>Autorize explicitamente as empresas que podem receber uma sugestão privada no Movidesk.</p>
+                </div>
+              </div>
+              <div class="studio-card-body">
+                <div class="toggle-setting-row">
+                  <div>
+                    <b>Piloto operacional ativo</b>
+                    <p>Mesmo ativo, o worker só publica para empresas selecionadas e se o servidor também estiver liberado.</p>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="setting-sandbox-mode" checked>
+                    <span></span>
+                  </label>
+                </div>
+
+                <div class="whitelist-manager-block">
+                  <label class="section-sublabel">Contas de simulação no Playground:</label>
+                  <p class="section-subnote">Estes e-mails servem apenas ao simulador e não autorizam escrita no Movidesk.</p>
+
+                  <div class="whitelist-input-row">
+                    <input type="text" id="whitelist-input" placeholder="Ex.: lucas.teste@alternativa.com.br ou Conta Fake Lucas">
+                    <button type="button" class="button button-quiet" id="whitelist-add-btn">+ Adicionar</button>
+                  </div>
+
+                  <div class="whitelist-tags-container" id="whitelist-tags-container">
+                    <!-- Tags renderizadas via JS -->
+                  </div>
+                </div>
+
+                <div class="whitelist-manager-block pilot-company-block">
+                  <label class="section-sublabel">Empresas autorizadas para nota interna privada:</label>
+                  <p class="section-subnote">Pesquise no cadastro do Movidesk e selecione a empresa. Digitar somente um nome ou e-mail acima não concede autorização.</p>
+                  <div class="whitelist-input-row">
+                    <input type="search" id="pilot-company-search" placeholder="Buscar empresa por nome ou ID do Movidesk">
+                    <button type="button" class="button button-quiet" id="pilot-company-search-btn">Buscar</button>
+                  </div>
+                  <div id="pilot-company-results" class="pilot-company-results"></div>
+                </div>
+
+                <div class="integration-actions-block">
+                  <label class="section-sublabel">Ação ao Receber Chamado Autorizado:</label>
+                  <div class="setting-check-group">
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="setting-draft-enabled" checked>
+                      <span>Gerar minuta no painel interno do Cortex (Simulação)</span>
+                    </label>
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="setting-auto-internal-note">
+                      <span>Publicar Nota Interna (Privada) automaticamente nos tickets das empresas selecionadas</span>
+                    </label>
+                  </div>
+                  <div class="security-callout">
+                    <span class="shield-icon">🔒</span>
+                    <div>
+                      <b>Blindagem de Segurança:</b> Respostas públicas ao cliente permanecem <strong>bloqueadas</strong>. O atendente sempre confere o procedimento antes do envio ao cliente final.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article class="panel studio-card">
+              <div class="studio-card-head"><div><h3>Webhook e notas internas</h3>
+                <p>Entregas recebidas, processamento e últimas sugestões do piloto.</p></div>
+                <button id="webhook-refresh" type="button">Atualizar estado</button></div>
+              <div class="studio-card-body"><p id="webhook-summary">Consultando worker…</p>
+                <div id="webhook-list"></div><div id="webhook-notes"></div></div>
+            </article>
+
+            <!-- Operational Limits Card -->
+            <article class="panel studio-card">
+              <div class="studio-card-head">
+                <div class="studio-icon-circle purple">⚙️</div>
+                <div>
+                  <h3>Ritmo & Limites Operacionais</h3>
+                  <p>Controle de taxa, janelas de atendimento e concorrência para preservar a API do Movidesk e Gemini.</p>
+                </div>
+              </div>
+              <div class="studio-card-body">
+                <div class="pace-slider-item">
+                  <div class="pace-slider-head">
+                    <label for="pace-min-interval">Intervalo mínimo entre gerações:</label>
+                    <span class="pace-slider-val" id="pace-min-interval-val">5 s</span>
+                  </div>
+                  <input type="range" id="pace-min-interval" min="0" max="60" step="1" value="5">
+                  <small>Garante espaçamento seguro contra rate limit (429).</small>
+                </div>
+
+                <div class="pace-slider-item">
+                  <div class="pace-slider-head">
+                    <label for="pace-max-minute">Limite máximo por minuto:</label>
+                    <span class="pace-slider-val" id="pace-max-minute-val">10 req/min</span>
+                  </div>
+                  <input type="range" id="pace-max-minute" min="1" max="60" step="1" value="10">
+                  <small>Máximo de requisições disparadas em uma janela móvel de 60 segundos.</small>
+                </div>
+
+                <div class="pace-slider-item">
+                  <div class="pace-slider-head">
+                    <label for="pace-max-concurrent">Processamentos simultâneos:</label>
+                    <span class="pace-slider-val" id="pace-max-concurrent-val">2</span>
+                  </div>
+                  <input type="range" id="pace-max-concurrent" min="1" max="5" step="1" value="2">
+                  <small>Número máximo de análises executadas em paralelo pelo motor.</small>
+                </div>
+
+                <div class="policy-badges-row">
+                  <div class="policy-badge active">
+                    <span class="dot green">●</span> Validação Humana Obrigatória
+                  </div>
+                  <div class="policy-badge locked">
+                    <span class="dot red">●</span> Disparo Público Bloqueado
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        <!-- TAB 2: Subagentes & Prompts -->
+        <div class="studio-tab-content" id="tab-specialists">
+          <div class="specialists-header-banner">
+            <div>
+              <h3>Subagentes Especialistas por Domínio do ERP</h3>
+              <p>Cada especialista possui foco específico, filtros no banco de conhecimento e diretrizes para evitar alucinações. Edite o prompt de qualquer um deles ou crie novas skills.</p>
+            </div>
+            <button type="button" class="button button-primary" id="add-specialist-btn">+ Criar Novo Especialista</button>
+          </div>
+
+          <div class="specialists-grid" id="specialists-cards-grid">
+            <!-- Renderizado dinamicamente via JS -->
+          </div>
+        </div>
+
+        <!-- TAB 3: Fontes de Conhecimento -->
+        <div class="studio-tab-content" id="tab-knowledge">
+          <div class="knowledge-sources-banner">
+            <div>
+              <h3>Base de Conhecimento & Tiers de Confiança</h3>
+              <p>O Cortex conta com <strong>29.593 registros indexados</strong>. Defina quais categorias de dados podem fundamentar as respostas do gerador.</p>
+            </div>
+          </div>
+
+          <div class="sources-cards-grid">
+            <!-- KB Oficial -->
+            <article class="panel source-card tier-kb">
+              <div class="source-card-head">
+                <div class="source-badge kb">CONFIANÇA MÁXIMA</div>
+                <label class="switch">
+                  <input type="checkbox" class="source-toggle" value="OFFICIAL_KB" checked>
+                  <span></span>
+                </label>
+              </div>
+              <h3>📖 Artigos Oficiais (KB)</h3>
+              <div class="source-count-number">1.400</div>
+              <p>Manuais e procedimentos revisados pela equipe técnica da Alternativa. Prioridade número 1 no RAG.</p>
+              <div class="source-footer-pill">Prioridade Alta</div>
+            </article>
+
+            <!-- Chamados Validados (Gold) -->
+            <article class="panel source-card tier-gold">
+              <div class="source-card-head">
+                <div class="source-badge gold">ALTA CONFIANÇA</div>
+                <label class="switch">
+                  <input type="checkbox" class="source-toggle" value="VALIDATED_TICKET" checked>
+                  <span></span>
+                </label>
+              </div>
+              <h3>🥇 Chamados Validados (Gold)</h3>
+              <div class="source-count-number">2.832</div>
+              <p>Chamados reais com confirmação de sucesso pelo cliente ou correção de desenvolvimento homologada.</p>
+              <div class="source-footer-pill">Prioridade Alta</div>
+            </article>
+
+            <!-- Histórico Investigativo (Silver) -->
+            <article class="panel source-card tier-silver">
+              <div class="source-card-head">
+                <div class="source-badge silver">USO COM CAUTELA</div>
+                <label class="switch">
+                  <input type="checkbox" class="source-toggle" value="PROBABLE_TICKET" checked>
+                  <span></span>
+                </label>
+              </div>
+              <h3>🥈 Histórico Investigativo (Silver)</h3>
+              <div class="source-count-number">25.203</div>
+              <p>Procedimentos padrão documentados em chamados históricos. Ajudam a investigar causas incomuns.</p>
+              <div class="source-footer-pill">Prioridade Média</div>
+            </article>
+
+            <!-- Manuais Técnicos -->
+            <article class="panel source-card tier-manual">
+              <div class="source-card-head">
+                <div class="source-badge manual">DOCUMENTAÇÃO</div>
+                <label class="switch">
+                  <input type="checkbox" class="source-toggle" value="MANUAL" checked>
+                  <span></span>
+                </label>
+              </div>
+              <h3>📘 Manuais Técnicos</h3>
+              <div class="source-count-number">158</div>
+              <p>Materiais de integrações e parametrização detalhada de módulos do ERP Master.</p>
+              <div class="source-footer-pill">Prioridade Suplementar</div>
+            </article>
+          </div>
+        </div>
+
+        <!-- TAB 4: Simulador de Chamado Real (Movidesk Studio) -->
+        <div class="studio-tab-content" id="tab-playground">
+          <!-- Top Back Link -->
+          <div class="ticket-top-nav">
+            <button type="button" class="back-link-btn" id="btn-back-to-list">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              <span>Voltar para a lista</span>
+            </button>
+          </div>
+
+          <!-- Ticket Title & Actions Row -->
+          <div class="ticket-header-headline">
+            <div class="ticket-title-group">
+              <h1 class="ticket-headline-text">
+                <span class="ticket-id-tag-num" id="ticket-number">#TKT-184920</span>
+                <span class="ticket-headline-sep">·</span>
+                <span class="ticket-headline-subject" id="ticket-subject-title">Produto não sobe para a Loja Integrada</span>
+              </h1>
+            </div>
+
+            <div class="ticket-header-actions-group">
+              <!-- Dropdown de Mais Ações / Cenários -->
+              <div class="ticket-actions-dropdown">
+                <button type="button" class="btn-more-actions" id="btn-more-actions">
+                  <span>Mais ações</span>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="scenario-dropdown-menu" id="scenario-dropdown-menu" hidden>
+                  <div class="dropdown-section-title">Trocar Cenário de Teste:</div>
+                  <button type="button" class="scenario-option-btn scenario-btn active" data-scenario="loja_integrada">
+                    <span>🔌</span> Loja Integrada: Produto não sobe
+                  </button>
+                  <button type="button" class="scenario-option-btn scenario-btn" data-scenario="mercado_livre">
+                    <span>🛒</span> Mercado Livre: Pedido não desce
+                  </button>
+                  <button type="button" class="scenario-option-btn scenario-btn" data-scenario="etiqueta_fr3">
+                    <span>🏷️</span> FastReport FR3: Etiqueta cortando
+                  </button>
+                  <button type="button" class="scenario-option-btn scenario-btn" data-scenario="nfe_rejeicao">
+                    <span>📑</span> SEFAZ: Rejeição NF-e 539
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button type="button" class="scenario-option-btn" id="btn-new-ticket">
+                    <span>➕</span> Novo Chamado em Branco
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metadata Chips Row (Linear / Stripe Style) -->
+          <div class="ticket-meta-pills-row">
+            <span class="meta-pill pill-status" id="ticket-status-pill">
+              <span class="pill-dot warning" id="ticket-status-dot"></span>
+              <span id="ticket-status-badge">Aguardando cliente</span>
+            </span>
+
+            <span class="meta-pill">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span id="ticket-client-name">Lucas Souza</span>
+            </span>
+
+            <span class="meta-pill">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M3 7v14M21 7v14M6 7V3h12v4M9 11h2M13 11h2M9 15h2M13 15h2"/></svg>
+              <span>Alternativa Sistemas</span>
+            </span>
+
+            <span class="meta-pill">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <span id="ticket-channel-chip">Loja Integrada</span>
+            </span>
+
+            <span class="meta-pill">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              <span id="ticket-specialist-chip">Hubs & Integrações</span>
+            </span>
+
+            <span class="meta-pill pill-sandbox">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              <span>Ambiente: Sandbox</span>
+            </span>
+          </div>
+
+          <!-- Grade Principal do Chamado: Ticket à Esquerda + Copilot Raio-X à Direita -->
+          <div class="ticket-desk-layout">
+            <!-- COLUNA ESQUERDA: Interface do Chamado Estilo Enterprise -->
+            <article class="ticket-view-card">
+              <!-- Linha do Tempo / Histórico de Mensagens do Chamado -->
+              <div class="ticket-timeline-feed" id="ticket-timeline-feed">
+                <!-- Mensagens renderizadas dinamicamente via JS -->
+              </div>
+
+              <!-- Indicador de Digitação da IA (Oculto por padrão) -->
+              <div class="typing-indicator" id="agent-typing-indicator" hidden>
+                <div class="typing-bubble">
+                  <div class="typing-dots">
+                    <span></span><span></span><span></span>
+                  </div>
+                  <small>Cortex está analisando...</small>
+                </div>
+              </div>
+
+              <!-- Caixa de Ação do Chamado: Respostas Rápidas + Editor Enterprise -->
+              <div class="ticket-reply-box">
+                <div class="quick-replies-section">
+                  <span class="quick-replies-label">Respostas rápidas</span>
+                  <div class="quick-replies-list" id="quick-replies-list">
+                    <!-- Chips de réplica rápida gerados pelo JS -->
+                  </div>
+                </div>
+
+                <form id="ticket-reply-form" class="ticket-reply-form">
+                  <div class="reply-editor-frame">
+                    <textarea id="ticket-reply-input" rows="3" maxlength="8000" placeholder="Digite a mensagem do cliente ou cole um print do erro..."></textarea>
+                    <input id="ticket-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+                    <img id="ticket-image-preview" alt="Print anexado à resposta" hidden style="max-width:100%;max-height:240px;margin:10px 0">
+                    <button id="ticket-image-remove" type="button" hidden>Remover print</button>
+                    <p id="ticket-image-notice" role="status" class="muted" hidden></p>
+
+                    <div class="reply-toolbar-row">
+                      <div class="reply-toolbar-left">
+                        <button type="button" class="toolbar-btn" title="Negrito"><b>B</b></button>
+                        <button type="button" class="toolbar-btn" title="Itálico"><i>I</i></button>
+                        <button type="button" class="toolbar-btn" title="Inserir Link">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                        </button>
+                        <button type="button" class="toolbar-btn" title="Lista">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                        </button>
+                      </div>
+
+                      <div class="reply-toolbar-right">
+                        <button type="button" id="ticket-image-btn" class="toolbar-btn btn-clip" title="Anexar print do erro">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                        </button>
+                        <button type="submit" class="button button-primary reply-send-btn-enterprise" id="ticket-reply-btn">
+                          <span>Enviar resposta</span>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </article>
+
+            <!-- COLUNA DIREITA: Painel Lateral Diagnóstico (Linear Style) -->
+            <aside class="ticket-copilot-card">
+              <div class="copilot-card-top">
+                <div class="copilot-card-heading">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                  <span>Diagnóstico</span>
+                </div>
+                <button type="button" class="copilot-settings-btn" title="Configurações do diagnóstico">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </button>
+              </div>
+
+              <!-- Seção 1: Status -->
+              <div class="diag-section">
+                <span class="diag-label">Status</span>
+                <div class="diag-status-box" id="diag-status-box">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span id="diag-status-text">Em análise</span>
+                </div>
+              </div>
+
+              <!-- Seção 2: Etapa Atual (Horizontal Stepper) -->
+              <div class="diag-section">
+                <span class="diag-label">Etapa atual</span>
+                <div class="diag-stepper-row" id="workflow-stepper">
+                  <div class="stepper-step active" id="step-1">
+                    <div class="step-circle">1</div>
+                    <div class="step-meta">
+                      <strong>Triagem</strong>
+                      <small>Coleta de informações</small>
+                    </div>
+                  </div>
+                  <div class="step-connector" id="step-line-1"></div>
+                  <div class="stepper-step" id="step-2">
+                    <div class="step-circle">2</div>
+                    <div class="step-meta">
+                      <strong>Diagnóstico</strong>
+                      <small>Análise da causa</small>
+                    </div>
+                  </div>
+                  <div class="step-connector" id="step-line-2"></div>
+                  <div class="stepper-step" id="step-3">
+                    <div class="step-circle">3</div>
+                    <div class="step-meta">
+                      <strong>Resolução</strong>
+                      <small>Correção e validação</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Seção 3: Responsável -->
+              <div class="diag-section">
+                <span class="diag-label">Responsável</span>
+                <div class="diag-box-row">
+                  <div class="diag-box-left">
+                    <div class="diag-box-icon">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
+                    <div class="diag-box-text">
+                      <strong id="copilot-spec-name">Hubs & Integrações</strong>
+                      <small id="copilot-spec-reason">Roteado automaticamente</small>
+                    </div>
+                  </div>
+                  <div class="diag-box-arrow">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Seção 4: Evidências Consultadas -->
+              <div class="diag-section">
+                <span class="diag-label">Evidências consultadas</span>
+                <div id="copilot-sources-list">
+                  <div class="diag-box-row">
+                    <div class="diag-box-left">
+                      <div class="diag-box-icon">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+                      </div>
+                      <div class="diag-box-text">
+                        <small class="muted">Nenhuma evidência consultada nesta rodada.</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Seção 5: Execução no Movidesk -->
+              <div class="diag-section">
+                <span class="diag-label">Execução no Movidesk</span>
+                <div class="diag-box-row">
+                  <div class="diag-box-left">
+                    <div class="diag-box-icon">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                    </div>
+                    <div class="diag-box-text">
+                      <strong>Sandbox</strong>
+                      <small id="copilot-audit-time">Resposta gerada em 0,2s</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <!-- MODAL: Editor de Especialista / Skill -->
+        <dialog id="specialist-modal" class="specialist-dialog">
+          <form id="specialist-form" method="dialog">
+            <div class="dialog-head">
+              <div>
+                <span class="eyebrow">CONFIGURAÇÃO DE SUBAGENTE</span>
+                <h3 id="specialist-modal-title">Editar Especialista</h3>
+              </div>
+              <button type="button" class="dialog-close" id="specialist-modal-close">×</button>
+            </div>
+
+            <div class="dialog-body">
+              <input type="hidden" id="spec-edit-id">
+
+              <div class="form-row-2col">
+                <label>
+                  Nome do Especialista:
+                  <input type="text" id="spec-edit-name" required placeholder="Ex.: Fiscal & SEFAZ">
+                </label>
+                <label>
+                  Ícone / Emoji:
+                  <input type="text" id="spec-edit-icon" required maxlength="4" style="max-width:80px; text-align:center" value="🧠">
+                </label>
+              </div>
+
+              <label>
+                Descrição Resumida do Escopo:
+                <input type="text" id="spec-edit-desc" required placeholder="Ex.: Tratamento de rejeições SEFAZ e documentos fiscais">
+              </label>
+
+              <label>
+                Palavras-chave de Acionamento (separadas por vírgula):
+                <input type="text" id="spec-edit-keywords" placeholder="Ex.: nfe, nfce, rejeicao, sefaz, cfop, csosn">
+                <small>O roteador utiliza estas palavras para identificar quando acionar este especialista.</small>
+              </label>
+
+              <label>
+                Diretrizes & Prompt de Sistema da IA:
+                <textarea id="spec-edit-prompt" rows="8" required placeholder="Instruções específicas para este especialista atuar..."></textarea>
+                <small>Defina tom de voz, caminhos de tela do Master, atalhos e regras de ouro que a IA não pode violar.</small>
+              </label>
+            </div>
+
+            <div class="dialog-foot">
+              <button type="button" class="button button-quiet" id="specialist-modal-cancel">Cancelar</button>
+              <button type="submit" class="button button-primary" id="specialist-modal-save">Salvar Especialista</button>
+            </div>
+          </form>
+        </dialog>
+      </section>
+
+
+      <section class="view" id="view-workbench">
+        <div class="wb-tabs" role="tablist" aria-label="Assistente do técnico">
+          <button id="wb-tab-assistant" class="active" type="button" role="tab" aria-selected="true" aria-controls="assistant-view">Atendimento</button>
+          <button id="wb-tab-company" type="button" role="tab" aria-selected="false" aria-controls="company-view">Contexto dos clientes</button>
+        </div>
+        <p class="wb-intro">Converse durante o atendimento, confira as fontes e registre somente o que foi confirmado.</p>
+        <p class="notice" id="global-status" role="status" hidden></p>
+  <section id="assistant-view" class="layout">
+    <aside class="card side"><h2>Novo atendimento</h2><label>Empresa Movidesk<input id="company-search" type="search" placeholder="Busque nome ou ID" autocomplete="off"></label><div id="company-options" class="options" role="listbox"></div><p id="selected-company" class="selected">Selecione uma empresa do cadastro.</p><label>Nome do cliente<input id="contact-name" maxlength="160" placeholder="Ex.: Fernanda"></label><label>Assunto ou tela<input id="subject" maxlength="300" placeholder="Ex.: Vendas - Gerenciamento / etiqueta"></label><button id="start-conversation" class="primary">Iniciar atendimento</button><hr><h2>Atendimentos recentes</h2><div id="recent-conversations" class="recent"></div></aside>
+    <section class="card work" id="conversation-panel"><div class="work-head"><div><span class="eyebrow">ATENDIMENTO</span><h2 id="conversation-title">Selecione ou inicie uma conversa</h2><p id="conversation-company"></p></div><button type="button" id="company-context-link" hidden>Ver contexto da empresa →</button></div><div id="company-context-summary" class="context-summary" hidden></div><div id="case-preparation" class="case-preparation" role="status" hidden></div><div id="messages" class="messages"><p class="empty">As mensagens e fontes ficarão registradas neste atendimento.</p></div><form id="message-form" class="compose"><label for="message-input">Relato ou pergunta do técnico</label><textarea id="message-input" rows="4" maxlength="12000" placeholder="Descreva o que o cliente relatou, cole o erro ou conte o resultado do teste..." required></textarea><div class="actions"><label class="file-picker">Analisar print<input id="message-image" type="file" accept="image/png,image/jpeg,image/webp"></label><span id="image-status" class="hint">Você também pode colar um print no campo. A transcrição aparece para revisão antes do envio.</span></div><button id="send-message" class="primary" disabled>Investigar com IA</button></form><section class="outcome"><h3>Registrar o que foi confirmado</h3><p>O rascunho usa estes fatos; a IA não preenche ações por suposição.</p><label>Ação executada<textarea id="confirmed-action" rows="3" placeholder="Ex.: conferi o campo Gerado pelo Site e alterei para Não"></textarea></label><label>Resultado observado<textarea id="confirmed-result" rows="3" placeholder="Ex.: a etiqueta foi emitida normalmente"></textarea></label><label class="inline"><input type="checkbox" id="resolved"> Cliente confirmou a resolução</label><div class="actions"><button id="save-outcome">Salvar validação</button><button id="draft-sup">Preparar rascunho SUP</button><button id="draft-dev">Preparar rascunho DEV</button></div><p class="hint">O rascunho é local para revisão. Esta tela ainda não publica no Movidesk.</p><div id="ticket-draft" hidden><h3>Rascunho para conferir</h3><input id="draft-subject" readonly aria-label="Assunto do rascunho"><textarea id="draft-body" rows="15" readonly aria-label="Corpo do rascunho"></textarea><button id="copy-draft">Copiar texto</button></div></section></section>
+  </section>
+
+  <section id="company-view" class="layout" hidden><aside class="card side"><h2>Selecionar empresa</h2><label>Empresa Movidesk<input id="profile-company-search" type="search" placeholder="Busque nome ou ID" autocomplete="off"></label><div id="profile-company-options" class="options" role="listbox"></div><p id="profile-selected-company" class="selected">Selecione uma empresa do cadastro.</p><p class="hint">O vínculo usa o ID da organização. Nomes parecidos não são mesclados automaticamente.</p></aside><section class="card work"><div class="work-head"><div><span class="eyebrow">CONHECIMENTO DO CLIENTE</span><h2 id="profile-title">Contexto da empresa</h2><p>Registre particularidades verificadas e associe apenas ambientes confirmados.</p></div></div><div id="profile-content" hidden><h3>Particularidades</h3><p>Uma informação por linha. Marque como confirmada apenas após conferir com o cliente, técnico ou chamado.</p><div id="facts-list"></div><div class="actions"><button id="add-fact">Adicionar informação</button><button id="save-profile" class="primary">Salvar contexto</button></div><hr><h3>Histórico recente da empresa</h3><p>Chamados resolvidos ajudam a investigar, mas cada correção precisa ser validada no caso atual.</p><div id="company-history"></div><hr><h3>Ambientes Master vinculados</h3><p>O inventário do Master pode citar várias bases no mesmo INI. Vincule somente a instalação ativa cuja empresa você confirmou.</p><div id="linked-environments"></div><label>Buscar ambiente coletado<input id="environment-search" type="search" placeholder="Nome informado pelo Master"></label><div id="environment-options" class="options"></div></div></section></section>
+      </section>
+
+      <section class="view" id="view-performance">
+        <div class="performance-toolbar"><div class="section-tabs"><button class="tab-button active" data-perf="summary">Indicadores</button><button class="tab-button" data-perf="reviews">Revisão de respostas <span id="review-count">0</span></button><button class="tab-button" data-perf="test">Testar resposta</button></div><label>Período <select id="performance-days"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option></select></label></div>
+        <div id="performance-summary">
+          <div class="kpi-grid" id="performance-kpis"></div>
+          <div class="panel-grid overview-grid"><article class="panel"><div class="panel-head"><div><h2>Gerações por dia</h2><p>Respostas concluídas e falhas de processamento · dias em UTC</p></div></div><div id="daily-chart" class="daily-chart"></div></article><article class="panel"><div class="panel-head"><div><h2>Resultado das avaliações</h2><p>Classificação registrada pelo responsável pela revisão</p></div></div><div id="verdict-chart" class="verdict-chart"></div></article></div>
+          <div class="panel metric-explainer"><h2>Como interpretar os resultados</h2><div class="definition-grid"><div><b>Aprovação sem ajustes</b><p>Aprovadas ÷ avaliadas. Respostas ainda sem revisão não entram no cálculo.</p></div><div><b>Correções e rejeições</b><p>Correção indica necessidade de ajuste. Rejeição indica resposta inadequada para uso.</p></div><div><b>Tempo de geração</b><p>Medido nas gerações concluídas. Não inclui espera do cliente, revisão ou envio.</p></div></div><p class="operational-note">Estes indicadores não comprovam resolução do chamado. O acompanhamento começa com as novas gerações; não há avaliações retroativas presumidas.</p></div>
+        </div>
+        <div id="performance-test" hidden><div class="panel"><div class="panel-head"><div><h2>Teste de atendimento</h2><p>Consulte a base e gere uma pré-resposta para avaliar. O teste usa o provedor configurado e entra nos indicadores; nenhuma mensagem é enviada ao cliente.</p></div></div><form id="test-response-form" class="review-form"><div class="test-ticket-lookup"><label>Número do chamado (opcional)<input id="test-ticket-id" type="number" min="1" step="1" placeholder="Ex.: 131140"></label><button type="button" class="button button-quiet" id="test-load-ticket">Carregar da base local</button><small id="test-ticket-note">Sem número, a geração será registrada como simulação livre.</small></div><label>Assunto do chamado<input id="test-subject" required maxlength="500" placeholder="Ex.: dificuldade ao cadastrar grade de produto"></label><label>Descrição e contexto<textarea id="test-problem" required minlength="10" maxlength="12000" placeholder="Descreva a dúvida, versão do sistema e o que já foi conferido."></textarea></label><div class="save-row"><span id="test-progress">As fontes permitidas e os limites configurados serão respeitados.</span><button type="submit" class="button button-primary" id="test-generate">Buscar referências e gerar resposta</button></div></form></div><div id="test-result"></div><article class="panel eval-workbench"><div class="panel-head"><div><h2>Amostra de avaliação</h2><p>Marque o assunto e os critérios de uma resposta correta em chamados reais. Soluções históricas servem apenas como referência.</p></div><button type="button" class="button button-quiet" id="eval-seed">Montar amostra</button></div><div id="eval-summary" class="muted">Carregando amostra…</div><div id="eval-case"></div><div class="save-row"><button type="button" class="button button-quiet" id="eval-prev">← Anterior</button><span id="eval-position"></span><button type="button" class="button button-quiet" id="eval-next">Próximo →</button></div></article></div>
+        <div id="performance-reviews" hidden><div class="panel filter-panel"><div class="filter-row"><label for="review-filter">Resultado</label><select id="review-filter"><option value="">Todas as gerações</option><option value="pending">Aguardando revisão</option><option value="approved">Aprovadas</option><option value="corrected">Corrigidas</option><option value="rejected">Rejeitadas</option></select><span class="muted">Abra uma resposta para conferir o texto e registrar sua avaliação.</span></div></div><div id="run-list"></div><div class="pagination"><button class="button button-quiet" id="runs-prev">← Anterior</button><span id="runs-page"></span><button class="button button-quiet" id="runs-next">Próxima →</button></div></div>
+      </section>
+      <section class="view" id="view-audit"><article class="panel table-panel"><div class="panel-head"><div><h2>Registro de operação</h2><p>Últimas 100 alterações de configuração e avaliações. Operador local, sem identificação individual.</p></div></div><div class="table-scroll"><table><thead><tr><th>DATA E HORA</th><th>AÇÃO</th><th>DETALHES</th></tr></thead><tbody id="audit-rows"></tbody></table></div></article></section>
+      <footer class="app-footer"><span>© Cortex · Alternativa Sistemas</span><span>Ambiente local <i></i> Acesso restrito a esta máquina</span></footer>
+    </div>
+  </main>
+</div>
+  <script src="/tech-assets/admin-console.js?v=20261008-sync-progress" defer></script>
+  <script src="/tech-assets/technician-workbench.js?v=5" defer></script>
+  <script src="/tech-assets/agent-center.js?v=20261006-enterprise" defer></script>
+</body></html>
+
+
+
+

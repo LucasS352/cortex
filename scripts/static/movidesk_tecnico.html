@@ -1,0 +1,2185 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movidesk — Mesa do Técnico • Alternativa Sistemas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .tab-action-active { border-bottom: 2px solid #0078d4; color: #0078d4; font-weight: 700; }
+        .table-row-hover:hover { background-color: #f1f5f9; cursor: pointer; }
+        #public-response-editor:empty:before {
+            content: "Escreva a resposta pública para o cliente ou utilize a solução sugerida pela IA. Cole prints de telas com Ctrl+V diretamente aqui no texto...";
+            color: #94a3b8;
+            pointer-events: none;
+        }
+        .inline-print-box {
+            user-select: none;
+        }
+        .rich-content img, #public-response-editor img, #ticket-description-text img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.375rem;
+        }
+    </style>
+</head>
+<body class="bg-[#f0f2f5] text-slate-800 min-h-screen flex flex-col selection:bg-blue-100 text-xs">
+
+    <!-- Top Main Header (Movidesk Style) -->
+    <header class="bg-[#0078d4] text-white px-4 py-2 flex items-center justify-between shadow-sm">
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 font-bold tracking-wide text-lg cursor-pointer" onclick="showTriagemView()">
+                <i data-lucide="headphones" class="w-5 h-5"></i>
+                <span>movidesk</span>
+            </div>
+            <span class="text-xs bg-white/20 px-2 py-0.5 rounded text-white/90 font-medium">Alternativa Sistemas • Atendimento Técnico</span>
+            <span class="text-xs bg-emerald-500/80 px-2.5 py-0.5 rounded text-white font-semibold flex items-center gap-1">
+                <span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                DeskCortex I.A. Ativo
+            </span>
+        </div>
+        <div class="flex items-center gap-4 text-xs">
+            <button onclick="showTriagemView()" class="bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded font-semibold flex items-center gap-1.5 transition">
+                <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                <span>Triagem (Todos os tickets)</span>
+            </button>
+            <a href="/cliente" target="_blank" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded font-semibold flex items-center gap-1.5 transition text-blue-100" title="Abrir portal do cliente em outra aba">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                <span>Portal do Cliente</span>
+            </a>
+            <div class="flex items-center gap-2 border-l border-white/20 pl-3">
+                <div class="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-bold text-white text-xs">LS</div>
+                <span class="font-semibold">Lucas Souza (Suporte)</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Sub-header Breadcrumb / Actions Bar -->
+    <div class="bg-[#e4e7eb] border-b border-[#cbd5e1] px-6 py-2 flex items-center justify-between">
+        <div class="flex items-center gap-2 text-xs font-semibold text-slate-700">
+            <button onclick="showTriagemView()" class="hover:text-[#0078d4] flex items-center gap-1">
+                <i data-lucide="inbox" class="w-4 h-4 text-[#0078d4]"></i>
+                <span>Tickets</span>
+            </button>
+            <span id="breadcrumb-separator" class="text-slate-400 hidden">/</span>
+            <span id="breadcrumb-ticket-id" class="text-[#0078d4] hidden">#130065</span>
+        </div>
+        <div class="text-[11px] text-slate-500 flex items-center gap-3">
+            <span>Base de Conhecimento Master: <b>29.305 artigos</b></span>
+            <span>•</span>
+            <span class="text-emerald-700 font-semibold flex items-center gap-1">
+                <i data-lucide="database" class="w-3.5 h-3.5"></i>
+                PostgreSQL FTS + Embeddings
+            </span>
+        </div>
+    </div>
+
+    <!-- ======================================================= -->
+    <!-- VISÃO 1: TELA DE TRIAGEM (TODOS OS TICKETS - IMAGEM 4) -->
+    <!-- ======================================================= -->
+    <main id="view-triagem" class="flex-1 max-w-[1750px] w-full mx-auto p-4 flex flex-col space-y-3">
+        
+        <!-- Header da Triagem (Exatamente como na Imagem 4) -->
+        <div class="bg-white border border-[#cbd5e1] rounded-t-md px-5 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+            <div>
+                <h1 class="text-base font-bold text-slate-800">Todos os tickets</h1>
+                <p class="text-xs text-slate-500" id="triagem-counter-label">
+                    Exibindo de 1 até 12 de um total de +1000 registro(s)
+                </p>
+            </div>
+
+            <div class="flex items-center gap-2.5 w-full sm:w-auto">
+                <button class="text-xs text-slate-600 hover:text-slate-800 font-bold flex items-center gap-1 border border-slate-300 px-3 py-1.5 rounded bg-slate-50 hover:bg-slate-100 transition">
+                    <span>OPÇÕES</span>
+                    <i data-lucide="more-vertical" class="w-3.5 h-3.5"></i>
+                </button>
+
+                <!-- Campo de Pesquisa com seletor de campo (Imagem 4) -->
+                <div class="relative flex items-center border border-slate-300 rounded bg-white focus-within:border-[#0078d4]">
+                    <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-1.5 border-r border-slate-200 font-medium whitespace-nowrap">
+                        Cliente (Completo)
+                    </span>
+                    <input type="text" id="triagem-search-inp" oninput="filterTriagem()" placeholder="Pesquisar..." class="px-2.5 py-1 text-xs outline-none w-48 sm:w-64">
+                    <button onclick="filterTriagem()" class="px-2 text-slate-400 hover:text-[#0078d4]">
+                        <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+
+                <button onclick="loadTickets()" class="p-1.5 text-slate-600 hover:text-[#0078d4] border border-slate-300 rounded bg-slate-50 hover:bg-slate-100" title="Atualizar fila">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabela da Triagem (Colunas idênticas à Imagem 4) -->
+        <div class="bg-white border-x border-b border-[#cbd5e1] rounded-b-md shadow-sm overflow-x-auto">
+            <table class="w-full text-left border-collapse whitespace-nowrap text-xs">
+                <thead>
+                    <tr class="bg-[#f8fafc] text-slate-600 font-semibold border-b border-slate-200 text-[11px]">
+                        <th class="py-2.5 px-3 w-8 text-center">
+                            <input type="checkbox" class="rounded text-[#0078d4]">
+                        </th>
+                        <th class="py-2.5 px-3">Número</th>
+                        <th class="py-2.5 px-2 text-center w-8">Tipo</th>
+                        <th class="py-2.5 px-4 min-w-[280px]">Assunto</th>
+                        <th class="py-2.5 px-3">Ab...</th>
+                        <th class="py-2.5 px-3">Re...</th>
+                        <th class="py-2.5 px-3">Client...</th>
+                        <th class="py-2.5 px-3">Responsá...</th>
+                        <th class="py-2.5 px-3">Categoria</th>
+                        <th class="py-2.5 px-2 text-center w-8">Ur...</th>
+                        <th class="py-2.5 px-3">Status</th>
+                        <th class="py-2.5 px-4">Cliente (Organização)</th>
+                    </tr>
+                </thead>
+                <tbody id="triagem-tbody" class="divide-y divide-slate-100">
+                    <!-- Linhas dos chamados preenchidas dinamicamente -->
+                </tbody>
+            </table>
+        </div>
+
+    </main>
+
+
+    <!-- ======================================================= -->
+    <!-- VISÃO 2: ATENDIMENTO DO CHAMADO (IMAGENS 2 E 3)        -->
+    <!-- ======================================================= -->
+    <main id="view-atendimento" class="hidden flex-1 max-w-[1750px] w-full mx-auto p-4 flex flex-col space-y-3">
+        
+        <!-- Header Superior do Ticket -->
+        <div class="bg-white border border-[#cbd5e1] rounded-md px-5 py-2.5 flex items-center justify-between shadow-xs">
+            
+            <div class="flex items-center gap-3">
+                <button onclick="showTriagemView()" class="text-slate-500 hover:text-[#0078d4] font-semibold flex items-center gap-1 mr-2 text-xs border border-slate-200 px-2 py-1 rounded bg-slate-50">
+                    <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+                    <span>Voltar à Triagem</span>
+                </button>
+                <div class="flex items-center gap-1.5 font-bold text-slate-800 text-sm">
+                    <i data-lucide="headphones" class="w-4 h-4 text-[#0078d4]"></i>
+                    <span id="ticket-number-header">130065</span>
+                </div>
+                <div class="flex items-center gap-2 border-l border-slate-200 pl-3">
+                    <button class="font-bold text-[#0078d4] border-b-2 border-[#0078d4] pb-0.5 text-xs">✓ PÚBLICO</button>
+                    <button class="font-semibold text-slate-500 hover:text-slate-700 pb-0.5 text-xs">INTERNO</button>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-slate-500 text-[11px]">Status:</span>
+                    <select id="ticket-status-select" class="border border-slate-300 rounded px-2.5 py-1 text-xs font-bold bg-amber-50 text-amber-800 focus:outline-none">
+                        <option value="Novo">Novo</option>
+                        <option value="SUP - Triagem">SUP - Triagem</option>
+                        <option value="Em atendimento">Em atendimento</option>
+                        <option value="Resolvido">Resolvido</option>
+                    </select>
+                </div>
+                <button class="text-xs text-slate-600 hover:text-slate-800 font-bold flex items-center gap-1 border border-slate-300 px-2.5 py-1 rounded bg-slate-50">
+                    <span>OPÇÕES</span>
+                    <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                </button>
+            </div>
+
+        </div>
+
+        <!-- Grid 2 Colunas: Metadados Esquerda (3 cols) vs Área de Resposta Direita (9 cols) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            <!-- Coluna Esquerda: Solicitante & Metadados ERP Master (3 colunas) -->
+            <aside class="lg:col-span-3 space-y-3">
+                
+                <div class="bg-white border border-[#cbd5e1] rounded-md p-3.5 shadow-xs space-y-3">
+                    
+                    <!-- Solicitante -->
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="font-bold text-slate-700 text-xs">Solicitante</label>
+                            <a href="javascript:void(0)" class="text-[10px] text-[#0078d4] hover:underline">Colocar-me como solicitante</a>
+                        </div>
+                        <input type="text" placeholder="Buscar solicitante" class="w-full border border-slate-300 rounded px-2.5 py-1 text-xs bg-slate-50 mb-2">
+                        
+                        <div class="p-2.5 bg-[#f8fafc] border border-slate-200 rounded space-y-1">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                <span id="meta-client-name" class="font-bold text-slate-800">Lucas Souza</span>
+                            </div>
+                            <p id="meta-client-org" class="text-[#0078d4] font-semibold text-[11px]">AR15 Sport</p>
+                            <p id="meta-client-email" class="text-slate-500 text-[11px]">lucas@ar15sport.com.br</p>
+                            <p id="meta-client-phone" class="text-slate-500 text-[11px]">(11) 98765-4321</p>
+                        </div>
+                    </div>
+
+                    <!-- Ambiente ERP Master (Os 5 Pilares) -->
+                    <div class="pt-2 border-t border-slate-200 space-y-1.5">
+                        <label class="block font-bold text-slate-700 text-[11px] flex items-center justify-between">
+                            <span>Ambiente ERP Master</span>
+                            <span id="meta-beta-badge" class="hidden bg-rose-100 text-rose-700 font-bold px-1.5 py-0.2 rounded text-[9px] border border-rose-200">
+                                VERSÃO BETA
+                            </span>
+                        </label>
+                        <div class="p-2 bg-slate-50 border border-slate-200 rounded text-[11px] space-y-1">
+                            <div><span class="text-slate-500">Hospedado:</span> <b id="meta-master-hosting" class="text-[#0078d4] font-bold">Vault</b></div>
+                            <div><span class="text-slate-500">Versão:</span> <b id="meta-master-version" class="text-slate-800">12.4.2</b></div>
+                            <div><span class="text-slate-500">Servidor/IP:</span> <span id="meta-master-server" class="font-mono text-slate-700">Vault Datacenter | Firebird 3.0</span></div>
+                            <div><span class="text-slate-500">Integrações:</span> <span id="meta-master-integrations" class="font-medium text-slate-800">Mercado Livre, Shopee</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Serviço / Categoria / Urgência -->
+                    <div class="pt-2 border-t border-slate-200 space-y-2">
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-0.5">Serviço</label>
+                            <select id="meta-service-select" class="w-full border border-slate-300 rounded px-2 py-1 bg-white text-slate-700">
+                                <option>Análise Técnica / Erro</option>
+                                <option>Dúvida Operacional</option>
+                                <option>Configuração Fiscal</option>
+                                <option>Sincronizador / Ecommerce</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-0.5">Categoria</label>
+                            <select id="meta-category-select" class="w-full border border-slate-300 rounded px-2 py-1 bg-white text-slate-700">
+                                <option>Análise Técnica</option>
+                                <option>Solicitação de Serviço</option>
+                                <option>Dúvida</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-0.5">Urgência</label>
+                            <select id="meta-urgency-select" class="w-full border border-slate-300 rounded px-2 py-1 bg-white text-slate-700">
+                                <option value="Normal">2 - Normal</option>
+                                <option value="Alta">3 - Alta</option>
+                                <option value="Crítica">4 - Crítica / Urgente</option>
+                                <option value="Baixa">1 - Baixa</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Ativos & Previsão -->
+                    <div class="pt-2 border-t border-slate-200 space-y-2">
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-1">Ativos:</label>
+                            <div class="flex items-center gap-3 text-[11px] text-slate-600">
+                                <label class="flex items-center gap-1 cursor-pointer">
+                                    <input type="radio" name="ativos" checked> Solicitante
+                                </label>
+                                <label class="flex items-center gap-1 cursor-pointer">
+                                    <input type="radio" name="ativos"> Organização
+                                </label>
+                                <label class="flex items-center gap-1 cursor-pointer">
+                                    <input type="radio" name="ativos"> Todos
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-0.5">Previsão de solução</label>
+                            <div class="p-1.5 bg-rose-50 border border-rose-200 rounded text-rose-700 text-[11px] font-medium flex items-center gap-1">
+                                <i data-lucide="clock" class="w-3.5 h-3.5 text-rose-500"></i>
+                                <span>Hoje até às 18:00</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-0.5">
+                                <label class="text-slate-600 font-semibold">Responsável</label>
+                                <a href="javascript:void(0)" class="text-[10px] text-[#0078d4] hover:underline">Atribuir para mim</a>
+                            </div>
+                            <select id="meta-responsible-select" class="w-full border border-slate-300 rounded px-2 py-1 bg-white text-slate-700">
+                                <option value="Lucas Souza">Suporte > Lucas Souza</option>
+                                <option value="Luiz Fernando">Suporte > Luiz Fernando</option>
+                                <option value="Renan Mitsuo">Suporte > Renan Mitsuo</option>
+                                <option value="Marília Gabriela">Suporte > Marília Gabriela</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-slate-600 font-semibold mb-0.5">Tags</label>
+                            <input type="text" placeholder="Ex: sefaz, nfe, crt" class="w-full border border-slate-300 rounded px-2 py-1 bg-white">
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </aside>
+
+            <!-- Coluna Direita: Assunto, Relato do Cliente, Abas de Ação e Solução da IA (9 colunas) -->
+            <section class="lg:col-span-9 space-y-3">
+                
+                <!-- Assunto -->
+                <div class="bg-white border border-[#cbd5e1] rounded-md p-3 shadow-xs">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-slate-600 font-semibold text-[11px]">Assunto</label>
+                        <button onclick="openSimilarDrawer()" id="btn-similar-tickets"
+                            class="hidden flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-semibold shadow transition-all">
+                            <i data-lucide="library" class="w-3.5 h-3.5"></i>
+                            <span>Referências</span>
+                            <span id="similar-badge" class="bg-white/25 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none hidden">0</span>
+                        </button>
+                    </div>
+                    <input type="text" id="ticket-subject-inp" class="w-full border border-slate-300 rounded px-3 py-1.5 font-bold text-slate-800 text-sm focus:outline-none focus:border-[#0078d4]">
+                </div>
+
+                <!-- Relato Original do Cliente com Miniaturas de Prints/GIFs -->
+                <div class="bg-white border border-[#cbd5e1] rounded-md p-3.5 shadow-xs space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                            <i data-lucide="user" class="w-3.5 h-3.5 text-[#0078d4]"></i>
+                            <span>Relato Inicial do Solicitante</span>
+                        </span>
+                        <span id="ticket-opened-at" class="text-slate-400 text-[11px]">10/09/2026 13:55</span>
+                    </div>
+
+                    <div id="ticket-description-text" class="text-slate-800 bg-slate-50 p-3.5 rounded-md border border-slate-200 text-xs leading-relaxed rich-content space-y-2">
+                        Descrição do problema do cliente...
+                    </div>
+
+                    <!-- Miniaturas dos prints anexados -->
+                    <div id="ticket-attachments-area" class="hidden pt-1">
+                        <span class="text-[11px] font-semibold text-slate-600">Prints / Imagens enviadas pelo cliente:</span>
+                        <div id="ticket-attachments-list" class="flex flex-wrap gap-2 pt-1.5"></div>
+                    </div>
+                </div>
+
+                <!-- Painel de Ações: Ação Pública vs Ação Interna (IMAGENS 2 e 3) -->
+                <div class="bg-white border border-[#cbd5e1] rounded-md shadow-xs overflow-hidden">
+                    
+                    <!-- Abas de Ação (Ação pública | Ação interna) -->
+                    <div class="bg-slate-100 border-b border-slate-200 px-4 pt-2 flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <button onclick="switchActionTab('public')" id="btn-action-public" class="tab-action-active pb-2 text-xs transition">
+                                Ação pública
+                            </button>
+                            <button onclick="switchActionTab('internal')" id="btn-action-internal" class="text-slate-600 hover:text-slate-900 pb-2 text-xs transition flex items-center gap-1">
+                                <span>Ação interna</span>
+                                <span class="bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded text-[10px] border border-amber-300">
+                                    Nota IA Disponível
+                                </span>
+                            </button>
+                        </div>
+                        <div class="text-[11px] text-slate-400 pb-1">
+                            <span id="action-hint">A resposta pública será visível para o cliente no portal</span>
+                        </div>
+                    </div>
+
+                    <!-- Conteúdo da Aba: AÇÃO PÚBLICA (COM SUPORTE A PRINTS INLINE DO MASTER) -->
+                    <div id="tab-content-public" class="p-4 space-y-3">
+                        
+                        <div class="space-y-1">
+                            <!-- Toolbar da Resposta Pública (Estilo Movidesk Real) -->
+                            <div class="border border-slate-300 rounded-lg overflow-hidden focus-within:border-[#0078d4] focus-within:ring-1 focus-within:ring-[#0078d4] bg-white transition shadow-xs">
+                                <div class="bg-slate-50 border-b border-slate-200 px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-slate-600 select-none">
+                                    <div class="flex items-center gap-1 text-xs">
+                                        <button type="button" onclick="formatTechDoc('bold')" class="p-1.5 hover:bg-slate-200 rounded font-bold text-slate-700" title="Negrito (Ctrl+B)">
+                                            <i data-lucide="bold" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <button type="button" onclick="formatTechDoc('italic')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Itálico (Ctrl+I)">
+                                            <i data-lucide="italic" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <button type="button" onclick="formatTechDoc('underline')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Sublinhado (Ctrl+U)">
+                                            <i data-lucide="underline" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+                                        <button type="button" onclick="formatTechDoc('insertUnorderedList')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Marcadores">
+                                            <i data-lucide="list" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <button type="button" onclick="formatTechDoc('insertOrderedList')" class="p-1.5 hover:bg-slate-200 rounded text-slate-700" title="Numeração">
+                                            <i data-lucide="list-ordered" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                        <div class="h-4 w-[1px] bg-slate-300 mx-1"></div>
+                                        <button type="button" onclick="triggerTechInlineImageUpload()" class="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#0078d4] border border-blue-200 rounded font-semibold flex items-center gap-1 text-[11px] transition shadow-2xs" title="Inserir print de tela do ERP Master">
+                                            <i data-lucide="image-plus" class="w-3.5 h-3.5"></i>
+                                            <span>Inserir Print do Master</span>
+                                        </button>
+                                        <input type="file" id="tech-inline-image-inp" accept="image/*" class="hidden" onchange="handleTechInlineImageUpload(event)">
+                                        <button type="button" onclick="clearTechEditor()" class="p-1.5 hover:bg-slate-200 rounded text-slate-400 hover:text-rose-600" title="Limpar editor">
+                                            <i data-lucide="eraser" class="w-3.5 h-3.5"></i>
+                                        </button>
+                                    </div>
+                                    <div class="text-[10px] text-slate-500 flex items-center gap-1">
+                                        <kbd class="px-1.5 py-0.5 bg-slate-200 border border-slate-300 rounded font-mono text-[9px] text-slate-700">Ctrl+V</kbd>
+                                        <span>cola prints direto no cursor</span>
+                                    </div>
+                                </div>
+
+                                <!-- Editor WYSIWYG do Técnico -->
+                                <div id="public-response-editor" contenteditable="true" class="p-3.5 min-h-[170px] max-h-[480px] overflow-y-auto text-xs text-slate-800 focus:outline-none leading-relaxed" style="font-family: inherit;"></div>
+                            </div>
+                            <div class="flex items-center justify-between text-[10px] text-slate-400 px-1">
+                                <span>Suporta colagem de prints de telas do ERP Master intercalados com o texto.</span>
+                                <div>Words: <span id="public-words-count">0</span></div>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Apontamento de Horas (Exatamente como na Imagem 2) -->
+                        <div class="p-2.5 bg-slate-50 border border-slate-200 rounded grid grid-cols-2 sm:grid-cols-8 gap-2 items-center text-[11px]">
+                            <div>
+                                <label class="block text-slate-500 text-[10px]">Data</label>
+                                <input type="text" value="10/09/2026" class="w-full border border-slate-300 rounded px-1.5 py-1 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-slate-500 text-[10px]">Início</label>
+                                <input type="text" value="13:55" class="w-full border border-slate-300 rounded px-1.5 py-1 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-slate-500 text-[10px]">Fim</label>
+                                <input type="text" value="14:10" class="w-full border border-slate-300 rounded px-1.5 py-1 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-slate-500 text-[10px]">Tempo apontado</label>
+                                <input type="text" id="inp-time-spent" value="15 min" class="w-full border border-slate-300 rounded px-1.5 py-1 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-slate-500 text-[10px]">Tipo de hora</label>
+                                <select class="w-full border border-slate-300 rounded px-1 py-1 bg-white">
+                                    <option>Normal</option>
+                                    <option>Extra</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-slate-500 text-[10px]">Atividade</label>
+                                <select class="w-full border border-slate-300 rounded px-1 py-1 bg-white">
+                                    <option>Remoto</option>
+                                    <option>Telefone</option>
+                                    <option>Chat</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-slate-500 text-[10px]">Valor</label>
+                                <input type="text" placeholder="R$ 0,00" class="w-full border border-slate-300 rounded px-1.5 py-1 bg-white">
+                            </div>
+                            <div class="flex items-center gap-2 pt-3">
+                                <button class="text-slate-400 hover:text-slate-600"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                <button class="text-[#0078d4] hover:text-blue-700 font-bold text-base">+</button>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Ferramentas Inferior da Ação Pública -->
+                        <div class="flex items-center justify-between pt-1">
+                            <div class="flex items-center gap-2 text-slate-500">
+                                <button class="p-1 hover:text-slate-700" title="Anexar arquivo"><i data-lucide="paperclip" class="w-4 h-4"></i></button>
+                                <button class="p-1 hover:text-slate-700" title="Inserir link"><i data-lucide="link" class="w-4 h-4"></i></button>
+                                <button class="p-1 hover:text-slate-700" title="Inserir tabela"><i data-lucide="table" class="w-4 h-4"></i></button>
+                                <button class="p-1 hover:text-slate-700" title="Formatar texto"><i data-lucide="type" class="w-4 h-4"></i></button>
+                                <select class="border border-slate-300 rounded px-2 py-1 text-xs bg-white text-slate-600">
+                                    <option>Aplicar macro</option>
+                                    <option>Encerramento Padrão</option>
+                                    <option>Solicitar Printscreen</option>
+                                </select>
+                            </div>
+                            <button class="bg-[#0078d4] hover:bg-[#106ebe] text-white px-4 py-1.5 rounded font-bold text-xs">
+                                NOVA AÇÃO
+                            </button>
+                        </div>
+
+                    </div>
+
+                    <!-- Conteúdo da Aba: AÇÃO INTERNA COM NOTA DA IA (IMAGEM 3) -->
+                    <div id="tab-content-internal" class="hidden p-4 space-y-4">
+                        
+                        <!-- Card da Nota Interna da IA DeskCortex -->
+                        <div class="bg-gradient-to-br from-amber-50/80 to-blue-50/40 border-2 border-amber-300 rounded-lg p-4 shadow-sm space-y-3">
+                            
+                            <div class="flex items-center justify-between border-b border-amber-200 pb-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-7 h-7 rounded-full bg-amber-400 text-amber-950 flex items-center justify-center font-bold">
+                                        <i data-lucide="bot" class="w-4 h-4"></i>
+                                    </div>
+                                    <div>
+                                        <span class="font-bold text-slate-800 text-xs">Nota Interna DeskCortex (I.A. Triagem Técnica)</span>
+                                        <p class="text-[10px] text-slate-500">Diagnóstico preliminar e prescrição automática baseada nos manuais oficiais do ERP Master</p>
+                                    </div>
+                                </div>
+                                <span id="ai-confidence-badge" class="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[11px] border border-emerald-300">
+                                    98% Confiança
+                                </span>
+                            </div>
+
+                            <!-- Leitura Visual (DeskCortex Vision) -->
+                            <div id="ai-vision-box" class="hidden p-2.5 bg-purple-50/90 rounded-lg border border-purple-200 text-[11px] text-purple-950 flex items-start gap-2.5">
+                                <div class="p-1 rounded bg-purple-100 text-purple-700 shrink-0 mt-0.5">
+                                    <i data-lucide="scan" class="w-4 h-4"></i>
+                                </div>
+                                <div class="space-y-0.5 min-w-0 flex-1">
+                                    <div class="flex items-center gap-2 flex-wrap">
+                                        <span class="font-bold text-purple-950 text-xs">Leitura Visual Automática (DeskCortex Vision)</span>
+                                        <span id="ai-vision-status-badge" class="bg-purple-200/80 text-purple-900 text-[10px] font-bold px-1.5 py-0.5 rounded">Print Analisado</span>
+                                    </div>
+                                    <p id="ai-vision-text" class="text-purple-900 text-[11px] font-medium leading-relaxed"></p>
+                                </div>
+                            </div>
+
+                            <!-- Diagnóstico -->
+                            <div class="space-y-1">
+                                <span class="font-bold text-amber-950 text-[11px] flex items-center gap-1">
+                                    <i data-lucide="alert-circle" class="w-3.5 h-3.5 text-amber-600"></i>
+                                    Diagnóstico Técnico da Causa Raiz:
+                                </span>
+                                <p id="ai-diagnosis-text" class="text-slate-800 text-xs bg-white/80 p-2.5 rounded border border-amber-200">
+                                    Identificando inconsistência...
+                                </p>
+                            </div>
+
+                            <!-- Possível Resolução -->
+                            <div class="space-y-1">
+                                <span class="font-bold text-blue-950 text-[11px] flex items-center gap-1">
+                                    <i data-lucide="check-circle" class="w-3.5 h-3.5 text-[#0078d4]"></i>
+                                    Possível Resolução Recomendada:
+                                </span>
+                                <div id="ai-resolution-box" class="text-slate-800 text-xs bg-white p-3 rounded border border-blue-200 whitespace-pre-wrap font-medium">
+                                    Carregando passo a passo recomendado...
+                                </div>
+                            </div>
+
+                            <!-- Rota & Atalhos no ERP Master -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                <div class="p-2 bg-white rounded border border-slate-200">
+                                    <span class="text-slate-500 font-semibold">Rota de Tela no Master:</span>
+                                    <span id="ai-screen-path" class="font-bold text-[#0078d4] ml-1">Vendas > Faturamento</span>
+                                </div>
+                                <div class="p-2 bg-white rounded border border-slate-200">
+                                    <span class="text-slate-500 font-semibold">Teclas de Atalho:</span>
+                                    <span id="ai-shortcuts" class="font-mono font-bold text-slate-700 ml-1">F9 - Transmitir</span>
+                                </div>
+                            </div>
+
+                            <!-- Botão de Ação Rápida: Copiar para Ação Pública -->
+                            <div class="pt-2 flex justify-end">
+                                <button type="button" onclick="copyAiResolutionToPublic()" class="bg-[#0078d4] hover:bg-[#106ebe] text-white px-4 py-2 rounded-md font-bold text-xs flex items-center gap-2 shadow-sm transition">
+                                    <i data-lucide="copy" class="w-4 h-4"></i>
+                                    <span>Copiar Solução para Ação Pública</span>
+                                </button>
+                            </div>
+
+                        </div>
+
+                        <!-- Campo adicional para o Técnico redigir notas internas dele -->
+                        <div class="space-y-1 pt-1">
+                            <label class="block font-semibold text-slate-700 text-xs">
+                                Adicionar Anotação Interna Adicional (Visível apenas aos técnicos)
+                            </label>
+                            <textarea id="internal-notes-text" rows="3" placeholder="Ex: Cliente informou que vai alterar o CRT após as 16h..." class="w-full border border-slate-300 rounded p-2.5 text-xs text-slate-800 focus:outline-none focus:border-[#0078d4]"></textarea>
+                        </div>
+
+                    </div>
+
+                <!-- Histórico de Atendimentos & Ações Realizadas (Idêntico ao Movidesk Real da Imagem 3) -->
+                <div class="bg-white border border-[#cbd5e1] rounded-md p-3.5 shadow-xs space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <span class="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                            <i data-lucide="history" class="w-3.5 h-3.5 text-[#0078d4]"></i>
+                            <span>Histórico de Atendimento & Respostas</span>
+                        </span>
+                        <span id="actions-count-badge" class="text-[10px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded border border-slate-200">
+                            0 ação(ões)
+                        </span>
+                    </div>
+
+                    <div id="ticket-actions-history-list" class="space-y-3">
+                        <!-- Itens renderizados dinamicamente -->
+                    </div>
+                </div>
+
+                <!-- Botão SALVAR Inferior (Verde Destaque - Imagem 2) -->
+                <div class="flex items-center justify-between pt-2">
+                    <div class="text-[11px] text-slate-500">
+                        Nenhum relacionamento encontrado para este ticket
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="showTriagemView()" class="px-4 py-2 border border-slate-300 rounded font-semibold text-slate-600 hover:bg-slate-100 transition">
+                            Cancelar
+                        </button>
+                        <button onclick="handleSaveAction()" id="btn-save-action" class="bg-[#107c41] hover:bg-[#0e6b37] text-white font-bold px-8 py-2 rounded shadow-sm flex items-center gap-2 text-xs transition">
+                            <i data-lucide="save" class="w-4 h-4"></i>
+                            <span>SALVAR</span>
+                        </button>
+                    </div>
+                </div>
+
+            </section>
+
+        </div>
+
+    </main>
+
+    <!-- Toast de Notificação -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-5 py-3 rounded-lg shadow-lg text-xs font-semibold flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toast-message">Ação registrada</span>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        let allTickets = [];
+        let currentTicket = null;
+
+        // Alternar Visões
+        function showTriagemView() {
+            document.getElementById('view-triagem').classList.remove('hidden');
+            document.getElementById('view-atendimento').classList.add('hidden');
+            document.getElementById('breadcrumb-separator').classList.add('hidden');
+            document.getElementById('breadcrumb-ticket-id').classList.add('hidden');
+            // Esconder botão de referências e fechar drawer se aberto
+            const btnSimilar = document.getElementById('btn-similar-tickets');
+            if (btnSimilar) btnSimilar.classList.add('hidden');
+            if (typeof closeSimilarDrawer === 'function') closeSimilarDrawer();
+            loadTickets();
+        }
+
+        function showAtendimentoView(ticket) {
+            currentTicket = ticket;
+            document.getElementById('view-triagem').classList.add('hidden');
+            document.getElementById('view-atendimento').classList.remove('hidden');
+            document.getElementById('breadcrumb-separator').classList.remove('hidden');
+            document.getElementById('breadcrumb-ticket-id').classList.remove('hidden');
+            document.getElementById('breadcrumb-ticket-id').innerText = '#' + ticket.id;
+
+            renderTicketDetails(ticket);
+            lucide.createIcons();
+        }
+
+        // Carregar Tickets da Triagem
+        async function loadTickets() {
+            try {
+                const resp = await fetch('/api/tickets/all');
+                const data = await resp.json();
+                allTickets = data.tickets || [];
+                document.getElementById('triagem-counter-label').innerText = 
+                    `Exibindo de 1 até ${allTickets.length} de um total de +1000 registro(s)`;
+                renderTriagemTable(allTickets);
+            } catch (err) {
+                console.error('Erro ao carregar fila de triagem:', err);
+            }
+        }
+
+        // Renderizar Tabela de Triagem (Exatamente como Imagem 4)
+        function renderTriagemTable(tickets) {
+            const tbody = document.getElementById('triagem-tbody');
+            tbody.innerHTML = '';
+
+            tickets.forEach(t => {
+                const tr = document.createElement('tr');
+                tr.className = 'table-row-hover border-b border-slate-100 transition';
+                tr.onclick = () => showAtendimentoView(t);
+
+                // Barrinha de urgência (amarela, roxa, vermelha)
+                const urgColor = t.urgency_color || (t.urgency === 'Alta' ? '#8b5cf6' : (t.urgency === 'Crítica' ? '#ef4444' : '#eab308'));
+
+                // Status Badge
+                let statusBadge = '';
+                if (t.status === 'Resolvido') {
+                    statusBadge = `<span class="text-slate-700 font-medium">Resolvido</span>`;
+                } else if (t.status === 'Em atendimento') {
+                    statusBadge = `<span class="text-blue-700 font-medium">Em atendimento</span>`;
+                } else if (t.status === 'SUP - Triagem') {
+                    statusBadge = `<span class="text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">SUP - Triagem</span>`;
+                } else {
+                    statusBadge = `<span class="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Novo</span>`;
+                }
+
+                const clientName = t.client ? t.client.name : 'Cliente';
+                const clientOrg = t.client ? t.client.organization : 'Alternativa Sistemas';
+
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3 text-center" onclick="event.stopPropagation()">
+                        <input type="checkbox" class="rounded text-[#0078d4]">
+                    </td>
+                    <td class="py-2.5 px-3 font-medium text-slate-700">${t.id}</td>
+                    <td class="py-2.5 px-2 text-center">
+                        <span class="inline-block w-1.5 h-4 bg-[#0078d4] rounded-full"></span>
+                    </td>
+                    <td class="py-2.5 px-4 font-semibold text-slate-800 max-w-xs truncate" title="${t.subject}">
+                        ${t.subject}
+                    </td>
+                    <td class="py-2.5 px-3 text-slate-500">${t.opened_at ? t.opened_at.split(' ')[0] : '10/...'}</td>
+                    <td class="py-2.5 px-3 text-slate-500">${t.resolved_at ? t.resolved_at.split(' ')[0] : ''}</td>
+                    <td class="py-2.5 px-3 text-slate-700 max-w-[100px] truncate" title="${clientName}">${clientName}</td>
+                    <td class="py-2.5 px-3 text-slate-600 max-w-[100px] truncate">${t.responsible || 'Lucas Souza'}</td>
+                    <td class="py-2.5 px-3 text-slate-600">${t.category || 'Análise...'}</td>
+                    <td class="py-2.5 px-2 text-center">
+                        <span class="inline-block w-1 h-3.5 rounded-full" style="background-color: ${urgColor}"></span>
+                    </td>
+                    <td class="py-2.5 px-3">${statusBadge}</td>
+                    <td class="py-2.5 px-4 text-slate-600 max-w-xs truncate">${clientOrg}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            lucide.createIcons();
+        }
+
+        // Filtro da Triagem
+        function filterTriagem() {
+            const q = document.getElementById('triagem-search-inp').value.toLowerCase().trim();
+            if (!q) {
+                renderTriagemTable(allTickets);
+                return;
+            }
+            const filtered = allTickets.filter(t => {
+                const corpus = `${t.id} ${t.subject} ${t.status} ${t.responsible} ${t.client?.name} ${t.client?.organization}`.toLowerCase();
+                return corpus.includes(q);
+            });
+            renderTriagemTable(filtered);
+        }
+
+        // Renderizar Detalhes do Chamado (Visão 2)
+        function renderTicketDetails(t) {
+            document.getElementById('ticket-number-header').innerText = t.id;
+            document.getElementById('ticket-status-select').value = t.status || 'Novo';
+            document.getElementById('ticket-subject-inp').value = t.subject || '';
+            document.getElementById('ticket-opened-at').innerText = t.opened_at || 'Hoje';
+            
+            // Relato Inicial do Solicitante com suporte a HTML e prints inline
+            const descEl = document.getElementById('ticket-description-text');
+            descEl.innerHTML = t.description || '';
+            descEl.querySelectorAll('img').forEach(img => {
+                img.classList.add('cursor-zoom-in');
+                img.onclick = () => openImageZoom(img.src);
+            });
+
+            // Metadados do Solicitante
+            const c = t.client || {};
+            document.getElementById('meta-client-name').innerText = c.name || 'Cliente';
+            document.getElementById('meta-client-org').innerText = c.organization || 'AR15 Sport';
+            document.getElementById('meta-client-email').innerText = c.email || 'cliente@empresa.com.br';
+            document.getElementById('meta-client-phone').innerText = c.phone || '(11) 98765-4321';
+
+            // Metadados do ERP Master
+            const env = t.master_env || {};
+            const hostVal = env.hosting || (c.organization && c.organization.includes('AR15') ? 'Vault' : (env.server && env.server.includes('Localhost') ? 'Localhost' : 'Vault'));
+            const hostingEl = document.getElementById('meta-master-hosting');
+            if (hostingEl) hostingEl.innerText = hostVal;
+            document.getElementById('meta-master-version').innerText = env.version || '12.4.2';
+            document.getElementById('meta-master-server').innerText = env.server || `${hostVal} Datacenter | Firebird 3.0`;
+            document.getElementById('meta-master-integrations').innerText = (env.integrations && env.integrations.length) ? env.integrations.join(', ') : 'Mercado Livre, Shopee';
+            
+            const betaBadge = document.getElementById('meta-beta-badge');
+            if (env.is_beta) {
+                betaBadge.classList.remove('hidden');
+            } else {
+                betaBadge.classList.add('hidden');
+            }
+
+            // Anexos do Cliente (Prints/GIFs)
+            const attArea = document.getElementById('ticket-attachments-area');
+            const attList = document.getElementById('ticket-attachments-list');
+            attList.innerHTML = '';
+
+            if (t.attachments && t.attachments.length > 0) {
+                attArea.classList.remove('hidden');
+                t.attachments.forEach(att => {
+                    const img = document.createElement('img');
+                    img.src = att.data;
+                    img.className = 'h-16 w-24 object-cover rounded border border-slate-300 cursor-zoom-in hover:scale-105 transition shadow-xs';
+                    img.title = 'Clique para ampliar o print';
+                    img.onclick = () => openImageZoom(att.data);
+                    attList.appendChild(img);
+                });
+            } else {
+                attArea.classList.add('hidden');
+            }
+
+            // Nota da IA (DeskCortex)
+            const aiNote = t.ai_internal_note || {};
+
+            // Bloco de Leitura Visual (VisionAnalyzer)
+            const va = aiNote.vision_analysis;
+            const visionBox = document.getElementById('ai-vision-box');
+            const visionText = document.getElementById('ai-vision-text');
+            if (va && va.analyzed && (va.error_codes?.length || va.error_messages?.length || va.screen_path || va.summary)) {
+                visionBox.classList.remove('hidden');
+                let parts = [];
+                if (va.error_codes && va.error_codes.length) parts.push(`<strong>Erros lidos no print:</strong> ${va.error_codes.join(', ')}`);
+                if (va.error_messages && va.error_messages.length) parts.push(`<strong>Mensagem da tela:</strong> ${va.error_messages.join(' | ')}`);
+                if (va.screen_path) parts.push(`<strong>Tela identificada:</strong> ${va.screen_path}`);
+                if (!parts.length && va.summary) parts.push(va.summary);
+                visionText.innerHTML = parts.join(' • ');
+            } else {
+                visionBox.classList.add('hidden');
+            }
+
+            document.getElementById('ai-diagnosis-text').innerText = aiNote.diagnosis || 'Análise da ocorrência em processamento.';
+            
+            const resBox = document.getElementById('ai-resolution-box');
+            if (aiNote.procedure_steps && Array.isArray(aiNote.procedure_steps) && aiNote.procedure_steps.length > 0) {
+                let listHtml = '<ol class="list-decimal pl-4 space-y-1 text-slate-800 leading-relaxed font-normal">';
+                aiNote.procedure_steps.forEach(st => {
+                    listHtml += `<li>${st}</li>`;
+                });
+                listHtml += '</ol>';
+                resBox.innerHTML = listHtml;
+            } else if (aiNote.possible_resolution) {
+                resBox.innerHTML = aiNote.possible_resolution.replace(/\n/g, '<br>');
+            } else {
+                resBox.innerText = '1. Verificar parâmetros no menu correspondente do ERP Master.\n2. Retransmitir a operação.';
+            }
+
+            document.getElementById('ai-screen-path').innerText = aiNote.screen_path || 'Módulo Fiscal / Vendas';
+            document.getElementById('ai-shortcuts').innerText = (aiNote.shortcuts && aiNote.shortcuts.length) ? aiNote.shortcuts.join(' | ') : 'F9 - Executar';
+            
+            let confVal = aiNote.confidence || '95%';
+            if (!confVal.includes('%')) confVal += '%';
+            document.getElementById('ai-confidence-badge').innerText = confVal + ' Confiança';
+
+            // Mostrar botão de Referências (Tickets Semelhantes) e pré-carregar em background
+            const btnSimilar = document.getElementById('btn-similar-tickets');
+            if (btnSimilar) {
+                btnSimilar.classList.remove('hidden');
+                preloadSimilarData(t.id);
+            }
+
+            // Limpar respostas
+            document.getElementById('public-response-editor').innerHTML = '';
+            document.getElementById('internal-notes-text').value = '';
+            document.getElementById('public-words-count').innerText = '0';
+
+            // Renderizar Histórico de Ações
+            renderTicketActions(t.actions || []);
+
+            // Exibir aba de ação pública por padrão
+            switchActionTab('public');
+        }
+
+        // Renderizar Histórico de Ações Realizadas (Idêntico ao Movidesk Real)
+        function renderTicketActions(actions) {
+            const list = document.getElementById('ticket-actions-history-list');
+            const badge = document.getElementById('actions-count-badge');
+            list.innerHTML = '';
+            badge.innerText = `${actions.length} ação(ões)`;
+
+            if (actions.length === 0) {
+                list.innerHTML = `
+                    <p class="text-[11px] text-slate-400 italic py-2">Nenhuma resposta ou ação registrada ainda neste ticket.</p>
+                `;
+                return;
+            }
+
+            actions.forEach((act, idx) => {
+                const card = document.createElement('div');
+                const isPublic = act.type === 'public';
+                const borderColor = isPublic ? 'border-t-[#0078d4]' : 'border-t-amber-500';
+                const badgeStyle = isPublic 
+                    ? 'bg-blue-100 text-[#0078d4] border-blue-200' 
+                    : 'bg-amber-100 text-amber-800 border-amber-300';
+                const badgeLabel = isPublic ? 'Ação pública' : 'Ação interna';
+
+                card.className = `border border-slate-200 border-t-2 ${borderColor} rounded-md p-3.5 bg-white shadow-xs space-y-2`;
+                card.innerHTML = `
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-slate-700 text-white font-bold flex items-center justify-center text-[10px]">
+                                ${act.author ? act.author.substring(0, 2).toUpperCase() : 'TC'}
+                            </div>
+                            <span class="font-bold text-slate-800 text-xs">${act.author || 'Técnico'}</span>
+                            <span class="text-[10px] text-slate-400">• ${act.created_at || 'Hoje'}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${badgeStyle}">
+                                ${badgeLabel}
+                            </span>
+                            ${act.time_spent ? `<span class="text-[10px] text-slate-400 font-mono">⏱️ ${act.time_spent}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="text-slate-800 text-xs leading-relaxed rich-content space-y-2">
+                        ${act.content}
+                    </div>
+                `;
+
+                card.querySelectorAll('img').forEach(img => {
+                    img.classList.add('cursor-zoom-in');
+                    img.onclick = () => openImageZoom(img.src);
+                });
+
+                list.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        // ============================================================
+        // EDITOR WYSIWYG DO TÉCNICO & SUPORTE A PRINTS INLINE (CTRL+V)
+        // ============================================================
+        function formatTechDoc(cmd, val = null) {
+            document.execCommand(cmd, false, val);
+            document.getElementById('public-response-editor').focus();
+        }
+
+        function clearTechEditor() {
+            if (confirm('Deseja limpar o texto e prints da resposta pública?')) {
+                document.getElementById('public-response-editor').innerHTML = '';
+                document.getElementById('public-words-count').innerText = '0';
+            }
+        }
+
+        function triggerTechInlineImageUpload() {
+            document.getElementById('tech-inline-image-inp').click();
+        }
+
+        function handleTechInlineImageUpload(e) {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                Array.from(files).forEach(file => {
+                    if (!file.type.startsWith('image/')) return;
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        insertTechInlineImage(evt.target.result, file.name);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+            e.target.value = '';
+        }
+
+        function insertTechInlineImage(dataUrl, name) {
+            const editor = document.getElementById('public-response-editor');
+            editor.focus();
+
+            const container = document.createElement('div');
+            container.className = 'inline-print-box my-3 p-2 bg-slate-50 border border-slate-200 rounded-lg inline-block max-w-full relative shadow-xs text-left select-none';
+            container.contentEditable = 'false';
+
+            const header = document.createElement('div');
+            header.className = 'flex items-center justify-between pb-1 px-1 text-[10px] text-slate-500 border-b border-slate-200 mb-1.5 gap-4';
+            header.innerHTML = `
+                <span class="font-semibold text-slate-700 flex items-center gap-1">
+                    <i data-lucide="image" class="w-3.5 h-3.5 text-[#0078d4]"></i>
+                    ${name || 'Print ERP Master'}
+                </span>
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] text-slate-400">Clique para ampliar</span>
+                    <button type="button" onclick="this.closest('.inline-print-box').remove()" class="text-rose-500 hover:text-rose-700 font-bold p-0.5" title="Remover este print">✕</button>
+                </div>
+            `;
+
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.className = 'max-h-80 max-w-full rounded border border-slate-200 cursor-zoom-in hover:brightness-95 transition shadow-2xs';
+            img.title = 'Clique para ampliar o print';
+            img.onclick = () => openImageZoom(dataUrl);
+
+            container.appendChild(header);
+            container.appendChild(img);
+
+            const p = document.createElement('p');
+            p.innerHTML = '<br>';
+
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                if (editor.contains(range.commonAncestorContainer)) {
+                    range.deleteContents();
+                    range.insertNode(p);
+                    range.insertNode(container);
+
+                    const newRange = document.createRange();
+                    newRange.setStart(p, 0);
+                    newRange.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(newRange);
+                } else {
+                    editor.appendChild(container);
+                    editor.appendChild(p);
+                }
+            } else {
+                editor.appendChild(container);
+                editor.appendChild(p);
+            }
+
+            lucide.createIcons();
+            updateTechWordsCount();
+            showToast('Print do Master colado com sucesso na resposta!');
+        }
+
+        // Listener de Paste do Editor Técnico
+        const techEditor = document.getElementById('public-response-editor');
+        techEditor.addEventListener('paste', function(e) {
+            const items = (e.clipboardData || window.clipboardData)?.items;
+            if (!items) return;
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    const blob = items[i].getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        insertTechInlineImage(evt.target.result, `print_master_${Date.now()}.png`);
+                    };
+                    reader.readAsDataURL(blob);
+                    return;
+                }
+            }
+        });
+
+        // Contagem de palavras do editor técnico
+        function updateTechWordsCount() {
+            const text = techEditor.innerText.trim();
+            const words = text ? text.split(/\s+/).length : 0;
+            document.getElementById('public-words-count').innerText = words;
+        }
+        techEditor.addEventListener('input', updateTechWordsCount);
+
+        // Alternar abas de Ação (Ação Pública vs Ação Interna)
+        function switchActionTab(tab) {
+            const btnPub = document.getElementById('btn-action-public');
+            const btnInt = document.getElementById('btn-action-internal');
+            const contentPub = document.getElementById('tab-content-public');
+            const contentInt = document.getElementById('tab-content-internal');
+            const hint = document.getElementById('action-hint');
+
+            if (tab === 'public') {
+                btnPub.className = 'tab-action-active pb-2 text-xs transition';
+                btnInt.className = 'text-slate-600 hover:text-slate-900 pb-2 text-xs transition flex items-center gap-1';
+                contentPub.classList.remove('hidden');
+                contentInt.classList.add('hidden');
+                hint.innerText = 'A resposta pública será visível para o cliente no portal';
+            } else {
+                btnInt.className = 'tab-action-active pb-2 text-xs transition flex items-center gap-1';
+                btnPub.className = 'text-slate-600 hover:text-slate-900 pb-2 text-xs transition';
+                contentInt.classList.remove('hidden');
+                contentPub.classList.add('hidden');
+                hint.innerText = 'Nota Interna e Anotações da equipe técnica (invisível para o cliente)';
+            }
+            lucide.createIcons();
+        }
+
+        // Copiar Solução da IA para Ação Pública com formatação rica
+        function copyAiResolutionToPublic() {
+            if (!currentTicket) return;
+            const aiNote = currentTicket.ai_internal_note || {};
+
+            if (aiNote.client_ready_response) {
+                techEditor.innerHTML = aiNote.client_ready_response;
+            } else {
+                const clientName = currentTicket.client ? currentTicket.client.name.split(' ')[0] : 'Cliente';
+                const screen = aiNote.screen_path || 'Módulo Principal do ERP Master';
+                const shortcuts = (aiNote.shortcuts && aiNote.shortcuts.length) ? aiNote.shortcuts.join(' | ') : 'F9 - Processar';
+
+                const rawResolution = aiNote.possible_resolution || 'Favor verificar os parâmetros no ERP Master e retransmitir a nota fiscal.';
+                const formattedRes = rawResolution.replace(/\n/g, '<br>');
+
+                const template = `
+<p>Olá, ${clientName}!</p>
+<p><br></p>
+<p>Analisamos a sua solicitação referente a "<b>${currentTicket.subject}</b>".</p>
+<p><br></p>
+<p>Identificamos a causa da inconsistência e orientamos o seguinte procedimento no ERP Master para resolução:</p>
+<div class="p-3 bg-blue-50/70 border border-blue-200 rounded-md my-2 text-slate-800 font-normal leading-relaxed">
+    ${formattedRes}
+</div>
+<p><b>Tela no Master:</b> <span class="text-[#0078d4] font-semibold">${screen}</span> &nbsp;|&nbsp; <b>Atalhos:</b> <kbd class="px-1.5 py-0.5 bg-slate-200 border rounded font-mono text-[10px]">${shortcuts}</kbd></p>
+<p><br></p>
+<p>Qualquer dúvida ou caso necessite de apoio adicional para concluir o procedimento, permanecemos à disposição!</p>
+<p><br></p>
+<p>Atenciosamente,<br><b>Equipe de Suporte Técnico</b> • Alternativa Sistemas</p>
+                `.trim();
+
+                techEditor.innerHTML = template;
+            }
+
+            updateTechWordsCount();
+            switchActionTab('public');
+            showToast('Solução pronta para o cliente copiada para a Ação Pública com sucesso!');
+        }
+
+        // Salvar Ação do Chamado (Botão Verde)
+        async function handleSaveAction() {
+            if (!currentTicket) return;
+
+            const publicHtml = techEditor.innerHTML.trim();
+            const publicText = techEditor.innerText.trim();
+            const hasPublicImages = techEditor.querySelectorAll('img').length > 0;
+            const hasPublicContent = publicText.length > 0 || hasPublicImages;
+
+            const internalText = document.getElementById('internal-notes-text').value.trim();
+            const newStatus = document.getElementById('ticket-status-select').value;
+            const timeSpent = document.getElementById('inp-time-spent').value.trim() || '15 min';
+
+            if (!hasPublicContent && !internalText && newStatus === currentTicket.status) {
+                alert('Escreva uma resposta pública, uma nota interna ou altere o status do chamado antes de salvar.');
+                return;
+            }
+
+            const btnSave = document.getElementById('btn-save-action');
+            btnSave.disabled = true;
+            btnSave.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>SALVANDO...</span>`;
+            lucide.createIcons();
+
+            try {
+                // Se houver resposta pública
+                if (hasPublicContent) {
+                    await fetch(`/api/tickets/${currentTicket.id}/action`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action_type: 'public',
+                            content: publicHtml,
+                            author: 'Lucas Souza (Suporte)',
+                            time_spent: timeSpent,
+                            new_status: newStatus
+                        })
+                    });
+                }
+
+                // Se houver nota interna adicional
+                if (internalText) {
+                    await fetch(`/api/tickets/${currentTicket.id}/action`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action_type: 'internal',
+                            content: internalText,
+                            author: 'Lucas Souza (Suporte)',
+                            time_spent: '0 min',
+                            new_status: newStatus
+                        })
+                    });
+                }
+
+                // Se apenas mudou o status
+                if (!hasPublicContent && !internalText) {
+                    await fetch(`/api/tickets/${currentTicket.id}/action`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action_type: 'internal',
+                            content: `Status do chamado alterado para "${newStatus}".`,
+                            author: 'Lucas Souza (Suporte)',
+                            time_spent: '0 min',
+                            new_status: newStatus
+                        })
+                    });
+                }
+
+                showToast(`Chamado #${currentTicket.id} salvo com sucesso! Status: ${newStatus}`);
+                setTimeout(() => {
+                    showTriagemView();
+                }, 1000);
+
+            } catch (err) {
+                console.error('Erro ao salvar ação do chamado:', err);
+                alert('Falha ao salvar atendimento no DeskCortex.');
+            } finally {
+                btnSave.disabled = false;
+                btnSave.innerHTML = `<i data-lucide="save" class="w-4 h-4"></i><span>SALVAR</span>`;
+                lucide.createIcons();
+            }
+        }
+
+        // ============================================================
+        // MODAL DE ZOOM DE IMAGENS (LIGHTBOX FULLSCREEN)
+        // ============================================================
+        function openImageZoom(src) {
+            const modal = document.getElementById('image-zoom-modal');
+            const img = document.getElementById('image-zoom-img');
+            img.src = src;
+            modal.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closeImageZoom() {
+            const modal = document.getElementById('image-zoom-modal');
+            modal.classList.add('hidden');
+            document.getElementById('image-zoom-img').src = '';
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeImageZoom();
+            }
+        });
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+
+        // Polling automático da Triagem a cada 6 segundos
+        setInterval(() => {
+            const triagem = document.getElementById('view-triagem');
+            if (!triagem.classList.contains('hidden')) {
+                loadTickets();
+            }
+        }, 6000);
+
+        // Início
+        loadTickets();
+    </script>
+
+    <!-- Modal de Zoom de Imagens (Lightbox com z-index maximo) -->
+    <div id="image-zoom-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4 transition-all" onclick="closeImageZoom()">
+        <div class="relative max-w-6xl max-h-[92vh] bg-slate-900 rounded-lg p-2 shadow-2xl flex flex-col items-center" onclick="event.stopPropagation()">
+            <div class="w-full flex items-center justify-between pb-2 border-b border-slate-700 text-white px-2">
+                <span class="text-xs font-semibold flex items-center gap-1.5 text-blue-300">
+                    <i data-lucide="zoom-in" class="w-4 h-4 text-[#0078d4]"></i> Visualização do Print / Imagem Ampliada
+                </span>
+                <button type="button" onclick="closeImageZoom()" class="text-slate-400 hover:text-white p-1 rounded transition text-sm">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="overflow-auto max-h-[82vh] p-2 flex items-center justify-center">
+                <img id="image-zoom-img" src="" class="max-w-full max-h-[80vh] object-contain rounded border border-slate-700 shadow" alt="Zoom Print">
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         DRAWER: TICKETS SEMELHANTES & BASE DE CONHECIMENTO
+    ════════════════════════════════════════════════════════════════════ -->
+
+    <!-- Overlay -->
+    <div id="similar-overlay" class="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-40 hidden transition-all" onclick="closeSimilarDrawer()"></div>
+
+    <!-- Drawer Panel -->
+    <div id="similar-drawer"
+        class="fixed top-0 right-0 h-full w-[460px] max-w-full bg-white shadow-2xl z-50 flex flex-col transform translate-x-full transition-transform duration-300 ease-in-out">
+
+        <!-- Drawer Header -->
+        <div class="bg-gradient-to-r from-violet-700 to-violet-900 text-white px-4 py-3 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2">
+                <i data-lucide="library" class="w-5 h-5 text-violet-200"></i>
+                <div>
+                    <div class="font-bold text-sm leading-tight">Referências DeskCortex</div>
+                    <div class="text-violet-200 text-[11px]">Chamados históricos e base de conhecimento</div>
+                </div>
+            </div>
+            <button onclick="closeSimilarDrawer()" class="p-1.5 rounded-md hover:bg-white/20 transition text-white">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+
+        <!-- Drawer Tabs -->
+        <div class="flex border-b border-slate-200 shrink-0 bg-slate-50">
+            <button id="similar-tab-tickets" onclick="switchSimilarTab('tickets')"
+                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-violet-700 border-b-2 border-violet-600 transition-all">
+                <i data-lucide="ticket" class="w-3.5 h-3.5"></i>
+                <span>Chamados</span>
+                <span id="similar-tab-tickets-badge" class="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">0</span>
+            </button>
+            <button id="similar-tab-kb" onclick="switchSimilarTab('kb')"
+                class="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-slate-500 border-b-2 border-transparent hover:text-violet-700 transition-all">
+                <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+                <span>Base de Conhecimento</span>
+                <span id="similar-tab-kb-badge" class="bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">0</span>
+            </button>
+        </div>
+
+        <!-- Barra de Busca Rápida no Drawer -->
+        <div class="px-3 py-2 border-b border-slate-200 bg-white shrink-0 flex items-center gap-1.5">
+            <div class="relative flex-1">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5"></i>
+                <input type="text" id="similar-custom-query" placeholder="Buscar por erro, termo ou #chamado..."
+                    class="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-7 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-violet-500 transition"
+                    onkeydown="if(event.key==='Enter') searchSimilarCustom()">
+                <button type="button" onclick="clearSimilarCustomSearch()" id="similar-custom-clear" class="hidden absolute right-2 top-2 text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+            <button onclick="searchSimilarCustom()" class="px-2.5 py-1.5 bg-violet-700 hover:bg-violet-800 text-white rounded-md text-xs font-semibold transition shrink-0">
+                Filtrar
+            </button>
+        </div>
+
+        <!-- Drawer Body -->
+        <div class="flex-1 overflow-y-auto">
+            <!-- Loading state -->
+            <div id="similar-loading" class="hidden flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+                <div class="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"></div>
+                <span class="text-xs">Buscando referências semelhantes...</span>
+            </div>
+
+            <!-- Tickets Tab Content -->
+            <div id="similar-content-tickets" class="p-3 space-y-2">
+                <p class="text-xs text-slate-400 italic py-4 text-center">Nenhum chamado semelhante encontrado.</p>
+            </div>
+
+            <!-- KB Tab Content -->
+            <div id="similar-content-kb" class="hidden p-3 space-y-2">
+                <p class="text-xs text-slate-400 italic py-4 text-center">Nenhum artigo da base de conhecimento encontrado.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         MODAL: VISUALIZAÇÃO DO CHAMADO HISTÓRICO (estilo dark/Movidesk)
+    ════════════════════════════════════════════════════════════════════ -->
+    <div id="hist-ticket-modal" class="fixed inset-0 bg-black/85 backdrop-blur z-[70] hidden flex items-start justify-center p-3 sm:p-6 overflow-y-auto" onclick="closeHistModal(event)">
+        <div class="relative bg-[#1e2030] text-white rounded-xl shadow-2xl w-full max-w-5xl my-4 overflow-hidden border border-slate-700 flex flex-col max-h-[92vh]" onclick="event.stopPropagation()">
+            <!-- Modal Header -->
+            <div id="hist-modal-header" class="bg-[#181a26] px-5 py-3.5 border-b border-slate-700 flex items-start justify-between shrink-0">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span id="hist-ticket-badge" class="text-xs font-bold bg-emerald-700 text-white px-2.5 py-0.5 rounded font-mono">CHAMADO #—</span>
+                        <span id="hist-ticket-status" class="text-xs font-bold bg-slate-700 text-slate-200 px-2.5 py-0.5 rounded">Fechado</span>
+                        <span id="hist-ticket-date" class="text-slate-400 text-xs font-mono"></span>
+                    </div>
+                    <h2 id="hist-ticket-title" class="font-bold text-base text-white leading-snug"></h2>
+                    <div id="hist-ticket-meta" class="text-slate-400 text-xs mt-1 flex items-center gap-2 flex-wrap"></div>
+                </div>
+                <button onclick="closeHistModal()" class="ml-4 p-1.5 rounded-lg hover:bg-slate-700 transition text-slate-400 hover:text-white shrink-0">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Modal Scrollable Content -->
+            <div class="p-5 overflow-y-auto space-y-4 flex-1">
+
+                <!-- Loading das Ações e Prints -->
+                <div id="hist-loading-actions" class="hidden flex flex-col items-center justify-center py-12 gap-3 text-slate-400">
+                    <div class="w-8 h-8 border-2 border-violet-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-xs font-medium">Carregando ações, resoluções e prints originais do chamado...</span>
+                </div>
+
+                <!-- Container das Ações Completas com Prints (Movidesk Real) -->
+                <div id="hist-actions-full-list" class="space-y-4"></div>
+
+                <!-- Fallback: Seções Resumidas (quando não houver ações na API) -->
+                <div id="hist-sections-fallback" class="space-y-4 hidden">
+                    <!-- Problema -->
+                    <div id="hist-section-problem" class="hidden">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <i data-lucide="alert-circle" class="w-3 h-3 text-red-400"></i> Problema Relatado
+                        </div>
+                        <div id="hist-ticket-problem" class="bg-slate-800/60 border border-slate-700 rounded-md p-3.5 text-xs leading-relaxed text-slate-200"></div>
+                    </div>
+
+                    <!-- Diagnóstico -->
+                    <div id="hist-section-diag" class="hidden">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <i data-lucide="stethoscope" class="w-3 h-3 text-amber-400"></i> Diagnóstico
+                        </div>
+                        <div id="hist-ticket-diag" class="bg-slate-800/60 border border-slate-700 rounded-md p-3.5 text-xs leading-relaxed text-amber-100"></div>
+                    </div>
+
+                    <!-- Solução -->
+                    <div id="hist-section-solution" class="hidden">
+                        <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <i data-lucide="check-circle" class="w-3 h-3 text-emerald-400"></i> Solução Aplicada
+                        </div>
+                        <div id="hist-ticket-solution" class="bg-emerald-950/60 border border-emerald-800/50 rounded-md p-3.5 text-xs leading-relaxed text-emerald-100"></div>
+                    </div>
+
+                    <!-- Caminho e Atalhos -->
+                    <div id="hist-section-meta" class="hidden grid grid-cols-2 gap-3">
+                        <div>
+                            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                <i data-lucide="map-pin" class="w-3 h-3 text-blue-400"></i> Caminho no Master
+                            </div>
+                            <div id="hist-ticket-screen" class="bg-slate-800/60 border border-slate-700 rounded px-2.5 py-1.5 text-[11px] text-blue-200 font-mono"></div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                <i data-lucide="keyboard" class="w-3 h-3 text-violet-400"></i> Atalhos
+                            </div>
+                            <div id="hist-ticket-shortcuts" class="bg-slate-800/60 border border-slate-700 rounded px-2.5 py-1.5 text-[11px] text-violet-200 font-mono"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tags -->
+                    <div id="hist-section-tags" class="hidden">
+                        <div id="hist-ticket-tags" class="flex flex-wrap gap-1.5"></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Footer: Feedback do Técnico -->
+            <div class="border-t border-slate-700 bg-slate-900/70 px-4 py-3 space-y-3" id="hist-modal-footer">
+                <!-- Botão marcar como útil -->
+                <div class="flex items-center gap-3">
+                    <button id="hist-btn-helpful" onclick="markHistHelpful()"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold shadow transition">
+                        <i data-lucide="thumbs-up" class="w-3.5 h-3.5"></i>
+                        <span>Marcar como Solução Útil</span>
+                    </button>
+                    <span id="hist-helpful-confirmed" class="hidden text-emerald-400 text-xs font-bold flex items-center gap-1">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i> Validado — Confiança elevada!
+                    </span>
+                </div>
+
+                <!-- Campo de Comentário -->
+                <div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <i data-lucide="message-square" class="w-3 h-3 text-slate-400"></i> Observação Técnica (opcional)
+                    </div>
+                    <textarea id="hist-comment-text" rows="2"
+                        placeholder="Ex.: Solução confirmada para erro 10060 com servidor SMTP..." 
+                        class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-violet-500 resize-none"></textarea>
+                    <div class="flex justify-end mt-1.5">
+                        <button onclick="saveHistComment()"
+                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-violet-700 hover:bg-violet-600 text-white text-xs font-semibold shadow transition">
+                            <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                            <span>Salvar Observação</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         MODAL: VISUALIZAÇÃO DO ARTIGO KB (estilo dark amplo)
+    ════════════════════════════════════════════════════════════════════ -->
+    <div id="hist-kb-modal" class="fixed inset-0 bg-black/85 backdrop-blur z-[70] hidden flex items-start justify-center p-3 sm:p-6 overflow-y-auto" onclick="closeKbModal(event)">
+        <div class="relative bg-[#1e2030] text-white rounded-xl shadow-2xl w-full max-w-5xl my-4 overflow-hidden border border-slate-700 flex flex-col max-h-[92vh]" onclick="event.stopPropagation()">
+            <!-- KB Modal Header -->
+            <div class="bg-[#181a26] px-5 py-3.5 border-b border-slate-700 flex items-start justify-between shrink-0">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+                        <span class="text-xs font-bold bg-blue-700 text-white px-2.5 py-0.5 rounded flex items-center gap-1">
+                            <i data-lucide="book-open" class="w-3.5 h-3.5"></i> BASE DE CONHECIMENTO
+                        </span>
+                        <span id="kb-modal-type" class="text-xs font-bold bg-slate-700 text-slate-200 px-2.5 py-0.5 rounded">Manual</span>
+                        <span id="kb-modal-match" class="text-xs font-bold text-emerald-400"></span>
+                    </div>
+                    <h2 id="kb-modal-title" class="font-bold text-base text-white leading-snug"></h2>
+                    <p id="kb-modal-meta" class="text-slate-400 text-xs mt-1"></p>
+                </div>
+                <button onclick="closeKbModal()" class="ml-4 p-1.5 rounded-lg hover:bg-slate-700 transition text-slate-400 hover:text-white shrink-0">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- KB Modal Body -->
+            <div class="p-5 overflow-y-auto space-y-5 flex-1">
+
+                <!-- Loading do Artigo -->
+                <div id="kb-loading-details" class="hidden flex flex-col items-center justify-center py-10 gap-3 text-slate-400">
+                    <div class="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span class="text-xs font-medium">Carregando conteúdo completo e telas do manual...</span>
+                </div>
+
+                <!-- Conteúdo HTML Oficial (quando existir) -->
+                <div id="kb-official-html-container" class="hidden border border-slate-700/80 rounded-xl p-5 bg-[#181a26] text-xs text-slate-200 leading-relaxed rich-content space-y-3"></div>
+
+                <!-- Conteúdo Estruturado do Manual Master -->
+                <div id="kb-structured-container" class="space-y-4">
+                    <!-- Situação / Contexto -->
+                    <div id="kb-section-problem" class="hidden">
+                        <div class="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                            <i data-lucide="help-circle" class="w-3.5 h-3.5"></i> Situação / Mensagem de Erro / Evidência
+                        </div>
+                        <div id="kb-modal-problem" class="bg-slate-800/80 border border-slate-700 rounded-lg p-4 text-xs leading-relaxed text-slate-200 whitespace-pre-line font-mono font-normal"></div>
+                    </div>
+
+                    <!-- Procedimento / Solução Oficial -->
+                    <div id="kb-section-solution" class="hidden">
+                        <div class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Procedimento Oficial no ERP Master / Resolução
+                        </div>
+                        <div id="kb-modal-solution" class="bg-emerald-950/60 border border-emerald-800/60 rounded-lg p-4 text-xs leading-relaxed text-emerald-100 whitespace-pre-line font-normal space-y-2"></div>
+                    </div>
+
+                    <!-- Caminho no Master e Atalhos -->
+                    <div id="kb-section-meta" class="hidden grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                <i data-lucide="map-pin" class="w-3 h-3 text-blue-400"></i> Caminho no ERP Master
+                            </div>
+                            <div id="kb-modal-screen" class="bg-slate-800/70 border border-slate-700 rounded-lg px-3 py-2 text-xs text-blue-200 font-mono"></div>
+                        </div>
+                        <div>
+                            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+                                <i data-lucide="keyboard" class="w-3 h-3 text-violet-400"></i> Teclas de Atalho
+                            </div>
+                            <div id="kb-modal-shortcuts" class="bg-slate-800/70 border border-slate-700 rounded-lg px-3 py-2 text-xs text-violet-200 font-mono"></div>
+                        </div>
+                    </div>
+
+                    <!-- Galeria de Imagens e Prints Oficiais do ERP Master -->
+                    <div id="kb-section-gallery" class="hidden space-y-2 pt-2">
+                        <div class="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center justify-between">
+                            <span class="flex items-center gap-1.5">
+                                <i data-lucide="image" class="w-3.5 h-3.5"></i> Telas e Prints de Instrução do ERP Master
+                            </span>
+                            <span class="text-[10px] text-slate-400 lowercase font-normal">clique em qualquer tela para ampliar</span>
+                        </div>
+                        <div id="kb-gallery-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- KB Modal Footer -->
+            <div class="border-t border-slate-700 bg-slate-900/80 px-5 py-3.5 space-y-3 shrink-0">
+                <div class="flex items-center gap-3">
+                    <button id="kb-btn-helpful" onclick="markKbHelpful()"
+                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-semibold shadow transition">
+                        <i data-lucide="thumbs-up" class="w-3.5 h-3.5"></i>
+                        <span>Marcar como Referência Útil</span>
+                    </button>
+                    <span id="kb-helpful-confirmed" class="hidden text-emerald-400 text-xs font-bold flex items-center gap-1">
+                        <i data-lucide="check-circle" class="w-4 h-4"></i> Validado — Confiança elevada!
+                    </span>
+                </div>
+                <div>
+                    <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Observação Técnica (opcional)</div>
+                    <textarea id="kb-comment-text" rows="2"
+                        placeholder="Ex.: Este manual resolveu o problema de sincronização do e-commerce..."
+                        class="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"></textarea>
+                    <div class="flex justify-end mt-1.5">
+                        <button onclick="saveKbComment()"
+                            class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-700 hover:bg-blue-600 text-white text-xs font-semibold shadow transition">
+                            <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                            <span>Salvar Observação</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // ═══════════════════════════════════════════════════════════════════
+    // SIMILAR TICKETS DRAWER — JS COMPLETO
+    // ═══════════════════════════════════════════════════════════════════
+    let _similarData = { knowledge_results: [], ticket_results: [] };
+    let _currentSimilarNode = null;  // nó sendo visualizado na modal
+    let _currentSimilarType = null;  // 'ticket' | 'kb'
+    let _currentSimilarTab = 'tickets';
+    const _similarCache = {}; // Cache local em memória por ticket id: { [ticketId]: data }
+    let _preloadingTicketId = null;
+
+    // ── Pré-carregar dados em background assim que o chamado for aberto ─
+    async function preloadSimilarData(ticketId) {
+        if (!ticketId) return;
+        if (_similarCache[ticketId]) {
+            updateSimilarBadgesAndRender(ticketId, _similarCache[ticketId]);
+            return;
+        }
+        _preloadingTicketId = ticketId;
+        try {
+            const resp = await fetch(`/api/tickets/${ticketId}/similar`);
+            if (!resp.ok) throw new Error('Erro HTTP ' + resp.status);
+            const data = await resp.json();
+            _similarCache[ticketId] = data;
+            if (currentTicket && currentTicket.id === ticketId) {
+                updateSimilarBadgesAndRender(ticketId, data);
+            }
+        } catch (e) {
+            console.error('Preload similar error:', e);
+        }
+    }
+
+    // ── Atualizar Badges e Renderizar Conteúdo Instantaneamente ─────────
+    function updateSimilarBadgesAndRender(ticketId, data) {
+        _similarData = data || { knowledge_results: [], ticket_results: [] };
+        const tCount = (_similarData.ticket_results || []).length;
+        const kCount = (_similarData.knowledge_results || []).length;
+        
+        const badgeT = document.getElementById('similar-tab-tickets-badge');
+        const badgeKB = document.getElementById('similar-tab-kb-badge');
+        if (badgeT) badgeT.innerText = tCount;
+        if (badgeKB) badgeKB.innerText = kCount;
+
+        const totalBadge = document.getElementById('similar-badge');
+        const total = tCount + kCount;
+        if (totalBadge) {
+            if (total > 0) {
+                totalBadge.innerText = total;
+                totalBadge.classList.remove('hidden');
+            } else {
+                totalBadge.classList.add('hidden');
+            }
+        }
+
+        renderSimilarTicketsList(_similarData.ticket_results || []);
+        renderKbList(_similarData.knowledge_results || []);
+
+        // Auto-switch inteligente se aba ativa estiver vazia
+        if (_currentSimilarTab === 'tickets' && tCount === 0 && kCount > 0) {
+            switchSimilarTab('kb');
+        } else if (_currentSimilarTab === 'kb' && kCount === 0 && tCount > 0) {
+            switchSimilarTab('tickets');
+        } else {
+            switchSimilarTab(_currentSimilarTab);
+        }
+        lucide.createIcons();
+    }
+
+    // ── Abrir Drawer ────────────────────────────────────────────────────
+    async function openSimilarDrawer() {
+        document.getElementById('similar-overlay').classList.remove('hidden');
+        const drawer = document.getElementById('similar-drawer');
+        drawer.classList.remove('translate-x-full');
+        lucide.createIcons();
+
+        if (!currentTicket) return;
+
+        const customQuery = (document.getElementById('similar-custom-query')?.value || '').trim();
+
+        // Se já temos no cache local e não há termo manual digitado, abre INSTANTANEAMENTE a 0ms!
+        if (!customQuery && _similarCache[currentTicket.id]) {
+            document.getElementById('similar-loading').classList.add('hidden');
+            updateSimilarBadgesAndRender(currentTicket.id, _similarCache[currentTicket.id]);
+            return;
+        }
+
+        loadSimilarTickets(customQuery);
+    }
+
+    // ── Fechar Drawer ───────────────────────────────────────────────────
+    function closeSimilarDrawer() {
+        document.getElementById('similar-overlay').classList.add('hidden');
+        document.getElementById('similar-drawer').classList.add('translate-x-full');
+    }
+
+    // ── Alternar Abas do Drawer ─────────────────────────────────────────
+    function switchSimilarTab(tab) {
+        _currentSimilarTab = tab;
+
+        const tabTickets = document.getElementById('similar-tab-tickets');
+        const tabKb = document.getElementById('similar-tab-kb');
+        const contentTickets = document.getElementById('similar-content-tickets');
+        const contentKb = document.getElementById('similar-content-kb');
+        const badgeT = document.getElementById('similar-tab-tickets-badge');
+        const badgeKB = document.getElementById('similar-tab-kb-badge');
+
+        if (tab === 'tickets') {
+            tabTickets.className = 'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-violet-700 border-b-2 border-violet-600 transition-all';
+            tabKb.className = 'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-slate-500 border-b-2 border-transparent hover:text-violet-700 transition-all';
+            badgeT.className = 'bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none';
+            badgeKB.className = 'bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none';
+            contentTickets.classList.remove('hidden');
+            contentKb.classList.add('hidden');
+        } else {
+            tabKb.className = 'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-violet-700 border-b-2 border-violet-600 transition-all';
+            tabTickets.className = 'flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-semibold text-slate-500 border-b-2 border-transparent hover:text-violet-700 transition-all';
+            badgeKB.className = 'bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none';
+            badgeT.className = 'bg-slate-100 text-slate-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none';
+            contentKb.classList.remove('hidden');
+            contentTickets.classList.add('hidden');
+        }
+        lucide.createIcons();
+    }
+
+    // ── Carregar Semelhantes da API ─────────────────────────────────────
+    async function loadSimilarTickets(customQuery = "") {
+        if (!currentTicket) return;
+
+        const loading = document.getElementById('similar-loading');
+        const contentT = document.getElementById('similar-content-tickets');
+        const contentKB = document.getElementById('similar-content-kb');
+
+        // Se for busca padrão e já tiver no cache, usa direto sem exibir loading
+        if (!customQuery && _similarCache[currentTicket.id]) {
+            loading.classList.add('hidden');
+            updateSimilarBadgesAndRender(currentTicket.id, _similarCache[currentTicket.id]);
+            return;
+        }
+
+        loading.classList.remove('hidden');
+        contentT.classList.add('hidden');
+        contentKB.classList.add('hidden');
+
+        try {
+            const url = customQuery 
+                ? `/api/tickets/${currentTicket.id}/similar?q=${encodeURIComponent(customQuery)}`
+                : `/api/tickets/${currentTicket.id}/similar`;
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('Erro HTTP ' + resp.status);
+            const data = await resp.json();
+            if (!customQuery) {
+                _similarCache[currentTicket.id] = data;
+            }
+            _similarData = data;
+        } catch (e) {
+            console.error('Similar fetch error:', e);
+            _similarData = { knowledge_results: [], ticket_results: [] };
+        }
+
+        loading.classList.add('hidden');
+        updateSimilarBadgesAndRender(currentTicket.id, _similarData);
+    }
+
+    function searchSimilarCustom() {
+        const inp = document.getElementById('similar-custom-query');
+        const val = inp.value.trim();
+        const clearBtn = document.getElementById('similar-custom-clear');
+        if (val) {
+            clearBtn.classList.remove('hidden');
+            loadSimilarTickets(val);
+        } else {
+            clearSimilarCustomSearch();
+        }
+    }
+
+    function clearSimilarCustomSearch() {
+        const inp = document.getElementById('similar-custom-query');
+        inp.value = '';
+        document.getElementById('similar-custom-clear').classList.add('hidden');
+        loadSimilarTickets('');
+    }
+
+    // ── Renderizar lista de Chamados ────────────────────────────────────
+    function renderSimilarTicketsList(tickets) {
+        const container = document.getElementById('similar-content-tickets');
+        if (!tickets.length) {
+            container.innerHTML = '<p class="text-xs text-slate-400 italic py-6 text-center">Nenhum chamado semelhante encontrado na base histórica.</p>';
+            return;
+        }
+        container.innerHTML = tickets.map((t, i) => {
+            const extId = t.source_external_id ? `#${t.source_external_id}` : `NK-${t.node_id}`;
+            const matchColor = t.match_pct >= 90 ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                             : t.match_pct >= 75 ? 'text-amber-700 bg-amber-50 border-amber-200'
+                             : 'text-slate-600 bg-slate-50 border-slate-200';
+            const isValidated = t.is_helpful;
+            return `
+            <div class="border border-slate-200 rounded-lg bg-white shadow-xs hover:shadow-md transition-shadow p-3 space-y-2" id="sim-card-${t.node_id}">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-[10px] font-bold bg-slate-800 text-white px-2 py-0.5 rounded font-mono">${extId}</span>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${matchColor}" title="Ordem de busca, não confiança no diagnóstico">Relevância ${t.match_pct}</span>
+                        ${isValidated ? '<span class="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">✅ Validado</span>' : ''}
+                    </div>
+                    ${t.date ? `<span class="text-[10px] text-slate-400 shrink-0">${t.date}</span>` : ''}
+                </div>
+                <div class="font-semibold text-slate-800 text-xs leading-tight">${t.title || '(sem título)'}</div>
+                ${t.problem ? `<div class="text-[11px] text-slate-600 leading-relaxed line-clamp-2">${t.problem}</div>` : ''}
+                ${t.answer_use === 'investigation_only' ? '<p class="text-xs text-amber-700">Evidência incompleta: usar para investigar, não como procedimento confirmado.</p>' : ''}
+                ${t.solution ? `<div class="text-[11px] text-emerald-700 leading-relaxed line-clamp-2 bg-emerald-50 rounded px-2 py-1 border border-emerald-100">💡 ${t.solution}</div>` : ''}
+                ${t.technician_comment ? `<div class="text-[11px] text-violet-700 bg-violet-50 border border-violet-100 rounded px-2 py-1 leading-relaxed">💬 ${t.technician_comment}</div>` : ''}
+                <div class="flex justify-end">
+                    <button onclick="openHistModal(${i})"
+                        class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-700 hover:bg-slate-900 text-white text-[11px] font-semibold shadow transition">
+                        <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                        <span>Ver Chamado Completo</span>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+        lucide.createIcons();
+    }
+
+    // ── Renderizar lista de KB ──────────────────────────────────────────
+    function renderKbList(articles) {
+        const container = document.getElementById('similar-content-kb');
+        if (!articles.length) {
+            container.innerHTML = '<p class="text-xs text-slate-400 italic py-6 text-center">Nenhum artigo da base de conhecimento encontrado.</p>';
+            return;
+        }
+        container.innerHTML = articles.map((a, i) => {
+            const matchColor = a.match_pct >= 90 ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                             : a.match_pct >= 75 ? 'text-amber-700 bg-amber-50 border-amber-200'
+                             : 'text-slate-600 bg-slate-50 border-slate-200';
+            const typeLabel = a.source_type === 'MANUAL' ? '📘 Manual' : '📋 KB Oficial';
+            const isValidated = a.is_helpful;
+            return `
+            <div class="border border-slate-200 rounded-lg bg-white shadow-xs hover:shadow-md transition-shadow p-3 space-y-2" id="kb-card-${a.node_id}">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="text-[10px] font-bold bg-blue-700 text-white px-2 py-0.5 rounded">${typeLabel}</span>
+                        <span class="text-[10px] font-bold px-1.5 py-0.5 rounded border ${matchColor}" title="Ordem de busca, não confiança no diagnóstico">Relevância ${a.match_pct}</span>
+                        ${isValidated ? '<span class="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">✅ Validado</span>' : ''}
+                    </div>
+                </div>
+                <div class="font-semibold text-slate-800 text-xs leading-tight">${a.title || '(sem título)'}</div>
+                ${a.problem ? `<div class="text-[11px] text-slate-600 leading-relaxed line-clamp-2">${a.problem}</div>` : ''}
+                ${a.answer_use === 'investigation_only' ? '<p class="text-xs text-amber-700">Fonte incompleta: conferir o original ou transcrever o vídeo antes de orientar passos.</p>' : ''}
+                ${a.solution ? `<div class="text-[11px] text-emerald-700 leading-relaxed line-clamp-2 bg-emerald-50 rounded px-2 py-1 border border-emerald-100">💡 ${a.solution}</div>` : ''}
+                ${a.screen_path ? `<div class="text-[11px] text-blue-700 font-mono bg-blue-50 border border-blue-100 rounded px-2 py-1">🗺️ ${a.screen_path}</div>` : ''}
+                ${a.technician_comment ? `<div class="text-[11px] text-violet-700 bg-violet-50 border border-violet-100 rounded px-2 py-1 leading-relaxed">💬 ${a.technician_comment}</div>` : ''}
+                <div class="flex justify-end">
+                    <button onclick="openKbModal(${i})"
+                        class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-700 hover:bg-blue-900 text-white text-[11px] font-semibold shadow transition">
+                        <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+                        <span>Ver Artigo Completo</span>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+        lucide.createIcons();
+    }
+
+    // ── Abrir Modal de Chamado Histórico ────────────────────────────────
+    // ── Abrir Modal de Chamado Histórico ────────────────────────────────
+    async function openHistModal(idx) {
+        const t = (_similarData.ticket_results || [])[idx];
+        if (!t) return;
+        _currentSimilarNode = t;
+        _currentSimilarType = 'ticket';
+
+        const extId = t.source_external_id ? `CHAMADO #${t.source_external_id}` : `REF #${t.node_id}`;
+        document.getElementById('hist-ticket-badge').textContent = extId;
+        document.getElementById('hist-ticket-title').textContent = t.title || '(sem título)';
+        document.getElementById('hist-ticket-date').textContent = t.date ? `Aberto em ${t.date}` : '';
+        document.getElementById('hist-ticket-meta').innerHTML = `
+            <span>Módulo: ${(t.modules && t.modules.length) ? t.modules.join(', ') : 'NFe / Fiscal'}</span>
+            ${t.match_pct ? `<span>• <b class="text-emerald-400 font-bold">Relevância ${t.match_pct} (não é confiança)</b></span>` : ''}
+        `;
+
+        const tierEl = document.getElementById('hist-ticket-status');
+        tierEl.textContent = t.tier || 'Fechado';
+
+        // Reset views
+        const loadingActions = document.getElementById('hist-loading-actions');
+        const actionsList = document.getElementById('hist-actions-full-list');
+        const fallbackSections = document.getElementById('hist-sections-fallback');
+
+        actionsList.innerHTML = '';
+        fallbackSections.classList.add('hidden');
+        loadingActions.classList.remove('hidden');
+
+        // Reset feedback footer
+        document.getElementById('hist-btn-helpful').classList.remove('hidden');
+        document.getElementById('hist-helpful-confirmed').classList.add('hidden');
+        document.getElementById('hist-comment-text').value = t.technician_comment || '';
+        if (t.is_helpful) {
+            document.getElementById('hist-btn-helpful').classList.add('hidden');
+            document.getElementById('hist-helpful-confirmed').classList.remove('hidden');
+        }
+
+        document.getElementById('hist-ticket-modal').classList.remove('hidden');
+        lucide.createIcons();
+
+        // Buscar detalhes e acoes completas do Movidesk
+        if (t.source_external_id) {
+            try {
+                const resp = await fetch(`/api/tickets/historical/${t.source_external_id}`);
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const detail = await resp.json();
+                
+                loadingActions.classList.add('hidden');
+
+                if (detail.client && detail.client !== 'Cliente') {
+                    document.getElementById('hist-ticket-meta').innerHTML += `<span>• Cliente: <b>${detail.client}</b></span>`;
+                }
+
+                if (detail.actions && detail.actions.length > 0) {
+                    actionsList.innerHTML = detail.actions.map((act, i) => {
+                        const authorInitials = act.author ? act.author.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'TC';
+                        return `
+                        <div class="border border-slate-700/80 rounded-xl overflow-hidden bg-[#181a26] shadow-lg">
+                            <div class="bg-[#24283b] px-4 py-3 border-b border-slate-700 flex items-center justify-between text-xs flex-wrap gap-2">
+                                <div class="flex items-center gap-2.5">
+                                    <div class="w-7 h-7 rounded-full bg-violet-600 text-white font-bold flex items-center justify-center text-xs shadow">
+                                        ${authorInitials}
+                                    </div>
+                                    <div>
+                                        <div class="font-bold text-slate-100 text-xs">${act.author}</div>
+                                        <div class="text-slate-400 text-[10px]">Ação #${act.id || (i+1)} • ${act.created_at || 'Atendimento'}</div>
+                                    </div>
+                                </div>
+                                <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-700/50">
+                                    Atendente / Suporte
+                                </span>
+                            </div>
+                            <div class="p-4 sm:p-5 text-xs text-slate-200 leading-relaxed rich-content space-y-3 font-normal overflow-x-auto">
+                                ${act.html_content}
+                            </div>
+                        </div>`;
+                    }).join('');
+
+                    // Adicionar classe e lightbox em todas as imagens renderizadas
+                    actionsList.querySelectorAll('img').forEach(img => {
+                        img.classList.add('cursor-zoom-in', 'rounded-lg', 'border', 'border-slate-700', 'hover:border-violet-400', 'transition-all', 'my-2', 'max-w-full', 'shadow');
+                        img.title = "Clique para ampliar o print";
+                        img.onclick = () => openImageZoom(img.src);
+                    });
+
+                    lucide.createIcons();
+                    return;
+                }
+            } catch (err) {
+                console.warn('Falha ao carregar ações detalhadas do Movidesk, usando dados locais:', err);
+            }
+        }
+
+        // Fallback: renderizar dados sintetizados se a API nao responder
+        loadingActions.classList.add('hidden');
+        fallbackSections.classList.remove('hidden');
+
+        if (t.problem) {
+            document.getElementById('hist-ticket-problem').textContent = t.problem;
+            document.getElementById('hist-section-problem').classList.remove('hidden');
+        } else {
+            document.getElementById('hist-section-problem').classList.add('hidden');
+        }
+
+        if (t.diagnosis) {
+            document.getElementById('hist-ticket-diag').textContent = t.diagnosis;
+            document.getElementById('hist-section-diag').classList.remove('hidden');
+        } else {
+            document.getElementById('hist-section-diag').classList.add('hidden');
+        }
+
+        if (t.solution) {
+            document.getElementById('hist-ticket-solution').textContent = t.solution;
+            document.getElementById('hist-section-solution').classList.remove('hidden');
+        } else {
+            document.getElementById('hist-section-solution').classList.add('hidden');
+        }
+
+        const hasScreen = !!t.screen_path;
+        const hasShortcuts = t.shortcut_keys && t.shortcut_keys.length;
+        if (hasScreen || hasShortcuts) {
+            document.getElementById('hist-ticket-screen').textContent = t.screen_path || '—';
+            document.getElementById('hist-ticket-shortcuts').textContent = hasShortcuts ? t.shortcut_keys.join(' | ') : '—';
+            document.getElementById('hist-section-meta').classList.remove('hidden');
+        } else {
+            document.getElementById('hist-section-meta').classList.add('hidden');
+        }
+
+        const tagsContainer = document.getElementById('hist-ticket-tags');
+        const allTags = [...(t.modules || []), ...(t.detected_error_codes || [])];
+        if (allTags.length) {
+            tagsContainer.innerHTML = allTags.map(tg => `<span class="text-[10px] font-bold bg-slate-700 text-slate-200 px-1.5 py-0.5 rounded">${tg}</span>`).join('');
+            document.getElementById('hist-section-tags').classList.remove('hidden');
+        } else {
+            document.getElementById('hist-section-tags').classList.add('hidden');
+        }
+        // Recolher drawer temporariamente para focar na modal
+        document.getElementById('similar-drawer').classList.add('translate-x-full');
+
+        document.getElementById('hist-ticket-modal').classList.remove('hidden');
+        lucide.createIcons();
+    }
+
+    function closeHistModal(e) {
+        if (e && e.target !== document.getElementById('hist-ticket-modal')) return;
+        document.getElementById('hist-ticket-modal').classList.add('hidden');
+        _currentSimilarNode = null;
+        // Restaurar drawer se ainda estiver com o overlay ativo
+        const overlay = document.getElementById('similar-overlay');
+        if (overlay && !overlay.classList.contains('hidden')) {
+            document.getElementById('similar-drawer').classList.remove('translate-x-full');
+        }
+    }
+
+    // ── Abrir Modal de Artigo KB ────────────────────────────────────────
+    // ── Abrir Modal de Artigo KB ────────────────────────────────────────
+    async function openKbModal(idx) {
+        const a = (_similarData.knowledge_results || [])[idx];
+        if (!a) return;
+        _currentSimilarNode = a;
+        _currentSimilarType = 'kb';
+
+        document.getElementById('kb-modal-title').textContent = a.title || '(sem título)';
+        document.getElementById('kb-modal-type').textContent = a.source_type === 'MANUAL' ? '📘 Manual Interno' : '📋 KB Oficial';
+        document.getElementById('kb-modal-match').textContent = a.match_pct ? `• Relevância ${a.match_pct} (não é confiança)` : '';
+        document.getElementById('kb-modal-meta').textContent = (a.modules && a.modules.length) ? 'Módulos: ' + a.modules.join(', ') : '';
+
+        // Reset views
+        const loadingKb = document.getElementById('kb-loading-details');
+        const officialHtml = document.getElementById('kb-official-html-container');
+        const structuredView = document.getElementById('kb-structured-container');
+        const gallerySection = document.getElementById('kb-section-gallery');
+        const galleryGrid = document.getElementById('kb-gallery-grid');
+
+        officialHtml.classList.add('hidden');
+        officialHtml.innerHTML = '';
+        gallerySection.classList.add('hidden');
+        galleryGrid.innerHTML = '';
+        structuredView.classList.remove('hidden');
+        loadingKb.classList.remove('hidden');
+
+        // Reset feedback footer
+        document.getElementById('kb-btn-helpful').classList.remove('hidden');
+        document.getElementById('kb-helpful-confirmed').classList.add('hidden');
+        document.getElementById('kb-comment-text').value = a.technician_comment || '';
+        if (a.is_helpful) {
+            document.getElementById('kb-btn-helpful').classList.add('hidden');
+            document.getElementById('kb-helpful-confirmed').classList.remove('hidden');
+        }
+
+        document.getElementById('hist-kb-modal').classList.remove('hidden');
+        lucide.createIcons();
+
+        try {
+            const resp = await fetch(`/api/knowledge/${a.node_id}`);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const detail = await resp.json();
+
+            loadingKb.classList.add('hidden');
+
+            // Se for artigo oficial com HTML
+            if (detail.html_content) {
+                officialHtml.innerHTML = detail.html_content;
+                officialHtml.classList.remove('hidden');
+                structuredView.classList.add('hidden');
+
+                // Adicionar zoom nas imagens do HTML oficial
+                officialHtml.querySelectorAll('img').forEach(img => {
+                    img.classList.add('cursor-zoom-in', 'rounded', 'border', 'border-slate-700', 'my-2', 'max-w-full');
+                    img.onclick = () => openImageZoom(img.src);
+                });
+                lucide.createIcons();
+                return;
+            }
+
+            // Renderizar dados estruturados do Manual Master completos
+            if (detail.problem) {
+                document.getElementById('kb-modal-problem').textContent = detail.problem;
+                document.getElementById('kb-section-problem').classList.remove('hidden');
+            } else {
+                document.getElementById('kb-section-problem').classList.add('hidden');
+            }
+
+            if (detail.solution) {
+                document.getElementById('kb-modal-solution').textContent = detail.solution;
+                document.getElementById('kb-section-solution').classList.remove('hidden');
+            } else {
+                document.getElementById('kb-section-solution').classList.add('hidden');
+            }
+
+            const hasScreen = !!detail.screen_path;
+            const hasShortcuts = detail.shortcut_keys && detail.shortcut_keys.length;
+            if (hasScreen || hasShortcuts) {
+                document.getElementById('kb-modal-screen').textContent = detail.screen_path || '—';
+                document.getElementById('kb-modal-shortcuts').textContent = hasShortcuts ? detail.shortcut_keys.join(' | ') : '—';
+                document.getElementById('kb-section-meta').classList.remove('hidden');
+            } else {
+                document.getElementById('kb-section-meta').classList.add('hidden');
+            }
+
+            // Renderizar galeria de imagens e prints oficiais do ERP Master
+            if (detail.images && detail.images.length > 0) {
+                galleryGrid.innerHTML = detail.images.map(im => `
+                    <div class="border border-slate-700/90 bg-slate-900/90 rounded-lg p-2.5 space-y-2 group hover:border-blue-500 transition shadow">
+                        <div class="relative overflow-hidden rounded-md cursor-zoom-in bg-black/50 aspect-video flex items-center justify-center" onclick="openImageZoom('${im.url}')">
+                            <img src="${im.url}" alt="${im.caption}" class="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200">
+                            <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+                                <span class="bg-blue-600/95 text-white text-[11px] font-bold px-2.5 py-1 rounded shadow flex items-center gap-1.5">
+                                    <i data-lucide="zoom-in" class="w-3.5 h-3.5"></i> Clique para ampliar
+                                </span>
+                            </div>
+                        </div>
+                        <div class="text-[11px] font-mono text-slate-400 truncate px-1 flex items-center gap-1">
+                            <i data-lucide="file-image" class="w-3 h-3 text-blue-400 shrink-0"></i>
+                            <span class="truncate">${im.caption}</span>
+                        </div>
+                    </div>
+                `).join('');
+                gallerySection.classList.remove('hidden');
+            }
+
+        } catch (err) {
+            console.warn('Falha ao carregar detalhes completos da KB:', err);
+            loadingKb.classList.add('hidden');
+            // Fallback nos dados locais
+            if (a.problem) { document.getElementById('kb-modal-problem').textContent = a.problem; document.getElementById('kb-section-problem').classList.remove('hidden'); }
+            if (a.solution) { document.getElementById('kb-modal-solution').textContent = a.solution; document.getElementById('kb-section-solution').classList.remove('hidden'); }
+        }
+
+        // Recolher drawer temporariamente para focar na modal
+        document.getElementById('similar-drawer').classList.add('translate-x-full');
+
+        document.getElementById('hist-kb-modal').classList.remove('hidden');
+        lucide.createIcons();
+    }
+
+    function closeKbModal(e) {
+        if (e && e.target !== document.getElementById('hist-kb-modal')) return;
+        document.getElementById('hist-kb-modal').classList.add('hidden');
+        _currentSimilarNode = null;
+        // Restaurar drawer se ainda estiver com o overlay ativo
+        const overlay = document.getElementById('similar-overlay');
+        if (overlay && !overlay.classList.contains('hidden')) {
+            document.getElementById('similar-drawer').classList.remove('translate-x-full');
+        }
+    }
+
+    // ── Marcar como Útil (Ticket Histórico) ────────────────────────────
+    async function markHistHelpful() {
+        if (!currentTicket || !_currentSimilarNode) return;
+        await sendSimilarFeedback(_currentSimilarNode.node_id, true, '');
+        document.getElementById('hist-btn-helpful').classList.add('hidden');
+        document.getElementById('hist-helpful-confirmed').classList.remove('hidden');
+        // Atualizar confiança no card principal
+        updateConfidenceBadgeFromFeedback();
+        showToast('✅ Chamado marcado como referência útil! Confiança elevada.');
+    }
+
+    // ── Marcar como Útil (KB) ───────────────────────────────────────────
+    async function markKbHelpful() {
+        if (!currentTicket || !_currentSimilarNode) return;
+        await sendSimilarFeedback(_currentSimilarNode.node_id, true, '');
+        document.getElementById('kb-btn-helpful').classList.add('hidden');
+        document.getElementById('kb-helpful-confirmed').classList.remove('hidden');
+        updateConfidenceBadgeFromFeedback();
+        showToast('✅ Artigo KB marcado como referência útil! Confiança elevada.');
+    }
+
+    // ── Salvar Comentário (Ticket Histórico) ────────────────────────────
+    async function saveHistComment() {
+        if (!currentTicket || !_currentSimilarNode) return;
+        const comment = document.getElementById('hist-comment-text').value.trim();
+        if (!comment) { showToast('Digite uma observação antes de salvar.'); return; }
+        await sendSimilarFeedback(_currentSimilarNode.node_id, _currentSimilarNode.is_helpful || false, comment);
+        showToast('💬 Observação salva como nota interna no chamado!');
+    }
+
+    // ── Salvar Comentário (KB) ──────────────────────────────────────────
+    async function saveKbComment() {
+        if (!currentTicket || !_currentSimilarNode) return;
+        const comment = document.getElementById('kb-comment-text').value.trim();
+        if (!comment) { showToast('Digite uma observação antes de salvar.'); return; }
+        await sendSimilarFeedback(_currentSimilarNode.node_id, _currentSimilarNode.is_helpful || false, comment);
+        showToast('💬 Observação salva como nota interna no chamado!');
+    }
+
+    // ── Enviar Feedback para a API ──────────────────────────────────────
+    async function sendSimilarFeedback(nodeId, isHelpful, comment) {
+        if (!currentTicket) return null;
+        try {
+            const resp = await fetch(`/api/tickets/${currentTicket.id}/similar-feedback`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    node_id: nodeId,
+                    is_helpful: isHelpful,
+                    comment: comment,
+                    technician: 'Lucas Souza'
+                })
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            return await resp.json();
+        } catch(e) {
+            console.error('Feedback error:', e);
+            return null;
+        }
+    }
+
+    // ── Atualizar badge de confiança após validação ─────────────────────
+    function updateConfidenceBadgeFromFeedback() {
+        const badge = document.getElementById('ai-confidence-badge');
+        if (!badge) return;
+        const current = parseInt(badge.innerText.replace(/[^0-9]/g, '')) || 88;
+        const newVal = Math.min(99, current + 2);
+        badge.innerText = `${newVal}% Confiança`;
+        badge.classList.add('ring-2', 'ring-emerald-400');
+        setTimeout(() => badge.classList.remove('ring-2', 'ring-emerald-400'), 3000);
+    }
+
+    // ── Fechar modals com ESC em cascata perfeita ──────────────────────
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const zoomModal = document.getElementById('image-zoom-modal');
+            if (zoomModal && !zoomModal.classList.contains('hidden')) {
+                closeImageZoom();
+                return;
+            }
+            const ticketModal = document.getElementById('hist-ticket-modal');
+            if (ticketModal && !ticketModal.classList.contains('hidden')) {
+                closeHistModal();
+                return;
+            }
+            const kbModal = document.getElementById('hist-kb-modal');
+            if (kbModal && !kbModal.classList.contains('hidden')) {
+                closeKbModal();
+                return;
+            }
+            closeSimilarDrawer();
+        }
+    });
+    </script>
+
+</body>
+</html>
+

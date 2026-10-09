@@ -1,0 +1,84 @@
+/* Two explicit themes. Dark is the default; the stored choice wins on reload. */
+.theme-switch{display:flex;gap:3px;padding:3px;border:1px solid #cbd7e2;border-radius:9px;background:#e9eef4}
+.theme-switch button{border:0;border-radius:6px;padding:6px 10px;background:transparent;color:#52677d;font-size:11px;font-weight:700;white-space:nowrap}
+.theme-switch button[aria-pressed="true"]{background:#fff;color:#1d4058;box-shadow:0 1px 5px #182c4129}
+.theme-switch button:focus-visible{outline:2px solid #58bfc4;outline-offset:2px}
+
+html[data-theme="dark"]{color-scheme:dark;--ink:#e4edf7;--muted:#a7b6c8;--line:#344960;--paper:#101b2b;--white:#1a2a3e;--shadow:0 8px 25px #07101d33;--cx-canvas:#101b2b;--cx-surface:#1a2a3e;--cx-surface-soft:#20344a;--cx-border:#344b62;--cx-border-strong:#4b667e;--cx-text-primary:#e5edf6;--cx-text-secondary:#b1c1d0;--cx-text-muted:#9aacbd;--cx-accent:#70c6d2}
+html[data-theme="dark"] body,html[data-theme="dark"] .main,html[data-theme="dark"] .overview-page .main{background:#101b2b;color:#e4edf7}
+html[data-theme="dark"] .topbar,html[data-theme="dark"] .overview-page .topbar{background:#17263a;border-bottom-color:#35475c}
+html[data-theme="dark"] .crumb,html[data-theme="dark"] .snapshot{color:#a9bbcc}
+html[data-theme="dark"] .crumb b{color:#e4edf7}
+html[data-theme="dark"] .avatar{background:#2d4266;color:#d5e2ff}
+html[data-theme="dark"] .theme-switch{background:#101b2b;border-color:#40556c}
+html[data-theme="dark"] .theme-switch button{color:#a7b8c9}
+html[data-theme="dark"] .theme-switch button[aria-pressed="true"]{background:#32526b;color:#f3f8fc;box-shadow:none}
+html[data-theme="dark"] .page-head h1,html[data-theme="dark"] .overview-page .page-head h1,html[data-theme="dark"] .panel-head h2,html[data-theme="dark"] .overview-page .panel-head h2,html[data-theme="dark"] .ticket-filter-heading h2,html[data-theme="dark"] .library-intro h2,html[data-theme="dark"] .library-heading h2,html[data-theme="dark"] .intake-heading h2{color:#f0f5fa}
+html[data-theme="dark"] .page-head p,html[data-theme="dark"] .overview-page .page-head p,html[data-theme="dark"] .eyebrow,html[data-theme="dark"] .panel-head p,html[data-theme="dark"] .ticket-filter-heading p,html[data-theme="dark"] .filter-caption,html[data-theme="dark"] .chart-note{color:#a9bacb}
+html[data-theme="dark"] .panel,html[data-theme="dark"] #view-overview .panel,html[data-theme="dark"] .kpi-card,html[data-theme="dark"] .ticket-kpi,html[data-theme="dark"] .module-tile,html[data-theme="dark"] .intake-summary>div,html[data-theme="dark"] #view-overview .intake-summary>div{background:#1a2a3e;border-color:#385068;color:#e6eff7;box-shadow:0 5px 18px #06101e33}
+html[data-theme="dark"] .button-light,html[data-theme="dark"] .button-quiet,html[data-theme="dark"] .overview-page #head-refresh,html[data-theme="dark"] .ticket-back{background:#263b51;border-color:#466078;color:#e4edf7}
+html[data-theme="dark"] .button-light:hover,html[data-theme="dark"] .button-quiet:hover,html[data-theme="dark"] .overview-page #head-refresh:hover,html[data-theme="dark"] .ticket-back:hover{background:#31506a;border-color:#6f92aa}
+html[data-theme="dark"] .snapshot-banner,html[data-theme="dark"] #view-overview .snapshot-banner,html[data-theme="dark"] #view-tickets .snapshot-banner{background:#1b3b43;border-color:#397477;color:#c9e9e5}
+html[data-theme="dark"] .snapshot-banner.stale,html[data-theme="dark"] #view-overview .snapshot-banner.stale,html[data-theme="dark"] #view-tickets .snapshot-banner.stale{background:#473521;border-color:#806037;color:#f4dbb6}
+html[data-theme="dark"] .department-heading h2,html[data-theme="dark"] #view-overview .department-heading h2{color:#eef5fa}
+html[data-theme="dark"] .department-heading p,html[data-theme="dark"] #view-overview .department-heading p{color:#adbdcb}
+html[data-theme="dark"] .department-card,html[data-theme="dark"] #view-overview .department-card,html[data-theme="dark"] .department-other,html[data-theme="dark"] #view-overview .department-other,html[data-theme="dark"] .decision-kpi,html[data-theme="dark"] #view-overview .decision-kpi{background:#1b2d42;border-color:#405b72;color:#e9f1f7}
+html[data-theme="dark"] .department-card:hover,html[data-theme="dark"] .department-other:hover,html[data-theme="dark"] .decision-kpi:hover{background:#253d55;border-color:#70a7ae}
+html[data-theme="dark"] .dept-name,html[data-theme="dark"] .department-other>span,html[data-theme="dark"] .dept-metric b,html[data-theme="dark"] .department-other>b,html[data-theme="dark"] .decision-kpi strong,html[data-theme="dark"] .decision-kpi .kpi-label{color:#f0f6fb}
+html[data-theme="dark"] .dept-metric small,html[data-theme="dark"] .department-other small,html[data-theme="dark"] .decision-kpi small,html[data-theme="dark"] .dept-link{color:#b4c8d8}
+html[data-theme="dark"] .dept-progress,html[data-theme="dark"] .bar-track,html[data-theme="dark"] .breakdown-track,html[data-theme="dark"] .intake-track{background:#30465b}
+html[data-theme="dark"] .queue-tab,html[data-theme="dark"] #view-overview .queue-tab,html[data-theme="dark"] .intake-preset,html[data-theme="dark"] .intake-switch button{background:#24384e;border-color:#455f76;color:#d4e4ef}
+html[data-theme="dark"] .queue-tab.selected,html[data-theme="dark"] #view-overview .queue-tab.selected,html[data-theme="dark"] .intake-preset.active,html[data-theme="dark"] .intake-switch button.active{background:#236b78;border-color:#55a4aa;color:#fff}
+html[data-theme="dark"] .topic-table-head,html[data-theme="dark"] #view-overview .topic-table-head,html[data-theme="dark"] th,html[data-theme="dark"] #view-tickets .ticket-table th,html[data-theme="dark"] #view-overview .decision-priority th{background:#24384d;border-color:#40566c;color:#b5c7d6}
+html[data-theme="dark"] td,html[data-theme="dark"] #view-tickets .ticket-table td,html[data-theme="dark"] #view-overview .decision-priority td{border-color:#31475e;color:#dce7f1}
+html[data-theme="dark"] #view-tickets .ticket-table tbody tr:nth-child(even),html[data-theme="dark"] #view-overview .decision-priority tbody tr:nth-child(even){background:#1e3146}
+html[data-theme="dark"] #view-tickets .ticket-table tbody tr:hover,html[data-theme="dark"] #view-overview .decision-priority tbody tr:hover{background:#2a465d}
+html[data-theme="dark"] .ticket-subject,html[data-theme="dark"] .decision-ticket-link span,html[data-theme="dark"] .ticket-breakdown-row span,html[data-theme="dark"] .client-rank b{color:#e7f0f7}
+html[data-theme="dark"] .ticket-id,html[data-theme="dark"] .decision-ticket-link,html[data-theme="dark"] .text-button,html[data-theme="dark"] .intake-record a{color:#91c4ff}
+html[data-theme="dark"] .decision-topic,html[data-theme="dark"] .decision-action,html[data-theme="dark"] .decision-breakdown,html[data-theme="dark"] .client-rank,html[data-theme="dark"] .intake-month,html[data-theme="dark"] .intake-topic,html[data-theme="dark"] .intake-record,html[data-theme="dark"] .ticket-breakdown-row{background:transparent;border-color:#344a61;color:#d9e7f1}
+html[data-theme="dark"] .decision-topic:hover,html[data-theme="dark"] .decision-action:hover,html[data-theme="dark"] .decision-breakdown:hover,html[data-theme="dark"] .client-rank:hover,html[data-theme="dark"] .intake-month:hover,html[data-theme="dark"] .ticket-breakdown-row:hover,html[data-theme="dark"] #view-tickets .ticket-breakdown-row:nth-child(even){background:#243c53}
+html[data-theme="dark"] .decision-topic>span:first-child,html[data-theme="dark"] .decision-action b,html[data-theme="dark"] .intake-record>b,html[data-theme="dark"] .intake-summary b{color:#e8f0f7}
+html[data-theme="dark"] .decision-action small,html[data-theme="dark"] .ticket-breakdown-row small,html[data-theme="dark"] .ticket-cell-note,html[data-theme="dark"] .intake-summary span,html[data-theme="dark"] .intake-summary small{color:#adc0d0}
+html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea,html[data-theme="dark"] .search-box,html[data-theme="dark"] #view-tickets .ticket-filter-grid input,html[data-theme="dark"] #view-tickets .ticket-filter-grid select,html[data-theme="dark"] #view-overview .intake-date-form input{background:#142338;border-color:#466079;color:#e9f1f8}
+html[data-theme="dark"] input::placeholder,html[data-theme="dark"] textarea::placeholder{color:#93a8ba}
+html[data-theme="dark"] .decision-method,html[data-theme="dark"] .decision-method summary,html[data-theme="dark"] .intake-method,html[data-theme="dark"] .intake-status{color:#aec1d0}
+html[data-theme="dark"] .status-chip,html[data-theme="dark"] .urgency-chip,html[data-theme="dark"] .source-chip,html[data-theme="dark"] .reason-chip,html[data-theme="dark"] .mini-pill{background:#2c4358;color:#d7e6f0;border-color:#456077}
+html[data-theme="dark"] .status-chip.open{background:#273f70;color:#c7d9ff}
+html[data-theme="dark"] .urgency-chip.high{background:#5c3135;color:#ffd8d7}
+html[data-theme="dark"] .ticket-scope-bar,html[data-theme="dark"] .notice{background:#243b50;border-color:#42627a;color:#dcebf5}
+html[data-theme="dark"] .knowledge-card h3,html[data-theme="dark"] .source-card b,html[data-theme="dark"] .setting-row b,html[data-theme="dark"] .policy-lock b,html[data-theme="dark"] .source-toggle b,html[data-theme="dark"] .governance b{color:#e7f0f7}
+html[data-theme="dark"] .knowledge-card p,html[data-theme="dark"] .knowledge-card .muted,html[data-theme="dark"] .source-card small,html[data-theme="dark"] .setting-row p,html[data-theme="dark"] .source-toggle small{color:#b2c3d1}
+html[data-theme="dark"] .knowledge-dialog{background:#17273a;color:#e6f0f7;border-color:#4b6379}
+html[data-theme="dark"] .editor-head,html[data-theme="dark"] .editor-body,html[data-theme="dark"] .editor-summary,html[data-theme="dark"] .source-preview,html[data-theme="dark"] .procedure-preview,html[data-theme="dark"] .editor-actions{background:#1a2c40;border-color:#40576d;color:#dce8f2}
+html[data-theme="dark"] .source-warning{background:#463923;color:#f0d8aa}
+html[data-theme="dark"] .app-footer,html[data-theme="dark"] .setting-row,html[data-theme="dark"] .policy-lock,html[data-theme="dark"] .source-toggle{border-color:#35495f;color:#aabccc}
+/* The overview and ticket styles use ID selectors, so match them explicitly. */
+html[data-theme="dark"] #view-overview .snapshot-banner b{color:#ddf3ed}
+html[data-theme="dark"] #view-overview .snapshot-banner span:last-child{color:#b9d9d2}
+html[data-theme="dark"] #view-overview .snapshot-banner.stale b,html[data-theme="dark"] #view-overview .snapshot-banner.stale span:last-child{color:#f0dcb8}
+html[data-theme="dark"] #view-overview .dept-name,html[data-theme="dark"] #view-overview .department-other>span,html[data-theme="dark"] #view-overview .decision-kpi .kpi-label{color:#e3eef6}
+html[data-theme="dark"] #view-overview .dept-link,html[data-theme="dark"] #view-overview .department-other small,html[data-theme="dark"] #view-overview .decision-kpi small{color:#b7ccdb}
+html[data-theme="dark"] #view-overview .section-label,html[data-theme="dark"] #view-overview .queue-explainer{color:#acc4d4}
+html[data-theme="dark"] #view-overview .queue-tabs{background:#1a2d42;border-color:#405a70}
+html[data-theme="dark"] #view-overview .department-card .dept-progress{background:#354d62}
+html[data-theme="dark"] #view-overview .decision-kpi strong,html[data-theme="dark"] #view-overview .decision-kpi.high strong,html[data-theme="dark"] #view-overview .decision-kpi.aged strong,html[data-theme="dark"] #view-overview .decision-kpi.clients strong{color:#f1f7fa}
+html[data-theme="dark"] #view-tickets .ticket-kpi{background:#1b2d42;border-color:#425e75;color:#e8f1f8}
+html[data-theme="dark"] #view-tickets .ticket-kpi:hover{background:#264057;border-color:#6b9ba8}
+html[data-theme="dark"] #view-tickets .ticket-kpi span,html[data-theme="dark"] #view-tickets .ticket-kpi strong{color:#edf5fa}
+html[data-theme="dark"] #view-tickets .ticket-kpi small{color:#b7c8d6}
+html[data-theme="dark"] #view-tickets .ticket-filter-grid label,html[data-theme="dark"] .ticket-filter-heading>span{color:#c1d1df}
+html[data-theme="dark"] #view-tickets .ticket-filters,html[data-theme="dark"] #view-tickets .ticket-table,html[data-theme="dark"] #view-tickets .ticket-breakdowns .panel{border-color:#405b72}
+html[data-theme="dark"] #view-overview .decision-topic>span:nth-child(n+3),html[data-theme="dark"] #view-overview .decision-action b,html[data-theme="dark"] #view-overview .decision-priority .decision-ticket-link span,html[data-theme="dark"] #view-overview .decision-priority .decision-ticket-link,html[data-theme="dark"] #view-overview .client-rank,html[data-theme="dark"] #view-overview .decision-breakdown{color:#dceaf4}
+html[data-theme="dark"] #view-overview .decision-action small,html[data-theme="dark"] #view-overview .decision-client,html[data-theme="dark"] #view-overview .age-number{color:#b9cbd9}
+html[data-theme="dark"] #view-overview .volume-cell b,html[data-theme="dark"] #view-overview .mini-pill,html[data-theme="dark"] #view-overview .reason-chip{background:#2c455d;color:#e2eef6;border-color:#48677b}
+html[data-theme="dark"] #view-overview .decision-topic:hover,html[data-theme="dark"] #view-overview .decision-action:hover{background:#263e54}
+html[data-theme="dark"] #view-overview .decision-priority .text-button,html[data-theme="dark"] #view-overview .department-heading>.text-button{color:#91d7df}
+html[data-theme="dark"] .agent-banner{background:#213a51;border-color:#48657a;color:#eaf4f8}
+html[data-theme="dark"] .agent-banner .eyebrow{color:#8ed4d4}
+html[data-theme="dark"] .agent-banner h2{color:#f0f6fa}
+html[data-theme="dark"] .agent-banner p{color:#bdd0de}
+html[data-theme="dark"] .agent-state{background:#274b54;border-color:#51818a;color:#def5ee}
+html[data-theme="dark"] .kpi-value,html[data-theme="dark"] .empty-state b,html[data-theme="dark"] .metric-explainer h2{color:#eaf3f9}
+html[data-theme="dark"] .empty-state,html[data-theme="dark"] .empty-state p,html[data-theme="dark"] .kpi-top,html[data-theme="dark"] .kpi-foot,html[data-theme="dark"] .definition-grid p{color:#b6c8d6}
+html[data-theme="dark"] .tab-button.active{color:#9fdbea;border-bottom-color:#79c8d9}
+@media(max-width:700px){.topbar{gap:10px}.top-actions{gap:9px}.theme-switch button{font-size:10px;padding:6px}.snapshot{display:none}}

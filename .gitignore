@@ -1,0 +1,42 @@
+# Movidesk Project
+.env
+.env.server
+.env.server.*
+!.env.server.example
+.env.bak*
+/output/
+/tmp/
+/.tools/
+/.presentation-build/
+/.obsidian/
+/Instrucoes_master/
+/dossie_movidesk/
+/deskcortex-api/
+/assets/
+/Abrir Cortex.cmd
+/00 - *.md
+/01 - VISAO & ESTRATEGIA/
+/02 - ARQUITETURA & TECNOLOGIA/
+/03 - INTEGRACOES & INGESTAO/
+/04 - MOTOR DE IA & CONHECIMENTO/
+/04 - PROCESSAMENTO & REFINARIA/
+/05 - ROADMAP & EXECUCAO/
+/docs/*.md
+!/docs/DEPLOY_PORTAINER.md
+!/docs/PLANO_ATENDIMENTO_CORTEX.md
+!/docs/PILOTO_NOTAS_INTERNAS.md
+/Imagens_fluxos/
+/*.png
+/*.db
+/payload_test.json
+scripts/output/
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+infra/pgdata/
+infra/redisdata/
+*.log
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm

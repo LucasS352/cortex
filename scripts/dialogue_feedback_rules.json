@@ -1,0 +1,71 @@
+[
+  {
+    "id": 1,
+    "timestamp": "2026-09-05T12:05:38.100487",
+    "session_id": "test_timeout_session",
+    "assistant_message": "Fala parceiro, manda o print do erro...",
+    "flaw_description": "Pediu print mesmo eu já tendo enviado o print e a mensagem de erro",
+    "expected_response": "Deveria ter diagnosticado o erro 10060 na hora",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "esta apresentando esse erro Ocorreram os seguintes erros ao enviar a NFe: Erro Interno: 10060 Erro HTTP: 500 URL: https://nfce.fazenda.sp.gov.br/ws/NFeAutorizacao4.asmx Connection timed out Erro Interno: 10060"
+      },
+      {
+        "role": "assistant",
+        "content": "Identifiquei perfeitamente na sua captura de tela! Esse é o clássico **Erro Interno 10060: Connection timed out (Erro HTTP: 500)** ao contatar os servidores da SEFAZ. 🌐⚡\n\n**O que está acontecendo:**\nO ERP Master tentou transmitir a nota para o webservice da Fazenda, mas o servidor da SEFAZ demorou para responder e a conexão expirou (timeout). Isso ocorre devido a instabilidade, sobrecarga ou fila de processamento nos servidores da própria SEFAZ (neste caso, o portal da SEFAZ-SP).\n\n**Como proceder no ERP Master para resolver:**\n1. **Não fique clicando em reenviar repetidas vezes seguidas:** Isso é essencial para evitar o erro de duplicidade (Rejeição 539/204), pois a SEFAZ pode autorizar a nota na fila e demorar para devolver o comprovante ao sistema.\n2. **Aguarde de 3 a 5 minutos** para a SEFAZ desengargalar a fila de processamento.\n3. **Consulte antes de reenviar:** No Master, vá em **Vendas > Faturamento > NF-e**, clique com o botão direito sobre a nota rejeitada e escolha **Consultar na SEFAZ** (ou Sincronizar Protocolo). Se a Fazenda já tiver processado, o Master baixa o protocolo e a nota fica Autorizada automaticamente!\n4. **Precisa liberar o cliente agora no caixa (NFC-e)?**\n   • Se estiver com o cliente na loja e não puder aguardar a SEFAZ voltar, ative a **Emissão em Contingência Offline (NFC-e)** no PDV para imprimir a nota na hora e liberar o cliente. Assim que a SEFAZ restabelecer a conexão, o sistema transmite os lotes pendentes automaticamente!\n\nAguarde uns minutinhos e clique em **Consultar na SEFAZ**. Me avisa aqui se ela já autorizou!"
+      }
+    ],
+    "state_snapshot": {
+      "intent": "erro_nota_fiscal",
+      "confirmed_cause": "instabilidade_sefaz_timeout",
+      "module": "Fiscal"
+    }
+  },
+  {
+    "id": 2,
+    "timestamp": "2026-09-05T12:06:13.510805",
+    "session_id": "test_timeout_session",
+    "assistant_message": "Fala parceiro, manda o print do erro...",
+    "flaw_description": "Pediu print mesmo eu já tendo enviado o print e a mensagem de erro",
+    "expected_response": "Deveria ter diagnosticado o erro 10060 na hora",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "esta apresentando esse erro Ocorreram os seguintes erros ao enviar a NFe: Erro Interno: 10060 Erro HTTP: 500 URL: https://nfce.fazenda.sp.gov.br/ws/NFeAutorizacao4.asmx Connection timed out Erro Interno: 10060"
+      },
+      {
+        "role": "assistant",
+        "content": "Identifiquei perfeitamente o seu caso! Esse é o clássico **Erro Interno 10060: Connection timed out (Erro HTTP: 500)** ao contatar os servidores da SEFAZ. 🌐⚡\n\n**O que está acontecendo:**\nO ERP Master tentou transmitir a nota para o webservice da Fazenda, mas o servidor da SEFAZ demorou para responder e a conexão expirou (timeout). Isso ocorre devido a instabilidade, sobrecarga ou fila de processamento nos servidores da própria SEFAZ (neste caso, o portal da SEFAZ-SP).\n\n**Como proceder no ERP Master para resolver:**\n1. **Não fique clicando em reenviar repetidas vezes seguidas:** Isso é essencial para evitar o erro de duplicidade (Rejeição 539/204), pois a SEFAZ pode autorizar a nota na fila e demorar para devolver o comprovante ao sistema.\n2. **Aguarde de 3 a 5 minutos** para a SEFAZ desengargalar a fila de processamento.\n3. **Consulte antes de reenviar:** No Master, vá em **Vendas > Faturamento > NF-e**, clique com o botão direito sobre a nota rejeitada e escolha **Consultar na SEFAZ** (ou Sincronizar Protocolo). Se a Fazenda já tiver processado, o Master baixa o protocolo e a nota fica Autorizada automaticamente!\n4. **Precisa liberar o cliente agora no caixa (NFC-e)?**\n   • Se estiver com o cliente na loja e não puder aguardar a SEFAZ voltar, ative a **Emissão em Contingência Offline (NFC-e)** no PDV para imprimir a nota na hora e liberar o cliente. Assim que a SEFAZ restabelecer a conexão, o sistema transmite os lotes pendentes automaticamente!\n\nAguarde uns minutinhos e clique em **Consultar na SEFAZ**. Me avisa aqui se ela já autorizou!"
+      }
+    ],
+    "state_snapshot": {
+      "intent": "erro_nota_fiscal",
+      "confirmed_cause": "instabilidade_sefaz_timeout",
+      "module": "Fiscal"
+    }
+  },
+  {
+    "id": 3,
+    "timestamp": "2026-09-05T12:06:34.442961",
+    "session_id": "test_timeout_session",
+    "assistant_message": "Fala parceiro, manda o print do erro...",
+    "flaw_description": "Pediu print mesmo eu já tendo enviado o print e a mensagem de erro",
+    "expected_response": "Deveria ter diagnosticado o erro 10060 na hora",
+    "recent_turns": [
+      {
+        "role": "user",
+        "content": "esta apresentando esse erro Ocorreram os seguintes erros ao enviar a NFe: Erro Interno: 10060 Erro HTTP: 500 URL: https://nfce.fazenda.sp.gov.br/ws/NFeAutorizacao4.asmx Connection timed out Erro Interno: 10060"
+      },
+      {
+        "role": "assistant",
+        "content": "Identifiquei perfeitamente o seu caso! Esse é o clássico **Erro Interno 10060: Connection timed out (Erro HTTP: 500)** ao contatar os servidores da SEFAZ. 🌐⚡\n\n**O que está acontecendo:**\nO ERP Master tentou transmitir a nota para o webservice da Fazenda, mas o servidor da SEFAZ demorou para responder e a conexão expirou (timeout). Isso ocorre devido a instabilidade, sobrecarga ou fila de processamento nos servidores da própria SEFAZ (neste caso, o portal da SEFAZ-SP).\n\n**Como proceder no ERP Master para resolver:**\n1. **Não fique clicando em reenviar repetidas vezes seguidas:** Isso é essencial para evitar o erro de duplicidade (Rejeição 539/204), pois a SEFAZ pode autorizar a nota na fila e demorar para devolver o comprovante ao sistema.\n2. **Aguarde de 3 a 5 minutos** para a SEFAZ desengargalar a fila de processamento.\n3. **Consulte antes de reenviar:** No Master, vá em **Vendas > Faturamento > NF-e**, clique com o botão direito sobre a nota rejeitada e escolha **Consultar na SEFAZ** (ou Sincronizar Protocolo). Se a Fazenda já tiver processado, o Master baixa o protocolo e a nota fica Autorizada automaticamente!\n4. **Precisa liberar o cliente agora no caixa (NFC-e)?**\n   • Se estiver com o cliente na loja e não puder aguardar a SEFAZ voltar, ative a **Emissão em Contingência Offline (NFC-e)** no PDV para imprimir a nota na hora e liberar o cliente. Assim que a SEFAZ restabelecer a conexão, o sistema transmite os lotes pendentes automaticamente!\n\nAguarde uns minutinhos e clique em **Consultar na SEFAZ**. Me avisa aqui se ela já autorizou!"
+      }
+    ],
+    "state_snapshot": {
+      "intent": "erro_nota_fiscal",
+      "confirmed_cause": "instabilidade_sefaz_timeout",
+      "module": "Fiscal"
+    }
+  }
+]

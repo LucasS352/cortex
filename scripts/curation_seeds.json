@@ -1,0 +1,86 @@
+[
+  {
+    "key": "safetech-xml-indisponivel",
+    "title": "Safetech: XML indisponível em SFT_XML_NOTA_FISCAL_SAIDA",
+    "module": "Safetech",
+    "aliases": ["qryXMLSTF", "BDSFT", "ORA-00942", "mini danfe", "XML da nota", "SFT_XML_NOTA_FISCAL_SAIDA"],
+    "summary": "Caso documentado de ambiente Safetech sem a tabela necessária à consulta do XML para impressão de NF etiqueta.",
+    "claims": [
+      {"field": "finding", "text": "No chamado 122703, o suporte registrou que a tabela de XML não existia naquele ambiente.", "source": "ticket:122703", "quote": "Essa tabalea não existe na Safetech."},
+      {"field": "procedure", "text": "A orientação daquele caso foi solicitar à Safetech a disponibilização da tabela e depois retornar à Alternativa para avaliação comercial e de desenvolvimento.", "source": "ticket:122703", "quote": "É necessário a tratativa com a Safetech para a disponibilização da tabela"},
+      {"field": "context", "text": "O histórico de Mini DANFE documenta a consulta de ARQUIVO_XML pela chave de acesso.", "source": "ticket:81364", "quote": "SELECT ARQUIVO_XML FROM SFT_XML_NOTA_FISCAL_SAIDA WHERE CHAVE_ACESSO = :CHAVE_ACESSO"}
+    ],
+    "limitations": ["O chamado não prova que todo ORA-00942 nessa tabela tenha a mesma causa.", "Sinônimo público visível não comprova existência nem permissão no objeto de destino.", "O erro de XML não comprova que uma consulta anterior esteja lenta; os dois problemas exigem diagnóstico separado."],
+    "related": ["safetech-consulta-faturamento", "safetech-ora00942-view"]
+  },
+  {
+    "key": "safetech-consulta-faturamento",
+    "title": "Safetech: consulta de faturamento sem retorno no DB Monitor",
+    "module": "Safetech",
+    "aliases": ["SFT_VW_FATURA_PEDIDO_ECOMMERCE", "ID_PEDIDO", "CHAVE_ACESSO_NFE", "notas não chegam", "SQL lenta", "sincronizador travado"],
+    "summary": "Os chamados 123522/123534 registram espera na consulta de faturamento e posterior normalização, sem causa raiz comprovada.",
+    "claims": [
+      {"field": "symptom", "text": "O chamado relata o DB Monitor parado na consulta da view de faturamento.", "source": "ticket:123522", "quote": "O db monitor fica nessa SQL"},
+      {"field": "signature", "text": "A consulta registrada acessa SFT_VW_FATURA_PEDIDO_ECOMMERCE.", "source": "ticket:123522", "quote": "select * from SFT_VW_FATURA_PEDIDO_ECOMMERCE"},
+      {"field": "outcome", "text": "Foi registrada normalização e confirmação em ligação da integração de NF.", "source": "ticket:123522", "quote": "confirmado em linha a integração normal das NF's"},
+      {"field": "limitation", "text": "O encerramento diz que não houve ação da Alternativa e apresenta a relação Safetech/Dilly como possibilidade, sem comprovar a causa.", "source": "ticket:123522", "quote": "Ressalto que não houve ação da Alternativa em relação a isso"}
+    ],
+    "limitations": ["Não há correção específica de índice, plano ou view comprovada nesses chamados.", "Lista extensa de pedidos é evidência do cenário, não prova de causa.", "O sucesso com poucos pedidos, sozinho, não identifica se a demora decorre de volume, dados específicos ou plano de execução."],
+    "related": ["safetech-xml-indisponivel", "safetech-ora00942-view"]
+  },
+  {
+    "key": "safetech-ora00942-view",
+    "title": "Safetech: ORA-00942 em SPT_VW_FATURA_PEDIDO_ECOMMERCE",
+    "module": "Safetech",
+    "aliases": ["ORA-00942", "SPT_VW_FATURA_PEDIDO_ECOMMERCE", "qryConsulta", "notas faturadas sem integrar"],
+    "summary": "Caso de erro na consulta da view de faturamento, com integração restabelecida após correção do DEV.",
+    "claims": [
+      {"field": "signature", "text": "O log do chamado contém SPT_VW_FATURA_PEDIDO_ECOMMERCE; preservar SPT como consta no original.", "source": "ticket:128797", "quote": "select * from SPT_VW_FATURA_PEDIDO_ECOMMERCE"},
+      {"field": "outcome", "text": "O atendimento registra integração normal após correção do DEV.", "source": "ticket:128797", "quote": "as notas estão sendo integradas normalmente após a correção do DEV"}
+    ],
+    "limitations": ["O chamado não descreve o ajuste realizado pelo DEV.", "Não concluir automaticamente que SPT é erro de digitação a ser corrigido para SFT.", "Este log usa qryConsulta; não é o mesmo objeto do erro qryXMLSTF."],
+    "related": ["safetech-consulta-faturamento", "safetech-xml-indisponivel"]
+  },
+  {
+    "key": "nfe-duplicidade-retorno-sincrono",
+    "title": "NF-e: duplicidade com falha na consulta automática do retorno síncrono",
+    "module": "NF-e",
+    "aliases": ["duplicidade NF-e", "cStat", "AcBR", "envio síncrono", "539", "204"],
+    "summary": "Artigo do desenvolvimento registra correção no tratamento do cStat de duplicidade retornado pelo AcBR em envio síncrono.",
+    "claims": [
+      {"field": "cause", "text": "Nesse defeito documentado, o AcBR retornava o cStat de duplicidade em outro local no envio síncrono.", "source": "kb:555147", "quote": "O AcBR retorna o cStat de duplicidade em um local diferente quando o envio é síncrono"},
+      {"field": "correction", "text": "O desenvolvimento ajustou a consulta da NF-e para tratar o retorno também no envio síncrono.", "source": "kb:555147", "quote": "A funcionalidade de consulta da NF-e na Sefaz foi ajustada para tratar corretamente o erro de duplicidade"}
+    ],
+    "limitations": ["Não é causa universal das rejeições 204 ou 539.", "A versão mínima corrigida não está estabelecida nesta ficha; conferir com o DEV.", "Não alterar número, excluir ou retransmitir apenas com base nesta ficha; confirmar a situação da nota na SEFAZ."],
+    "related": []
+  },
+  {
+    "key": "nfe-configurar-certificado",
+    "title": "NF-e: selecionar o certificado digital da empresa no Master",
+    "module": "NF-e",
+    "aliases": ["certificado digital", "certificado NFe", "Empresas/Lojas", "aba NFe", "PIN"],
+    "summary": "Procedimento de configuração documentado na base oficial. A compatibilidade dos componentes deve ser conferida para a versão instalada.",
+    "claims": [
+      {"field": "prerequisite", "text": "O artigo exige certificado instalado no computador usado para emitir NF-e.", "source": "kb:310332", "quote": "O cliente deve ter o certificado digital instalado no mesmo computador"},
+      {"field": "procedure", "text": "Abrir Cadastro > Administrativo > Empresas/Lojas.", "source": "kb:310332", "quote": "Cadastro>Administrativo>Empresas/Lojas"},
+      {"field": "procedure", "text": "Selecionar a empresa padrão, Alterar e abrir a aba NFe.", "source": "kb:310332", "quote": "Selecione na aba Listagem a empresa padrão do MASTER e clique no botão Alterar e selecione a aba NFe"},
+      {"field": "procedure", "text": "Selecionar o certificado desejado e confirmar com OK; depois gravar o cadastro.", "source": "kb:310332", "quote": "Selecione o certificado desejado na lista e clique no botão OK"}
+    ],
+    "limitations": ["O artigo cita componentes legados; não presumir que todas as instalações atuais dependam deles.", "A ficha não determina a validade, titularidade ou compatibilidade do certificado de um cliente."],
+    "related": ["nfe-classe-nao-registrada"]
+  },
+  {
+    "key": "nfe-classe-nao-registrada",
+    "title": "NF-e ou PLP: classe não registrada — procedimento histórico de componentes",
+    "module": "NF-e",
+    "aliases": ["classe não registrada", "PLP", "Schemas", "Capicom", "RegAsm", ".NET Framework"],
+    "summary": "A base oficial registra revisão de Schemas, DLLs, .NET e registro de componentes para esse erro. Exige verificar compatibilidade antes de aplicar.",
+    "claims": [
+      {"field": "procedure", "text": "O artigo orienta atualizar a pasta Schemas da instalação do cliente.", "source": "kb:480443", "quote": "Atualizar a pasta Schemas (Nota)"},
+      {"field": "procedure", "text": "O procedimento histórico solicita habilitar .NET Framework 3.5.", "source": "kb:480443", "quote": ".NET Framework 3.5 (tem que estar marcado)"},
+      {"field": "procedure", "text": "O artigo orienta registro de Capicom, Regasm e RegAsmSigepWeb.bat.", "source": "kb:480443", "quote": "Registrar Capicom, Regasm e RegAsmSigepWeb.bat"}
+    ],
+    "limitations": ["Aplicabilidade depende da versão e arquitetura da instalação.", "Usar componentes homologados pela Alternativa; esta ficha não distribui DLLs nem executa registros."],
+    "related": ["nfe-configurar-certificado"]
+  }
+]
