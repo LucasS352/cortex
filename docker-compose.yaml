@@ -78,14 +78,29 @@ services:
     stop_grace_period: 60s
 
   caddy:
-    image: caddy:2
+    image: caddy:2-alpine
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        cat << 'EOF' > /etc/caddy/Caddyfile
+        {$CORTEX_DOMAIN} {
+            encode zstd gzip
+            handle /webhooks/movidesk/tickets/* {
+                reverse_proxy webhook:8003
+            }
+            handle {
+                reverse_proxy app:8001
+            }
+        }
+        EOF
+        exec caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
     ports:
       - "80:80"
       - "443:443"
     environment:
-      CORTEX_DOMAIN: ${CORTEX_DOMAIN:-localhost}
+      CORTEX_DOMAIN: ${CORTEX_DOMAIN:-:80}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
