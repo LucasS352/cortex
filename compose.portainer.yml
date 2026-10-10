@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
 
   app:
-    image: ${CORTEX_IMAGE:?Defina CORTEX_IMAGE na Stack}
+    image: ${CORTEX_IMAGE:-ghcr.io/lucass352/cortex:latest}
     environment: &app_env
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
@@ -56,7 +56,7 @@ services:
     restart: unless-stopped
 
   webhook:
-    image: ${CORTEX_IMAGE:?Defina CORTEX_IMAGE na Stack}
+    image: ${CORTEX_IMAGE:-ghcr.io/lucass352/cortex:latest}
     command: ["uvicorn", "movidesk_webhook:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "1", "--no-access-log"]
     environment: *app_env
     volumes:
@@ -64,7 +64,7 @@ services:
     restart: unless-stopped
 
   note-worker:
-    image: ${CORTEX_IMAGE:?Defina CORTEX_IMAGE na Stack}
+    image: ${CORTEX_IMAGE:-ghcr.io/lucass352/cortex:latest}
     command: ["python", "movidesk_note_worker.py"]
     working_dir: /app/scripts
     environment: *app_env
