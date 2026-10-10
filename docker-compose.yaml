@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: deskcortex
       POSTGRES_USER: deskcortex
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD na Stack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/schema-current.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -18,15 +18,15 @@ services:
     restart: unless-stopped
 
   app:
-    build: .
+    image: ${CORTEX_IMAGE:-ghcr.io/lucass352/cortex:latest}
     environment: &app_env
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_DB: deskcortex
       POSTGRES_USER: deskcortex
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD na Stack}
-      MOVIDESK_TOKEN: ${MOVIDESK_TOKEN:?Defina MOVIDESK_TOKEN na Stack}
-      MOVIDESK_WEBHOOK_SECRET: ${MOVIDESK_WEBHOOK_SECRET:?Defina MOVIDESK_WEBHOOK_SECRET na Stack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
+      MOVIDESK_TOKEN: ${MOVIDESK_TOKEN:-}
+      MOVIDESK_WEBHOOK_SECRET: ${MOVIDESK_WEBHOOK_SECRET:-cortex_webhook_secret_default_32chars}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       CORTEX_AUTONOTE_MODE: ${CORTEX_AUTONOTE_MODE:-disabled}
@@ -36,12 +36,12 @@ services:
       CORTEX_PILOT_TICKET_IDS: ${CORTEX_PILOT_TICKET_IDS:-}
       CORTEX_MOVIDESK_INTERVAL_SECONDS: ${CORTEX_MOVIDESK_INTERVAL_SECONDS:-7}
       CORTEX_RUNTIME_PILOT_CONTROL: "true"
-      CORTEX_AUTH_REQUIRED: "true"
-      CORTEX_ADMIN_USERNAME: ${CORTEX_ADMIN_USERNAME:?Defina CORTEX_ADMIN_USERNAME na Stack}
-      CORTEX_ADMIN_PASSWORD_HASH: ${CORTEX_ADMIN_PASSWORD_HASH:?Defina CORTEX_ADMIN_PASSWORD_HASH na Stack}
-      CORTEX_SESSION_SECRET: ${CORTEX_SESSION_SECRET:?Defina CORTEX_SESSION_SECRET na Stack}
-      CORTEX_PUBLIC_URL: https://${CORTEX_DOMAIN:?Defina CORTEX_DOMAIN na Stack}
-      CORTEX_ALLOWED_HOSTS: ${CORTEX_DOMAIN:?Defina CORTEX_DOMAIN na Stack},localhost,127.0.0.1
+      CORTEX_AUTH_REQUIRED: "${CORTEX_AUTH_REQUIRED:-false}"
+      CORTEX_ADMIN_USERNAME: ${CORTEX_ADMIN_USERNAME:-admin}
+      CORTEX_ADMIN_PASSWORD_HASH: ${CORTEX_ADMIN_PASSWORD_HASH:-}
+      CORTEX_SESSION_SECRET: ${CORTEX_SESSION_SECRET:-cortex_session_secret_default_32chars}
+      CORTEX_PUBLIC_URL: ${CORTEX_PUBLIC_URL:-http://localhost}
+      CORTEX_ALLOWED_HOSTS: ${CORTEX_ALLOWED_HOSTS:-localhost,127.0.0.1}
     volumes:
       - cortex_output:/app/scripts/output
       - manual_media:/app/Instrucoes_master:ro
@@ -56,7 +56,7 @@ services:
     restart: unless-stopped
 
   webhook:
-    build: .
+    image: ${CORTEX_IMAGE:-ghcr.io/lucass352/cortex:latest}
     command: ["uvicorn", "movidesk_webhook:app", "--host", "0.0.0.0", "--port", "8003", "--workers", "1", "--no-access-log"]
     environment: *app_env
     volumes:
@@ -64,7 +64,7 @@ services:
     restart: unless-stopped
 
   note-worker:
-    build: .
+    image: ${CORTEX_IMAGE:-ghcr.io/lucass352/cortex:latest}
     command: ["python", "movidesk_note_worker.py"]
     working_dir: /app/scripts
     environment: *app_env
@@ -83,7 +83,7 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      CORTEX_DOMAIN: ${CORTEX_DOMAIN:?Defina CORTEX_DOMAIN na Stack}
+      CORTEX_DOMAIN: ${CORTEX_DOMAIN:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
