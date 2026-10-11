@@ -125,6 +125,11 @@ async def validation_error_without_payload(_request: Request, exc: RequestValida
     ]})
 _trusted_hosts = ["localhost", "127.0.0.1", "[::1]", "testserver"]
 _trusted_hosts += [h.strip() for h in os.getenv("CORTEX_ALLOWED_HOSTS", "").split(",") if h.strip()]
+if os.getenv("CORTEX_PUBLIC_URL"):
+    from urllib.parse import urlsplit
+    _public_host = urlsplit(web_auth.public_origin()).hostname
+    if _public_host:
+        _trusted_hosts.append(_public_host)
 app.include_router(tech_desk_router)
 app.include_router(master_telemetry_router)
 app.include_router(technician_workbench_router)

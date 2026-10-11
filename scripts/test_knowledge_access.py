@@ -1,10 +1,18 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from knowledge_access import query_plan,rank_rows,quality,search,assessment,applicability
 from tech_evidence import detail
 
 
 class AccessTests(unittest.TestCase):
+    def setUp(self):
+        # Retrieval unit tests use a fake connection; schema/index preparation
+        # must not open a second, real database connection.
+        for target in ('knowledge_access.knowledge_index.ensure_coverage', 'knowledge_access.curation.ensure_schema'):
+            helper = patch(target)
+            helper.start()
+            self.addCleanup(helper.stop)
+
     def test_conversational_noise_and_common_typo_do_not_hide_fiscal_subject(self):
         plan = query_plan('erro de inscrição estadual do destinatio invalida ta dando isso ao tentar emitir a nota')
         self.assertIn('destinatario', plan['terms'])

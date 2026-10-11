@@ -6,7 +6,7 @@ from web_auth import hash_password
 
 
 if __name__ == "__main__":
-    password = getpass("Senha do administrador (mínimo 12 caracteres): ")
+    password = getpass("Senha do administrador (mínimo 8 caracteres): ")
     confirmation = getpass("Repita a senha: ")
     if password != confirmation:
         raise SystemExit("As senhas não coincidem.")

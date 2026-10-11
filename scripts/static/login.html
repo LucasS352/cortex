@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <title>Entrar · Alternativa Sistemas</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; min-height: 100svh; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(ellipse at top, #172a47, #0b1220 70%); color: #f1f5f9; }
+    main { width: min(100%, 420px); padding: 32px; background: #111c2e; border: 1px solid #2b3b52; border-radius: 20px; box-shadow: 0 24px 80px #0005; }
+    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; }
+    .mark { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: #2675e8; font-size: 25px; font-weight: 800; }
+    .brand strong { display: block; font-size: 19px; letter-spacing: -.4px; }
+    .brand small { color: #a6b6cb; font-size: 12px; }
+    h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.6px; }
+    p { color: #a6b6cb; line-height: 1.5; margin: 0 0 26px; font-size: 14px; }
+    label { display: block; margin: 20px 0 8px; font-size: 14px; font-weight: 600; }
+    input { width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid #435571; border-radius: 9px; background: #0b1423; color: #fff; font: inherit; }
+    input:focus-visible, button:focus-visible { outline: 3px solid #83b6ff; outline-offset: 3px; }
+    button { width: 100%; min-height: 48px; margin-top: 26px; padding: 12px; border: 0; border-radius: 9px; background: #2675e8; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+    button:hover { background: #3485fb; }
+    footer { margin-top: 28px; padding-top: 20px; border-top: 1px solid #2b3b52; color: #a6b6cb; font-size: 12px; text-align: center; }
+    .error { margin: 20px 0 0; padding: 12px; background: #482530; border: 1px solid #ab5368; border-radius: 8px; color: #ffd1da; }
+    @media (max-width: 380px) { main { padding: 24px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand"><span class="mark" aria-hidden="true">A</span><div><strong>Alternativa</strong><small>SISTEMAS</small></div></div>
+    <h1>Acesse o Cortex</h1>
+    <p>Entre com suas credenciais para acessar a central de inteligência.</p>
+    <!-- LOGIN_ERROR -->
+    <form method="post" action="/login">
+      <label for="user">Usuário</label>
+      <input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="80" required autofocus>
+      <label for="pass">Senha</label>
+      <input id="pass" type="password" name="password" autocomplete="current-password" maxlength="1024" required>
+      <button type="submit">Entrar</button>
+    </form>
+    <footer>Alternativa Sistemas · Acesso restrito</footer>
+  </main>
+</body>
+</html>

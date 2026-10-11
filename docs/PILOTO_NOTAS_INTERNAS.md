@@ -24,13 +24,13 @@ O comando não sobrescreve arquivo existente. Reutiliza as chaves Movidesk/Gemin
 
 Preencher no arquivo, fora do chat:
 
-- `CORTEX_DOMAIN`: domínio HTTPS, sem protocolo/caminho.
+- `CORTEX_PUBLIC_URL`: URL de acesso, como `http://179.236.68.24` ou `https://cortex.exemplo.com.br`, sem caminho.
 - `CORTEX_ADMIN_PASSWORD_HASH`: gerar com `python scripts/create_admin_hash.py` se estiver vazio. Manter aspas simples em torno do hash para preservar `$`.
 - `MOVIDESK_BOT_PERSON_ID`: ID real de um agente autorizado a incluir ações internas; recomendado agente exclusivo do Cortex.
 - `MOVIDESK_TICKET_UI_BASE`: endereço da tela de edição de tickets usado nos links de chamados semelhantes.
 - `CORTEX_RUNTIME_PILOT_CONTROL=true`: torna o painel a fonte efetiva da lista de empresas do piloto. Este é o padrão dos arquivos Compose.
 - `CORTEX_PILOT_TICKET_IDS` e `CORTEX_PILOT_ORGANIZATION_IDS`: mantidos somente para diagnóstico e execução direta do worker fora do controle do painel. Com o controle em tempo de execução ativo, esses valores não contornam a seleção feita na interface.
-- `CORTEX_IMAGE`: necessário somente para `compose.portainer.yaml`.
+- `CORTEX_IMAGE`: imagem publicada, como `ghcr.io/lucass352/cortex:<commit>`.
 
 `CORTEX_AUTONOTE_MODE` controla este worker:
 
@@ -63,12 +63,13 @@ Em volume novo ela é executada automaticamente pelo PostgreSQL na inicializaç�
 
 ```bash
 docker compose --env-file .env.server config --quiet
-docker compose --env-file .env.server up -d --build
+docker compose --env-file .env.server pull
+docker compose --env-file .env.server up -d --wait
 docker compose --env-file .env.server ps
 docker compose --env-file .env.server logs --tail=80 note-worker
 ```
 
-Não executar `docker compose config` sem `--quiet` em um terminal gravado: a saída completa contém variáveis expandidas. Em Portainer, carregar os valores de `.env.server` nas variáveis da Stack e usar `compose.portainer.yaml` com a imagem construída.
+Não executar `docker compose config` sem `--quiet` em um terminal gravado: a saída completa contém variáveis expandidas. Em Portainer, carregar os valores de `.env.server` nas variáveis da Stack e usar `docker-compose.yml` com a imagem publicada.
 
 Publicar apenas 80/443 do proxy. Caddy encaminha `/webhooks/movidesk/tickets/*` ao receptor e o painel ao serviço autenticado. O access log do receptor está desativado para não registrar o segredo da URL; configurar o proxy externo da empresa da mesma forma.
 

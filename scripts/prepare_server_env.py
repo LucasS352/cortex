@@ -29,4 +29,4 @@ if __name__ == '__main__':
         target = prepare(Path(__file__).resolve().parent.parent, args.from_local)
     except FileExistsError:
         raise SystemExit('.env.server já existe. Nenhuma credencial foi alterada.')
-    print('Criado .env.server separado. Preencha domínio, agente Movidesk e IDs do piloto; confira o login administrativo.')
+    print('Criado .env.server separado. Confira CORTEX_PUBLIC_URL, login, agente Movidesk e IDs do piloto.')

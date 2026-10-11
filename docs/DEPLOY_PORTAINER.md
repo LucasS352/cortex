@@ -2,33 +2,57 @@
 
 ## O que está no Git
 
-O repositório contém o código, o `Dockerfile`, a Stack `compose.portainer.yaml`, o esquema SQL sem dados e o receptor Movidesk. **Não contém** `.env`, banco de dados, chamados, anexos nem os manuais originais. A Stack cria uma base vazia com as tabelas corretas; o histórico e o RAG exigem restauração separada.
+O repositório contém o código, o `Dockerfile`, a Stack `docker-compose.yml`, o esquema SQL sem dados e o receptor Movidesk. `docker-compose.yaml` e `compose.portainer.yml` são cópias compatíveis. **Não contém** `.env`, banco de dados, chamados, anexos nem os manuais originais. A Stack cria uma base vazia com as tabelas corretas; o histórico e o RAG exigem restauração separada.
 
-O modo de produção exige login para toda a aplicação. O webhook é um serviço separado, acessível apenas no caminho secreto HTTPS. O serviço `note-worker` gera sugestões e, em modo `internal_note`, publica uma ação interna no mesmo chamado. A Stack não envia respostas públicas ao cliente. Veja [Piloto de notas internas](PILOTO_NOTAS_INTERNAS.md) para configuração do `.env.server` e validação.
+Esta Stack exige o login da Alternativa para telas, APIs e arquivos da aplicação. `/login` e `/healthz` são públicos; o healthcheck só informa disponibilidade do banco/esquema. O webhook é um serviço separado, protegido por seu próprio segredo. O serviço `note-worker` gera sugestões e, em modo `internal_note`, publica uma ação interna no mesmo chamado. A Stack não envia respostas públicas ao cliente. Veja [Piloto de notas internas](PILOTO_NOTAS_INTERNAS.md) para configuração do `.env.server` e validação.
 
 ## Antes de subir
 
-1. Criar um repositório **privado** no GitHub e enviar o branch `main` após conferir o conteúdo do commit. O workflow `.github/workflows/cortex-image.yml` publica `ghcr.io/<organização>/<repositório>:latest` e uma tag por commit.
-2. Apontar o DNS de `CORTEX_DOMAIN` ao servidor e liberar as portas 80 e 443. O Caddy usa essas portas para obter e renovar HTTPS. Se já houver um proxy na máquina, adaptar a Stack para encaminhar o painel ao serviço `app:8001` e somente `/webhooks/movidesk/tickets/*` ao serviço `webhook:8003`.
+1. Publicar as alterações em `main` no repositório `LucasS352/cortex` e aguardar o workflow **Build Cortex image** terminar. Ele testa autenticação, Compose e webhook, depois publica `ghcr.io/lucass352/cortex:latest` e uma tag por commit. Atualizar só o YAML não atualiza o código dentro da imagem.
+2. Para acesso pelo IP informado, usar `CORTEX_PUBLIC_URL=http://179.236.68.24` e liberar a porta 80. O Caddy recebe essa mesma URL; não é necessário preencher `CORTEX_DOMAIN` nem `CORTEX_ALLOWED_HOSTS`. Para HTTPS com domínio, usar `https://seu-dominio`, apontar o DNS e liberar 80/443. HTTP exige login, mas não criptografa o tráfego; o cookie usa `Secure` quando a URL é HTTPS. Se já houver um proxy na máquina, adaptar a Stack para encaminhar o painel ao serviço `app:8001` e somente `/webhooks/movidesk/tickets/*` ao serviço `webhook:8003`. Uma porta externa diferente exige ajustar também o mapeamento do Caddy.
 3. No servidor, verificar se o Portainer usa **Docker Standalone**. No Git Registry/Registries, configurar acesso à imagem GHCR privada se o pacote não for público. O token deve ter permissão de leitura de pacotes. Mantenha também o repositório privado.
 4. Gerar a senha do administrador fora do chat e guardar os três valores impressos por `python scripts/create_admin_hash.py`. O script pede a senha sem ecoá-la e gera o hash da senha, a chave da sessão e o segredo do webhook.
 
-O checkout local foi inicializado em Git, mas não possui identidade de commit nem remoto configurados. No computador de quem fará o primeiro push, configure `git config user.name` e `git config user.email` com a identidade real, crie o commit e vincule o remoto do repositório privado da empresa. Não adicione arquivos ignorados nem use `git add -f` para `.env`, `output` ou `Instrucoes_master`.
+Não adicione arquivos ignorados nem use `git add -f` para `.env`, `output` ou `Instrucoes_master`.
+
+## Corrigir a Stack existente sem recriar o banco
+
+Em **Stacks → cortex → Edit stack settings**, mantenha o repositório e `refs/heads/main`, com Compose path `docker-compose.yml`. Nas variáveis de ambiente, configure:
+
+| Variável | Valor |
+| --- | --- |
+| `CORTEX_PUBLIC_URL` | `http://179.236.68.24` |
+| `CORTEX_ADMIN_USERNAME` | `admin` (ou o usuário escolhido) |
+| `CORTEX_ADMIN_PASSWORD_HASH` | Hash gerado por `python scripts/create_admin_hash.py` |
+| `CORTEX_SESSION_SECRET` | Chave aleatória gerada pelo mesmo script |
+| `MOVIDESK_WEBHOOK_SECRET` | Segredo atual se já configurado; caso contrário, um novo segredo gerado |
+| `POSTGRES_PASSWORD` | **A mesma senha usada pelo banco que já está saudável** |
+| `CORTEX_IMAGE` | `ghcr.io/lucass352/cortex:<commit corrigido>` ou `:latest` com re-pull |
+
+Preserve também as chaves Movidesk/Gemini e configurações do piloto existentes. Não substitua a senha do banco por uma nova: mudar a variável não muda a senha no volume já inicializado. Caso a Stack antiga tenha sido criada sem essa variável, confira o fallback do commit implantado e mantenha esse valor até uma rotação planejada.
+
+Cole o hash no campo de valor do Portainer com os `$` originais, sem aspas extras. Em arquivo `.env.server`, use aspas simples para preservar os `$`. O Compose bloqueia a implantação se faltarem credenciais, em vez de abrir o painel sem login. `CORTEX_AUTH_REQUIRED=false` no Portainer não desativa a proteção desta Stack.
+
+Se o acesso já tiver sido preparado localmente, copie as quatro variáveis de `.env.server.access` para a Stack: usuário, hash da senha, chave de sessão e URL pública. Esse arquivo é privado e ignorado pelo Git; publicar o código não transfere as credenciais. Preserve as outras variáveis da Stack, especialmente a senha do PostgreSQL. A senha é configurada como hash scrypt, com mínimo de 8 caracteres.
+
+Depois que a imagem corrigida estiver publicada, use **Pull and redeploy**, solicitando nova busca da imagem se usar `latest`. Preserve os volumes e o nome da Stack. Abra `http://179.236.68.24/admin`: deve redirecionar ao login. Não use a porta 9443, que pertence ao Portainer.
+
+As duas falhas corrigidas eram: `/healthz` retornava 404 quando a autenticação estava desativada, e o Compose interpolava a variável do Caddy antes de iniciar o container. O YAML agora usa `{$$CORTEX_DOMAIN}`; dentro do Caddyfile o resultado correto é `{$CORTEX_DOMAIN}`.
 
 ## Stack de Git no Portainer
 
 Em **Stacks > Add stack > Git repository**:
 
 - URL: URL do repositório privado; configure a credencial Git no Portainer.
-- Compose path: `compose.portainer.yaml`.
-- Habilite **relative path volumes**, pois o SQL e o Caddyfile são arquivos relativos do repositório.
+- Compose path: `docker-compose.yml`.
+- Habilite **relative path volumes**, pois os arquivos SQL são relativos ao repositório. O Caddyfile é criado dentro do container, sem bind mount do host.
 - Preencha as variáveis de `.env.example` na seção **Environment variables** da Stack. Use segredos reais; não salve `.env` no Git.
 - `CORTEX_IMAGE` deve apontar para a imagem GHCR publicada, preferencialmente a tag do commit implantado.
 - Um único serviço `app` e um único `webhook`: o agendador local da sincronização não foi feito para múltiplas réplicas.
 
 O arquivo da Stack usa `image`, sem `build`. [O Portainer informa que build em Compose pode falhar em ambientes Docker remotos](https://docs.portainer.io/faqs/known-issues/docker-compose-files-including-build-steps-fail); por isso a imagem é criada no GitHub Actions e publicada no GHCR.
 
-Após o deploy, acesse `https://<CORTEX_DOMAIN>/admin`. O Movidesk recebe a URL `https://<CORTEX_DOMAIN>/webhooks/movidesk/tickets/<MOVIDESK_WEBHOOK_SECRET>`. Configure o gatilho só depois de HTTPS, DNS e login validados. O endpoint recebe e armazena eventos; o `note-worker` faz o processamento e o PATCH interno conforme o teto `CORTEX_AUTONOTE_MODE` e as empresas autorizadas no painel.
+Após o deploy, acesse `<CORTEX_PUBLIC_URL>/admin`. O Movidesk recebe a URL `<CORTEX_PUBLIC_URL>/webhooks/movidesk/tickets/<MOVIDESK_WEBHOOK_SECRET>`. Valide o login e o transporte escolhido antes de configurar o gatilho. O endpoint recebe e armazena eventos; o `note-worker` faz o processamento e o PATCH interno conforme o teto `CORTEX_AUTONOTE_MODE` e as empresas autorizadas no painel.
 
 ## Dados e mídia
 
@@ -44,14 +68,15 @@ Os volumes `cortex_output` e `manual_media` também começam vazios. O primeiro 
 
 ## Teste local antes do Portainer
 
-Preencha as variáveis em um `.env` local (ignorado pelo Git) e execute:
+Preencha as variáveis em `.env.server` (ignorado pelo Git) e execute:
 
 ```bash
-docker compose config --quiet
-docker compose up --build -d
+docker compose --env-file .env.server config --quiet
+docker compose --env-file .env.server pull
+docker compose --env-file .env.server up -d --wait
 ```
 
-Para verificar: `docker compose ps`, `docker compose logs --tail=100 app`, abrir a URL HTTPS e testar login, leitura de chamados, fontes e atualização manual. Faça o teste de webhook com uma conta de teste antes de habilitar o gatilho geral.
+Para verificar: `docker compose --env-file .env.server ps`, logs de `app` e `caddy`, abrir a URL configurada e testar login, leitura de chamados, fontes e logout. `/healthz` deve responder 200; falha real do banco/esquema retorna 503. Sem sessão, uma página retorna ao login e uma API retorna 401. Faça o teste de webhook com uma conta de teste antes de habilitar o gatilho geral.
 
 ## Cuidados operacionais
 

@@ -8,14 +8,26 @@ import os
 import re
 import secrets
 import time
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlsplit
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 COOKIE = "cortex_session"
 SESSION_SECONDS = 8 * 60 * 60
 _failures: dict[str, list[float]] = {}
+
+
+def public_origin() -> str:
+    value = os.getenv("CORTEX_PUBLIC_URL", "").rstrip("/")
+    url = urlsplit(value)
+    if (url.scheme not in {"http", "https"} or not url.hostname or url.username
+            or url.password or url.path or url.query or url.fragment):
+        raise ValueError("CORTEX_PUBLIC_URL deve ser uma origem HTTP/HTTPS, sem caminho")
+    # Also validate malformed ports before serving any request.
+    _ = url.port
+    return value
 
 
 def enabled() -> bool:
@@ -35,13 +47,15 @@ def validate_configuration() -> None:
         raise RuntimeError("CORTEX_SESSION_SECRET precisa de pelo menos 32 caracteres")
     if len(os.getenv("MOVIDESK_WEBHOOK_SECRET", "")) < 32:
         raise RuntimeError("MOVIDESK_WEBHOOK_SECRET precisa de pelo menos 32 caracteres")
-    if not os.getenv("CORTEX_PUBLIC_URL", "").startswith("https://"):
-        raise RuntimeError("CORTEX_PUBLIC_URL precisa ser HTTPS")
+    try:
+        public_origin()
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 def hash_password(password: str) -> str:
-    if len(password) < 12:
-        raise ValueError("A senha precisa de pelo menos 12 caracteres")
+    if len(password) < 8:
+        raise ValueError("A senha precisa de pelo menos 8 caracteres")
     salt = secrets.token_bytes(16)
     digest = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1)
     return "scrypt$16384$8$1$" + salt.hex() + "$" + digest.hex()
@@ -77,59 +91,69 @@ def _valid(cookie: str | None) -> bool:
         user, expiry, _nonce = payload.split(":", 2)
         return (user == os.environ["CORTEX_ADMIN_USERNAME"] and int(expiry) > time.time()
                 and hmac.compare_digest(signature, _sign(payload)))
-    except (ValueError, KeyError, UnicodeError):
+    except (ValueError, KeyError, UnicodeError, TypeError):
         return False
 
 
 def login_page(error: bool = False) -> HTMLResponse:
-    message = '<p class="error">Usuário ou senha inválidos.</p>' if error else ""
-    page = f'''<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar · Cortex</title><style>
-    :root{{color-scheme:dark}}*{{box-sizing:border-box}}body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0d1930;color:#e8f3ff;font:16px system-ui,sans-serif}}main{{width:min(92vw,420px);background:#14243c;border:1px solid #335170;border-radius:18px;padding:32px;box-shadow:0 18px 65px #0006}}h1{{margin:0 0 8px}}p{{color:#a9c0d5}}label{{display:block;margin:18px 0 6px}}input{{width:100%;padding:12px;border:1px solid #54708d;border-radius:8px;background:#0b1a30;color:white;font:inherit}}button{{width:100%;margin-top:24px;padding:12px;border:0;border-radius:8px;background:#1a77db;color:white;font:inherit;font-weight:700;cursor:pointer}}.error{{color:#ffaaa9}}
-    </style></head><body><main><h1>CORTEX</h1><p>Acesso administrativo</p>{message}<form method="post" action="/login"><label for="user">Usuário</label><input id="user" name="username" autocomplete="username" required autofocus><label for="pass">Senha</label><input id="pass" type="password" name="password" autocomplete="current-password" required><button>Entrar</button></form></main></body></html>'''
-    return HTMLResponse(page, headers={"Cache-Control": "no-store", "X-Frame-Options": "DENY"})
+    from pathlib import Path
+    message = '<p class="error" role="alert">Usuário ou senha inválidos.</p>' if error else ""
+    page = (Path(__file__).parent / "static" / "login.html").read_text(encoding="utf-8")
+    return HTMLResponse(page.replace("<!-- LOGIN_ERROR -->", message),
+                        status_code=401 if error else 200,
+                        headers={"Cache-Control": "no-store", "X-Frame-Options": "DENY"})
+
+
+def _database_ready() -> bool:
+    try:
+        import psycopg
+        from config import POSTGRES_DSN
+        with psycopg.connect(POSTGRES_DSN, connect_timeout=2,
+                             options="-c statement_timeout=2000") as db:
+            return bool(db.execute("SELECT to_regclass('public.ticket_knowledge_nodes') IS NOT NULL").fetchone()[0])
+    except Exception:
+        return False
 
 
 async def gate(request: Request, call_next):
-    if not enabled():
-        return await call_next(request)
     path = request.url.path
     if path == "/healthz":
-        try:
-            import psycopg
-            from config import POSTGRES_DSN
-            with psycopg.connect(POSTGRES_DSN, connect_timeout=2) as db:
-                ready = db.execute("SELECT to_regclass('public.ticket_knowledge_nodes') IS NOT NULL").fetchone()[0]
-        except Exception:
-            ready = False
-        return JSONResponse({"status": "ok" if ready else "unavailable"}, status_code=200 if ready else 503)
+        ready = await run_in_threadpool(_database_ready)
+        return JSONResponse({"status": "ok" if ready else "unavailable"}, status_code=200 if ready else 503,
+                            headers={"Cache-Control": "no-store"})
+    if not enabled():
+        return await call_next(request)
     if path == "/login":
         if request.method == "GET":
             return login_page()
         if request.method != "POST":
             return JSONResponse({"error": "Method not allowed"}, status_code=405)
         origin = request.headers.get("origin")
-        if not origin or origin.rstrip("/") != os.environ["CORTEX_PUBLIC_URL"].rstrip("/"):
+        if not origin or origin.rstrip("/") != public_origin():
             return JSONResponse({"error": "Origin inválida"}, status_code=403)
+        data = await request.body()
+        if len(data) > 4096:
+            return HTMLResponse("Formulário muito grande", status_code=413)
         ip = request.client.host if request.client else "unknown"
         now = time.time()
         attempts = [stamp for stamp in _failures.get(ip, []) if now - stamp < 900]
         _failures[ip] = attempts
         if len(attempts) >= 8:
             return HTMLResponse("Muitas tentativas. Tente mais tarde.", status_code=429)
-        data = await request.body()
-        if len(data) > 4096:
-            return HTMLResponse("Formulário muito grande", status_code=413)
+        # Reserve before awaiting scrypt so simultaneous failures share the limit.
+        attempts.append(now)
         form = parse_qs(data.decode("utf-8", errors="replace"))
         user = form.get("username", [""])[0]
         password = form.get("password", [""])[0]
-        valid_user = hmac.compare_digest(user, os.environ["CORTEX_ADMIN_USERNAME"])
-        valid_pass = verify_password(password)
+        valid_user = hmac.compare_digest(user.encode(), os.environ["CORTEX_ADMIN_USERNAME"].encode())
+        valid_pass = await run_in_threadpool(verify_password, password)
         if not (valid_user and valid_pass):
-            attempts.append(now)
             return login_page(True)
         _failures.pop(ip, None)
         response = RedirectResponse("/admin", status_code=303)
-        response.set_cookie(COOKIE, _issue(), max_age=SESSION_SECONDS, httponly=True, secure=True, samesite="lax", path="/")
+        response.set_cookie(COOKIE, _issue(), max_age=SESSION_SECONDS, httponly=True,
+                            secure=public_origin().startswith("https://"), samesite="lax", path="/")
+        response.headers["Cache-Control"] = "no-store"
         return response
     authenticated = _valid(request.cookies.get(COOKIE))
     if not authenticated:
@@ -140,7 +164,7 @@ async def gate(request: Request, call_next):
     request.state.cortex_user = os.environ["CORTEX_ADMIN_USERNAME"]
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         origin = request.headers.get("origin")
-        expected = os.environ["CORTEX_PUBLIC_URL"].rstrip("/")
+        expected = public_origin()
         if not origin or origin.rstrip("/") != expected:
             return JSONResponse({"error": "Origin inválida"}, status_code=403)
     if path == "/logout":

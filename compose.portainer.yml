@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: deskcortex
       POSTGRES_USER: deskcortex
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Informe a senha atual do PostgreSQL}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/schema-current.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -24,9 +24,9 @@ services:
       POSTGRES_PORT: "5432"
       POSTGRES_DB: deskcortex
       POSTGRES_USER: deskcortex
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Informe a senha atual do PostgreSQL}
       MOVIDESK_TOKEN: ${MOVIDESK_TOKEN:-}
-      MOVIDESK_WEBHOOK_SECRET: ${MOVIDESK_WEBHOOK_SECRET:-cortex_webhook_secret_default_32chars}
+      MOVIDESK_WEBHOOK_SECRET: ${MOVIDESK_WEBHOOK_SECRET:?Gere um segredo para o webhook}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       CORTEX_AUTONOTE_MODE: ${CORTEX_AUTONOTE_MODE:-disabled}
@@ -36,11 +36,11 @@ services:
       CORTEX_PILOT_TICKET_IDS: ${CORTEX_PILOT_TICKET_IDS:-}
       CORTEX_MOVIDESK_INTERVAL_SECONDS: ${CORTEX_MOVIDESK_INTERVAL_SECONDS:-7}
       CORTEX_RUNTIME_PILOT_CONTROL: "true"
-      CORTEX_AUTH_REQUIRED: "${CORTEX_AUTH_REQUIRED:-false}"
+      CORTEX_AUTH_REQUIRED: "true"
       CORTEX_ADMIN_USERNAME: ${CORTEX_ADMIN_USERNAME:-admin}
-      CORTEX_ADMIN_PASSWORD_HASH: ${CORTEX_ADMIN_PASSWORD_HASH:-}
-      CORTEX_SESSION_SECRET: ${CORTEX_SESSION_SECRET:-cortex_session_secret_default_32chars}
-      CORTEX_PUBLIC_URL: ${CORTEX_PUBLIC_URL:-http://localhost}
+      CORTEX_ADMIN_PASSWORD_HASH: ${CORTEX_ADMIN_PASSWORD_HASH:?Gere o hash com scripts/create_admin_hash.py}
+      CORTEX_SESSION_SECRET: ${CORTEX_SESSION_SECRET:?Gere uma chave de sessao}
+      CORTEX_PUBLIC_URL: ${CORTEX_PUBLIC_URL:?Informe http://IP_DO_SERVIDOR ou https://DOMINIO}
       CORTEX_ALLOWED_HOSTS: ${CORTEX_ALLOWED_HOSTS:-localhost,127.0.0.1}
     volumes:
       - cortex_output:/app/scripts/output
@@ -49,10 +49,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=3).read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/healthz', timeout=5).read()"]
       interval: 30s
-      timeout: 5s
+      timeout: 7s
       retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   webhook:
@@ -84,7 +85,7 @@ services:
       - -c
       - |
         cat << 'EOF' > /etc/caddy/Caddyfile
-        {$CORTEX_DOMAIN} {
+        {$$CORTEX_DOMAIN} {
             encode zstd gzip
             handle /webhooks/movidesk/tickets/* {
                 reverse_proxy webhook:8003
@@ -99,13 +100,15 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      CORTEX_DOMAIN: ${CORTEX_DOMAIN:-:80}
+      CORTEX_DOMAIN: ${CORTEX_PUBLIC_URL:?Informe http://IP_DO_SERVIDOR ou https://DOMINIO}
     volumes:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - app
-      - webhook
+      app:
+        condition: service_healthy
+      webhook:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
