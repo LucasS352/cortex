@@ -45,6 +45,22 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("CORTEX_ADMIN_PASSWORD_HASH", result.stderr)
 
+    def test_existing_portainer_stack_keeps_previous_database_password(self):
+        env = dict(os.environ)
+        env.pop("POSTGRES_PASSWORD", None)
+        env.update({"CORTEX_ADMIN_PASSWORD_HASH": hash_password("DisposableTestPassword!"),
+                    "CORTEX_ADMIN_USERNAME": "alternariva", "CORTEX_SESSION_SECRET": "s" * 48,
+                    "MOVIDESK_WEBHOOK_SECRET": "w" * 48,
+                    "CORTEX_PUBLIC_URL": "http://179.236.68.24"})
+        result = subprocess.run(["docker", "compose", "--env-file", os.devnull, "-f", FILES[0],
+                                 "config", "--format", "json"], cwd=ROOT, env=env,
+                                capture_output=True, text=True, check=True)
+        services = json.loads(result.stdout)["services"]
+        app_env = services["app"]["environment"]
+        self.assertEqual(app_env["POSTGRES_PASSWORD"], "cortex_secret")
+        self.assertEqual(app_env["CORTEX_ADMIN_USERNAME"], "alternariva")
+        self.assertEqual(app_env["CORTEX_PUBLIC_URL"], "http://179.236.68.24")
+
 
 if __name__ == "__main__":
     unittest.main()

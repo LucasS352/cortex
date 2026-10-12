@@ -4,7 +4,8 @@ services:
     environment:
       POSTGRES_DB: deskcortex
       POSTGRES_USER: deskcortex
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Informe a senha atual do PostgreSQL}
+      # Compatibilidade com volumes criados pelas versões anteriores da Stack.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/schema-current.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -24,7 +25,7 @@ services:
       POSTGRES_PORT: "5432"
       POSTGRES_DB: deskcortex
       POSTGRES_USER: deskcortex
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Informe a senha atual do PostgreSQL}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
       MOVIDESK_TOKEN: ${MOVIDESK_TOKEN:-}
       MOVIDESK_WEBHOOK_SECRET: ${MOVIDESK_WEBHOOK_SECRET:?Gere um segredo para o webhook}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

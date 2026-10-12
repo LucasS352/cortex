@@ -22,18 +22,20 @@ Em **Stacks → cortex → Edit stack settings**, mantenha o repositório e `ref
 | Variável | Valor |
 | --- | --- |
 | `CORTEX_PUBLIC_URL` | `http://179.236.68.24` |
-| `CORTEX_ADMIN_USERNAME` | `admin` (ou o usuário escolhido) |
+| `CORTEX_ADMIN_USERNAME` | `alternariva` |
 | `CORTEX_ADMIN_PASSWORD_HASH` | Hash gerado por `python scripts/create_admin_hash.py` |
 | `CORTEX_SESSION_SECRET` | Chave aleatória gerada pelo mesmo script |
 | `MOVIDESK_WEBHOOK_SECRET` | Segredo atual se já configurado; caso contrário, um novo segredo gerado |
-| `POSTGRES_PASSWORD` | **A mesma senha usada pelo banco que já está saudável** |
+| `POSTGRES_PASSWORD` | Na Stack existente, omitir ou usar `cortex_secret`; o volume foi criado pelo fallback anterior |
 | `CORTEX_IMAGE` | `ghcr.io/lucass352/cortex:<commit corrigido>` ou `:latest` com re-pull |
 
-Preserve também as chaves Movidesk/Gemini e configurações do piloto existentes. Não substitua a senha do banco por uma nova: mudar a variável não muda a senha no volume já inicializado. Caso a Stack antiga tenha sido criada sem essa variável, confira o fallback do commit implantado e mantenha esse valor até uma rotação planejada.
+Preserve também as chaves Movidesk/Gemini e configurações do piloto existentes. Não copie a senha aleatória de um `.env.server` novo para `POSTGRES_PASSWORD`: mudar a variável não altera a senha no volume já inicializado e faria a aplicação perder a conexão. A atualização mantém `cortex_secret` quando essa variável não estiver preenchida, igual à Stack que criou o volume atual.
 
 Cole o hash no campo de valor do Portainer com os `$` originais, sem aspas extras. Em arquivo `.env.server`, use aspas simples para preservar os `$`. O Compose bloqueia a implantação se faltarem credenciais, em vez de abrir o painel sem login. `CORTEX_AUTH_REQUIRED=false` no Portainer não desativa a proteção desta Stack.
 
-Se o acesso já tiver sido preparado localmente, copie as quatro variáveis de `.env.server.access` para a Stack: usuário, hash da senha, chave de sessão e URL pública. Esse arquivo é privado e ignorado pelo Git; publicar o código não transfere as credenciais. Preserve as outras variáveis da Stack, especialmente a senha do PostgreSQL. A senha é configurada como hash scrypt, com mínimo de 8 caracteres.
+Se o acesso já tiver sido preparado localmente, copie as quatro variáveis de `.env.server.access` para a Stack: usuário, hash da senha, chave de sessão e URL pública. Esse arquivo é privado e ignorado pelo Git; publicar o código não transfere as credenciais. Adicione também as variáveis Movidesk/Gemini do `.env.server`, cada uma em seu próprio campo no Portainer. Não copie comentários, aspas externas nem os textos `&#x20;`. A senha é configurada como hash scrypt, com mínimo de 8 caracteres.
+
+Para gerar um único arquivo pronto para a opção **Load variables from .env file** do Portainer, execute `python scripts/prepare_portainer_env.py` e importe `.env.server.portainer`. O arquivo combina as configurações locais com o hash do login e corrige `POSTGRES_PASSWORD` para o volume existente. Ele é ignorado pelo Git e não deve ser commitado.
 
 Depois que a imagem corrigida estiver publicada, use **Pull and redeploy**, solicitando nova busca da imagem se usar `latest`. Preserve os volumes e o nome da Stack. Abra `http://179.236.68.24/admin`: deve redirecionar ao login. Não use a porta 9443, que pertence ao Portainer.
 
