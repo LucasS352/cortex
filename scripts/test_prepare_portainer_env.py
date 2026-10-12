@@ -12,7 +12,7 @@ class PreparePortainerEnvTests(unittest.TestCase):
     def test_writer_does_not_add_literal_quotes(self):
         values = {
             "CORTEX_PUBLIC_URL": "http://192.0.2.10",
-            "CORTEX_ADMIN_USERNAME": "alternariva",
+            "CORTEX_ADMIN_USERNAME": "alternativa",
             "CORTEX_ADMIN_PASSWORD_HASH": "scrypt$16384$8$1$salt$hash",
             "OPTIONAL_VALUE": "",
         }

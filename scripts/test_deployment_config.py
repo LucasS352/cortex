@@ -49,7 +49,7 @@ class DeploymentConfigTests(unittest.TestCase):
         env = dict(os.environ)
         env.pop("POSTGRES_PASSWORD", None)
         env.update({"CORTEX_ADMIN_PASSWORD_HASH": hash_password("DisposableTestPassword!"),
-                    "CORTEX_ADMIN_USERNAME": "alternariva", "CORTEX_SESSION_SECRET": "s" * 48,
+                    "CORTEX_ADMIN_USERNAME": "alternativa", "CORTEX_SESSION_SECRET": "s" * 48,
                     "MOVIDESK_WEBHOOK_SECRET": "w" * 48,
                     "CORTEX_PUBLIC_URL": "http://179.236.68.24"})
         result = subprocess.run(["docker", "compose", "--env-file", os.devnull, "-f", FILES[0],
@@ -58,7 +58,7 @@ class DeploymentConfigTests(unittest.TestCase):
         services = json.loads(result.stdout)["services"]
         app_env = services["app"]["environment"]
         self.assertEqual(app_env["POSTGRES_PASSWORD"], "cortex_secret")
-        self.assertEqual(app_env["CORTEX_ADMIN_USERNAME"], "alternariva")
+        self.assertEqual(app_env["CORTEX_ADMIN_USERNAME"], "alternativa")
         self.assertEqual(app_env["CORTEX_PUBLIC_URL"], "http://179.236.68.24")
 
 

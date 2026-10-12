@@ -26,7 +26,7 @@ def main() -> None:
     values = {
         "CORTEX_PUBLIC_URL": access.get("CORTEX_PUBLIC_URL") or "http://179.236.68.24",
         "CORTEX_IMAGE": server.get("CORTEX_IMAGE") or "ghcr.io/lucass352/cortex:latest",
-        "CORTEX_ADMIN_USERNAME": access.get("CORTEX_ADMIN_USERNAME") or "alternariva",
+        "CORTEX_ADMIN_USERNAME": access.get("CORTEX_ADMIN_USERNAME") or "alternativa",
         "CORTEX_ADMIN_PASSWORD_HASH": access.get("CORTEX_ADMIN_PASSWORD_HASH") or "",
         "CORTEX_SESSION_SECRET": access.get("CORTEX_SESSION_SECRET") or "",
         # The existing Portainer volume was initialized by the old Compose fallback.

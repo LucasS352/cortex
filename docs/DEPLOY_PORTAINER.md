@@ -22,7 +22,7 @@ Em **Stacks → cortex → Edit stack settings**, mantenha o repositório e `ref
 | Variável | Valor |
 | --- | --- |
 | `CORTEX_PUBLIC_URL` | `http://179.236.68.24` |
-| `CORTEX_ADMIN_USERNAME` | `alternariva` |
+| `CORTEX_ADMIN_USERNAME` | `alternativa` |
 | `CORTEX_ADMIN_PASSWORD_HASH` | Hash gerado por `python scripts/create_admin_hash.py` |
 | `CORTEX_SESSION_SECRET` | Chave aleatória gerada pelo mesmo script |
 | `MOVIDESK_WEBHOOK_SECRET` | Segredo atual se já configurado; caso contrário, um novo segredo gerado |
