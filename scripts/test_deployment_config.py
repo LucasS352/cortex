@@ -33,7 +33,9 @@ class DeploymentConfigTests(unittest.TestCase):
                 command = services["caddy"]["entrypoint"][2].replace("$$", "$")
                 self.assertIn("{$CORTEX_DOMAIN} {", command)
                 self.assertNotIn("must-not-be-interpolated", command)
-                for private in ("app", "webhook", "postgres", "note-worker"):
+                self.assertEqual(services["postgres"]["ports"][0]["target"], 5432)
+                self.assertEqual(services["postgres"]["ports"][0]["published"], "5432")
+                for private in ("app", "webhook", "note-worker"):
                     self.assertFalse(services[private].get("ports"))
 
     def test_missing_login_credentials_reject_deployment(self):
