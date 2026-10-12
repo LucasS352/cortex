@@ -35,7 +35,7 @@ Cole o hash no campo de valor do Portainer com os `$` originais, sem aspas extra
 
 Se o acesso já tiver sido preparado localmente, copie as quatro variáveis de `.env.server.access` para a Stack: usuário, hash da senha, chave de sessão e URL pública. Esse arquivo é privado e ignorado pelo Git; publicar o código não transfere as credenciais. Adicione também as variáveis Movidesk/Gemini do `.env.server`, cada uma em seu próprio campo no Portainer. Não copie comentários, aspas externas nem os textos `&#x20;`. A senha é configurada como hash scrypt, com mínimo de 8 caracteres.
 
-Para gerar um único arquivo pronto para a opção **Load variables from .env file** do Portainer, execute `python scripts/prepare_portainer_env.py` e importe `.env.server.portainer`. O arquivo combina as configurações locais com o hash do login e corrige `POSTGRES_PASSWORD` para o volume existente. Ele é ignorado pelo Git e não deve ser commitado.
+Para gerar um único arquivo pronto para a opção **Load variables from .env file** do Portainer, execute `python scripts/prepare_portainer_env.py` e importe `.env.server.portainer`. O arquivo combina as configurações locais com o hash do login e corrige `POSTGRES_PASSWORD` para o volume existente. Os valores são gravados sem aspas porque o Portainer preserva aspas como parte do valor importado. Ele é ignorado pelo Git e não deve ser commitado.
 
 Depois que a imagem corrigida estiver publicada, use **Pull and redeploy**, solicitando nova busca da imagem se usar `latest`. Preserve os volumes e o nome da Stack. Abra `http://179.236.68.24/admin`: deve redirecionar ao login. Não use a porta 9443, que pertence ao Portainer.
 

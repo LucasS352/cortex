@@ -1,13 +1,23 @@
 """Build a private env file ready for Portainer's environment import."""
 from pathlib import Path
 
-from dotenv import dotenv_values, set_key
+from dotenv import dotenv_values
 
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_ENV = ROOT / ".env.server"
 ACCESS_ENV = ROOT / ".env.server.access"
 OUTPUT_ENV = ROOT / ".env.server.portainer"
+
+
+def write_portainer_env(path: Path, values: dict[str, str]) -> None:
+    """Write values exactly as Portainer expects them in its env-file importer."""
+    lines = ["# Importar em Stacks > cortex > Edit stack settings > Environment variables.\n"]
+    for key, value in values.items():
+        if any(character in value for character in ("\0", "\r", "\n")):
+            raise ValueError(f"A variável {key} contém uma quebra de linha inválida.")
+        lines.append(f"{key}={value}\n")
+    path.write_text("".join(lines), encoding="utf-8")
 
 
 def main() -> None:
@@ -38,10 +48,9 @@ def main() -> None:
     if missing:
         raise SystemExit("Variáveis privadas ausentes: " + ", ".join(missing))
 
-    OUTPUT_ENV.write_text("# Importar em Stacks > cortex > Edit stack settings > Environment variables.\n",
-                          encoding="utf-8")
-    for key, value in values.items():
-        set_key(OUTPUT_ENV, key, value, quote_mode="always")
+    # Portainer preserves quote characters when importing environment variables.
+    # Write raw values so quotes do not become part of usernames, URLs or hashes.
+    write_portainer_env(OUTPUT_ENV, values)
     print(f"Arquivo privado criado: {OUTPUT_ENV.name} ({len(values)} variáveis).")
 
 
