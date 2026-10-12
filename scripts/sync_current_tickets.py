@@ -7,6 +7,7 @@ command can be safely rerun after interruption. No customer replies are sent.
 
 import argparse
 import json
+import os
 import sys
 import time
 from collections import Counter
@@ -23,7 +24,10 @@ from config import MOVIDESK_BASE_URL, MOVIDESK_TOKEN, ODATA_SELECT_FIELDS, POSTG
 from refine_tickets_v2 import process_ticket_v2
 
 
-PAGE_SIZE = 100
+PAGE_SIZE = max(10, min(100, int(os.getenv("CORTEX_MOVIDESK_PAGE_SIZE", "25"))))
+REQUEST_TIMEOUT_SECONDS = max(30, min(300, int(
+    os.getenv("CORTEX_MOVIDESK_REQUEST_TIMEOUT_SECONDS", "75")
+)))
 RETRYABLE_HTTP = {429, 500, 502, 503, 504}
 EXPAND = "actions($expand=attachments),clients($expand=organization),owner,customFieldValues($expand=items)"
 JSON_COLUMNS = {"detected_modules", "detected_error_codes", "evidence_data"}
@@ -227,7 +231,8 @@ def main():
         print(f"Started {started.isoformat()} | previous_max={previous_max}", flush=True)
 
         try:
-            with httpx.Client(timeout=httpx.Timeout(35, connect=10), headers={"User-Agent": "DeskCortex/1.0"}) as client:
+            with httpx.Client(timeout=httpx.Timeout(REQUEST_TIMEOUT_SECONDS, connect=10),
+                              headers={"User-Agent": "DeskCortex/1.0"}) as client:
                 for lane in ("new", "older_open", "older_past"):
                     cursor = previous_max if lane == "new" else (args.older_open_before or previous_max + 1)
                     while True:
