@@ -1,3 +1,4 @@
+import html
 import os
 import unittest
 from unittest.mock import Mock, MagicMock, patch
@@ -144,6 +145,30 @@ class MappedReplyTests(unittest.TestCase):
         self.assertIsNotNone(source)
         self.assertEqual(source['id'], 'reviewed-state-registration-v1')
 
+    def test_duplicate_nfe_reply_has_official_queries_image_and_confirmed_cases(self):
+        source = mapped.match('Rejeição: Duplicidade de NF-e com diferença na Chave de Acesso [chNFe: 123]')
+        self.assertIsNotNone(source)
+        self.assertEqual(source['id'], 'reviewed-duplicate-nfe-key-v1')
+        self.assertEqual(len(source['resolved_examples']), 3)
+        self.assertEqual([case['ticket'] for case in source['resolved_examples']],
+                         [127706, 117855, 115902])
+        self.assertEqual(source['images'][0]['after_step'], 1)
+        with patch.dict(os.environ, {'CORTEX_PUBLIC_URL': ''}):
+            images, notices = mapped.note_images(source)
+        self.assertEqual(len(images), 1)
+        self.assertFalse(notices)
+        note = render_note({'reply': source['reviewed_reply'], 'images': images,
+                            'sources': [{'title': source['title'], 'url': source['source_url']}],
+                            'similar_tickets': source['resolved_examples']}, 'marker')
+        for url in (mapped.NFE_INUTILIZATION_URL, mapped.NFE_QUERY_URL):
+            escaped_url = html.escape(url, quote=True)
+            self.assertIn(f'<a href="{escaped_url}">{escaped_url}</a>', note)
+        self.assertEqual(note.count('<img src="data:image/png;base64,'), 1)
+        self.assertLess(note.index('1. Abra a nota fiscal'), note.index(images[0]['data_url']))
+        self.assertLess(note.index(images[0]['data_url']), note.index('2. Copie a chave'))
+        for ticket_id in (127706, 117855, 115902):
+            self.assertIn('/Ticket/Edit/' + str(ticket_id), note)
+
     def test_exact_recipe_wins_even_when_company_history_exists(self):
         ticket = {'id': 140000, 'subject': 'Pedido não integrado',
                   'clients': [{'id': 'requester', 'email': 'cliente@example.test',
@@ -194,6 +219,11 @@ class MappedReplyTests(unittest.TestCase):
                       'https://example.com/x?token=secret', '//example.com/x',
                       'https://example.com/"onclick="x'):
             self.assertEqual(mapped.safe_url(value), '')
+
+    def test_only_exact_official_nfe_query_urls_may_keep_a_query_string(self):
+        self.assertEqual(mapped.safe_url(mapped.NFE_INUTILIZATION_URL), mapped.NFE_INUTILIZATION_URL)
+        self.assertEqual(mapped.safe_url(mapped.NFE_QUERY_URL), mapped.NFE_QUERY_URL)
+        self.assertEqual(mapped.safe_url(mapped.NFE_INUTILIZATION_URL + '&redirect=https://example.com'), '')
 
     def test_untrusted_inline_image_data_is_rejected(self):
         for value in ('data:text/html;base64,PHNjcmlwdD4=',

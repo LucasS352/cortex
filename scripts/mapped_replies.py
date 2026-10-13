@@ -11,8 +11,17 @@ import re
 import unicodedata
 
 
+NFE_INUTILIZATION_URL = ('https://www.nfe.fazenda.gov.br/portal/consulta.aspx?'
+                         'tipoConsulta=inutilizacao&tipoConteudo=nDmpH/MjKrg=')
+NFE_QUERY_URL = ('https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?'
+                 'tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=')
+OFFICIAL_QUERY_URLS = {NFE_INUTILIZATION_URL, NFE_QUERY_URL}
+
+
 def safe_url(value):
     value = str(value or '').strip()
+    if value in OFFICIAL_QUERY_URLS:
+        return value
     try:
         url = urlsplit(value)
         if (url.scheme in {'https', 'http'} and url.hostname and not url.username
@@ -68,6 +77,22 @@ A mensagem “Inscrição Estadual inválida” indica que devemos conferir a IE
 Se a IE não estiver habilitada no CCC, se o CNPJ não possuir IE nessa UF ou se os dados continuarem divergentes, não informe “ISENTO” nem remova a IE por conta própria. Confirme a situação cadastral e o endereço com o destinatário antes de uma nova emissão. Os dados apresentados nas imagens são apenas exemplos.'''
 
 
+DUPLICATE_NFE_REPLY = f'''Olá!
+
+A rejeição 539, “Duplicidade de NF-e com diferença na Chave de Acesso”, indica que a SEFAZ já encontrou outra NF-e para o mesmo emitente, modelo, série e número, mas a chave enviada agora está diferente.
+
+1. Abra a nota fiscal no Master e anote os campos Série e Número. Os valores mostrados na imagem abaixo são apenas exemplos; utilize os dados da nota que apresentou a rejeição.
+2. Copie a chave de 44 dígitos apresentada na mensagem e consulte a situação da NF-e no Portal Nacional: {NFE_QUERY_URL}
+3. Para verificar se a numeração foi inutilizada, acesse a consulta oficial:
+{NFE_INUTILIZATION_URL}
+Informe o CNPJ do emitente, o ano, o modelo, a série e a numeração correspondente. Essa tela consulta a inutilização da sequência; ela não substitui a consulta da NF-e pela chave.
+4. Compare a série e o número do Master com a última NF-e válida dessa mesma série e confirme se outro sistema emissor utilizou a mesma sequência.
+5. Se a NF-e encontrada pertencer à mesma operação, não gere outra numeração. Recupere o XML autorizado e solicite a importação ou vinculação da nota ao movimento correto no Master.
+6. Se a numeração já tiver sido usada por outra operação e esta for uma nova nota, ajuste a sequência somente após confirmar com a contabilidade qual foi o último número válido da série. Salve e tente transmitir novamente.
+
+Não exclua a nota, altere a série ou avance a numeração por tentativa. Se a consulta apresentar situação cancelada, denegada ou inutilizada, encaminhe os resultados ao suporte antes de fazer alterações.'''
+
+
 def normalized(value):
     return ''.join(c for c in unicodedata.normalize('NFKD', str(value or '').lower())
                    if not unicodedata.combining(c))
@@ -75,6 +100,39 @@ def normalized(value):
 
 def match(query):
     text = normalized(query)
+    if re.search(r'\bduplicidade de nf[ -]?e\b[^\n.!?]{0,100}\bdiferenca na chave de acesso\b', text):
+        return {
+            'id': 'reviewed-duplicate-nfe-key-v1', 'source_type': 'REVIEWED_PROCEDURE',
+            'title': 'Consulta de inutilização no Portal Nacional da NF-e',
+            'problem': 'Rejeição 539 — Duplicidade de NF-e com diferença na Chave de Acesso',
+            'solution': DUPLICATE_NFE_REPLY, 'reviewed_reply': DUPLICATE_NFE_REPLY,
+            'applicable': True, 'answer_use': 'procedure_reference',
+            'quality_flags': [], 'applicability_reasons': [], 'reviewed_at': '2026-10-13',
+            'source_url': NFE_INUTILIZATION_URL,
+            'provenance': ('Procedimento revisado com base na regra oficial da rejeição 539; '
+                           'resultados confirmados nos chamados 127706, 117855 e 115902.'),
+            'resolved_examples': [
+                {'ticket': 127706,
+                 'title': 'SUP - NFE - Duplicidade de NF-e com diferença na Chave de Acesso',
+                 'status': 'Fechado — transmissão confirmada', 'active': False,
+                 'resolution': ('A numeração e a série corretas foram verificadas; após o ajuste, '
+                                'a nota foi transmitida com sucesso.')},
+                {'ticket': 117855, 'title': 'SUP - NFE - Nota Duplicada',
+                 'status': 'Fechado — transmissão confirmada', 'active': False,
+                 'resolution': ('Outro sistema já havia utilizado o número da série. Foi conferido o último '
+                                'número válido, ajustada a sequência e a nota foi transmitida.')},
+                {'ticket': 115902,
+                 'title': 'SUP - NFE - Duplicidade de NF-e com diferença na Chave de Acesso',
+                 'status': 'Fechado — emissão confirmada', 'active': False,
+                 'resolution': ('A chave foi consultada na SEFAZ e a última sequência foi confirmada com a '
+                                'contabilidade. O número foi ajustado e as emissões seguintes ocorreram sem o erro.')},
+            ],
+            'images': [
+                {'file': 'duplicate-nfe-series-number.png', 'after_step': 1,
+                 'caption': ('Passo 1: confira Série e Número na nota fiscal. '
+                             'Os valores destacados são apenas exemplos.')},
+            ],
+        }
     if (re.search(r'\binscricao estadual\b[^\n.!?]{0,100}\binvalid[ao]\b', text) or
             re.search(r'\bie do destinatario\b[^\n.!?]{0,60}\binvalid[ao]\b', text)):
         return {
