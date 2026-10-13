@@ -321,6 +321,34 @@ async function saveAllStudioSettings() {
   }
 }
 
+async function savePilotToggle(inputId, settingName, toStored = value => value, fromStored = value => !!value) {
+  const input = $(inputId);
+  const status = $('pilot-toggle-save-status');
+  if (!input) return;
+
+  const requestedValue = input.checked;
+  let saved = false;
+  input.disabled = true;
+  if (status) status.textContent = 'Salvando alteração…';
+
+  try {
+    const updated = await api('/api/admin/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ [settingName]: toStored(requestedValue) })
+    });
+    input.checked = fromStored(updated[settingName]);
+    saved = true;
+    if (status) status.textContent = 'Alteração salva.';
+  } catch (err) {
+    input.checked = !requestedValue;
+    if (status) status.textContent = 'A alteração não foi salva.';
+    showError('Erro ao salvar configuração: ' + err.message);
+  } finally {
+    input.disabled = false;
+  }
+  if (saved) await loadWebhookReceipts();
+}
+
 // --- Playground Simulation & Raio-X ---
 function checkPlaygroundSandboxStatus() {
   const clientInput = $('playground-client');
@@ -864,6 +892,13 @@ function initAgentStudio() {
 
   // Save button
   $('save-studio-btn')?.addEventListener('click', saveAllStudioSettings);
+  $('setting-sandbox-mode')?.addEventListener('change', () => {
+    // The UI switch means "active", while the stored setting means "paused".
+    savePilotToggle('setting-sandbox-mode', 'pilot_paused', value => !value, value => !value);
+  });
+  $('setting-auto-internal-note')?.addEventListener('change', () => {
+    savePilotToggle('setting-auto-internal-note', 'auto_internal_note');
+  });
 
   // Reset defaults button
   $('reset-default-specialists')?.addEventListener('click', async () => {
