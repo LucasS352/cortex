@@ -317,7 +317,8 @@ def generate_note(ticket, settings, api):
     import ticket_image
     from agent_control import organization
     from technician_workbench import (connection, build_reply, evidence_for_company, environment_card,
-                                      environment_rows, search_context_query)
+                                      environment_rows, search_context_query, resolved_support_cases,
+                                      company_case_source)
     from tech_evidence import ensure_single_tenant
     from conversation_outcome import classify_outcome, RESOLVED_REPLY, ACKNOWLEDGED_REPLY
 
@@ -355,6 +356,12 @@ def generate_note(ticket, settings, api):
     if len(current_attachments) > 2:
         attachment_notices.append('Há outros anexos pendentes de leitura pelo técnico.')
     question += '\n' + '\n'.join(attachment_notices) if attachment_notices else ''
+    query = search_context_query(question, list(reversed(messages[:-1])))
+    from support_triage import intake
+    triage = intake(question, query, messages[:-1])
+    if triage:
+        triage['attachments'].extend(attachment_notices)
+        return triage
     org_id, org_name, _ = organization(ticket.get('clients'))
     with connection() as conn:
         tenant = ensure_single_tenant(conn)
@@ -383,10 +390,18 @@ def generate_note(ticket, settings, api):
             # company cases are still retained for the internal audit trail.
             sources = [reviewed]
             evidence_scope = 'reviewed_procedure'
+        company_cases = list(cases)
+        # History attached to a solution must describe a completed procedure.
+        cases = [case for case in cases if company_case_source(case)]
+        known = {str(case['external_id']) for case in cases}
+        for case in resolved_support_cases(conn, tenant, query, ticket.get('id')):
+            if str(case['external_id']) not in known:
+                cases.append(case)
+                known.add(str(case['external_id']))
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in messages[:-1])
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
            'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
-    reply, meta = build_reply(row, context, facts, envs, sources, question, cases, audience='customer_draft')
+    reply, meta = build_reply(row, context, facts, envs, sources, question, company_cases, audience='customer_draft')
     if not meta.get('used'):
         raise RetryJob('Gemini indisponível; nenhuma nota de contingência publicada')
     reference = sources[:1] if sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
@@ -402,13 +417,19 @@ def generate_note(ticket, settings, api):
         existing_ids = {str(case['ticket']) for case in similar} | {str(ticket['id'])}
         similar.extend(case for case in reference[0].get('resolved_examples', [])
                        if str(case['ticket']) not in existing_ids)
+    else:
+        similar = []
+    similar = similar[:3]
     return {'reply': reply,
             'sources': [{'ticket': s.get('source_external_id') if s.get('source_type') in
                          ('VALIDATED_TICKET', 'PROBABLE_TICKET') else None,
                          'title': s.get('title'), 'url': s.get('source_url') or (s.get('metadata') or {}).get('source_url'),
                          'provenance': s.get('provenance')} for s in reference],
             'similar_tickets': similar, 'evidence_scope': evidence_scope,
-            'mode': meta.get('mode'), 'attachments': attachment_notices + media_notices, 'images': images}
+            'mode': meta.get('mode'), 'attachments': attachment_notices + media_notices, 'images': images,
+            'history_notice': ('Foram localizados menos de três chamados resolvidos com procedimento aplicável.'
+                               if reference and len(similar) < 3 else
+                               'Diagnóstico pendente: nenhuma solução comprovada foi selecionada.' if not reference else '')}
 
 
 def render_note(result, marker):
@@ -486,6 +507,8 @@ def render_note(result, marker):
             elif case.get('resolution'):
                 lines.append('<li>Resolução registrada: ' + html.escape(plain(case['resolution'])[:700]) + '</li>')
         lines.append('</ul>')
+    if result.get('history_notice'):
+        lines.append('<p><strong>Observação interna:</strong> ' + html.escape(result['history_notice']) + '</p>')
     remaining_images = [item for item in images if not item.get('after_step')]
     if remaining_images:
         lines.append('<p><strong>Imagens do procedimento:</strong></p>')

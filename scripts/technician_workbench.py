@@ -164,6 +164,31 @@ def company_similar_cases(conn, tenant, company_id: str, query: str,
     return applicable[:min(max(limit, 1), 20)]
 
 
+def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3):
+    """Find documented resolutions across the tenant, independent of customer."""
+    plan = knowledge_access.query_plan(query)
+    if not plan['terms']:
+        return []
+    vector = "to_tsvector('portuguese',concat_ws(' ',subject,problem_statement,technical_narrative,solution_statement))"
+    rows = conn.execute(f'''SELECT external_id,subject,status,base_status,
+        problem_statement,technical_narrative,solution_statement,quality_tier,hard_block_reason,
+        ts_rank_cd({vector},websearch_to_tsquery('portuguese',%s)) AS relevance
+        FROM refined_tickets WHERE tenant_id=%s AND external_id::text<>%s
+        AND base_status IN ('Resolved','Closed') AND quality_tier IN ('GOLD','SILVER')
+        AND coalesce(hard_block_reason,'')='' AND length(trim(coalesce(solution_statement,'')))>=40
+        AND {vector} @@ websearch_to_tsquery('portuguese',%s)
+        ORDER BY relevance DESC,created_date DESC LIMIT 80''',
+        (plan['fts'],tenant,str(exclude_ticket_id or ''),plan['fts'])).fetchall()
+    result = []
+    for row in rows:
+        source = company_case_source(row)
+        if source and knowledge_access.applicability(source, query)['applicable']:
+            result.append(dict(row, is_active=False))
+            if len(result) >= limit:
+                break
+    return result
+
+
 def company_case_source(case):
     """Promote only a completed, documented company case to procedural evidence."""
     if (case.get("base_status") not in ("Resolved", "Closed") or
@@ -470,7 +495,14 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
                 'Não solicite CPF/CNPJ completos nem credenciais: oriente a conferir dados cadastrais no sistema. '
                 'Não inclua notas internas da empresa, '
                 'nomes de outros clientes nem detalhes de infraestrutura confidenciais. Não diga que executou ações. '
-                'Quando faltar evidência, explique a próxima conferência ou pergunta de forma clara.'
+                'Quando houver procedimento aplicável, organize em passos numerados: onde acessar, '
+                'o que conferir, ajuste condicional e como validar o resultado. '
+                'Quando faltar evidência, explique a próxima conferência ou pergunta de forma clara. '
+                'Se o cliente já pesquisou ocorrências e não encontrou, investigue o integrador, período e estado '
+                'do serviço; não repita a triagem inteira. Se uma tentativa falhou, considere esse resultado '
+                'e peça apenas a evidência nova necessária. Se a base não sustentar o próximo ajuste, encaminhe '
+                'para análise técnica explicando o que já foi verificado e o que falta. '
+                'Não prometa imagens: elas são inseridas separadamente somente quando há material revisado.'
                 if audience == 'customer_draft' else
                 'Responda em português em até 130 palavras, sem saudação e sem repetir o erro completo.')
     voice = ('Você é técnico de suporte do ERP Master redigindo uma resposta diretamente ao cliente.'
