@@ -46,11 +46,11 @@ def safe_image_data(value):
     return value if len(raw) <= 350_000 and raw.startswith(b'\x89PNG\r\n\x1a\n') else ''
 
 
-PAYMENT_REPLY = '''A mensagem indica que a forma de pagamento do pedido não está relacionada no Master. Confira o vínculo assim:
+PAYMENT_REPLY = '''A mensagem indica que a forma de pagamento recebida do integrador ainda não está relacionada no Master. Faça o de/para assim:
 
-1. Acesse Cadastros → Formas de Pagamento e selecione a forma correspondente ao pagamento do pedido. Confirme se é crédito, débito ou outra modalidade; somente a bandeira Elo não define isso.
-2. Com a forma selecionada, pressione Ctrl+R para abrir Relação - Site.
-3. Confira o Site/Meu Site da integração do pedido. Se a relação estiver ausente, clique em Adicionar e preencha Código de fora com o código da forma de pagamento informado pelo integrador. Não use o UUID do erro como código de pagamento.
+1. Acesse Cadastros → Formas de Pagamento e escolha no Master a forma que deve representar o pagamento recebido. Confirme se é crédito, débito, carteira ou outra modalidade; o nome ou a bandeira, isoladamente, não define a escolha correta.
+2. Com essa forma de pagamento selecionada, pressione Ctrl+R para abrir Relação - Site.
+3. Confira o Site/Meu Site correspondente ao integrador do pedido. Se a relação estiver ausente, clique em Adicionar e preencha Código de fora com o código ou nome externo informado pelo integrador. No exemplo “Shopee PayLater”, relacione exatamente o identificador recebido, após confirmar qual forma do Master deve representá-lo. Não use o UUID do erro como código de pagamento.
 4. Confirme e salve a relação. Depois, reprocesse o pedido no sincronizador e confira se integrou sem a mensagem.
 
 Se o código da forma de pagamento não aparecer na mensagem, envie o detalhe desse erro no sincronizador para identificarmos o valor correto antes de cadastrar a relação.'''
@@ -196,7 +196,12 @@ def match(query):
         }
     # Do not apply this recipe to generic missing orders or orders already
     # integrated without payment (ANY_PAGAMENTO_STATUS is a different issue).
-    if not re.search(r'forma de pagamento[^\n.!?]{0,100}\bnao integrad[ao]\b', text):
+    payment_missing = (
+        re.search(r'forma de pagamento[^\n.!?]{0,240}\bnao (?:esta )?'
+                  r'(?:integrad[ao]|configurad[ao]|relacionad[ao]|associad[ao]|cadastrad[ao])\b', text) or
+        re.search(r'rela[cç][aã]o (?:da |de )?forma de pagamento[^\n.!?]{0,100}\bnao encontrad[ao]\b', text)
+    )
+    if not payment_missing:
         return None
     if re.search(r'ja (?:foi )?integrad|integra(?:m|dos?)? sem forma|any_pagamento_status', text):
         return None
@@ -204,20 +209,29 @@ def match(query):
         return None
     return {
         'id': 'reviewed-payment-relation-v1', 'source_type': 'REVIEWED_PROCEDURE',
-        'title': 'Forma de pagamento não integrada — relação pelo Ctrl+R',
-        'problem': 'Forma de pagamento não integrada no sincronizador do Master',
+        'title': 'Forma de pagamento não integrada/configurada — relação pelo Ctrl+R',
+        'problem': 'Forma de pagamento do integrador sem relação no Master',
         'solution': PAYMENT_REPLY, 'reviewed_reply': PAYMENT_REPLY,
         'applicable': True, 'answer_use': 'procedure_reference',
         'quality_flags': [], 'applicability_reasons': [],
         'reviewed_at': '2026-10-13',
-        'provenance': 'Passos conferidos nos manuais Integrando formas de pagamento e transportadora e Erro de sincronizador; Ctrl+R confirmado por Lucas em 13/10/2026.',
-        'resolved_examples': [{'ticket': 128116,
+        'provenance': ('Passos conferidos nos manuais Integrando formas de pagamento e transportadora '
+                       'e Erro de sincronizador; Ctrl+R confirmado por Lucas em 13/10/2026. '
+                       'Resultado também confirmado no chamado 131288.'),
+        'resolved_examples': [{'ticket': 131288,
+            'title': 'SUP - SNC - Pedidos sem integrar | Anymarket',
+            'status': 'Fechado — integração confirmada', 'active': False,
+            'resolution': ('O de/para da forma de pagamento foi realizado e o pedido foi integrado. '
+                           'O chamado confirma a causa e o resultado; o procedimento detalhado vem do material revisado.')},
+            {'ticket': 128116,
             'title': 'SUP - SNC - Forma de Pagamento não integrada',
             'status': 'Encerrado (consulta em 13/10/2026)', 'active': False,
             'resolution': 'Relação com a forma de pagamento realizada; pedido integrado com sucesso.'}],
         'images': [
-            {'file': 'payment-selection.png', 'caption': 'Passos 1–2: selecione a forma correta e pressione Ctrl+R. A seleção do print é apenas exemplo.'},
-            {'file': 'payment-relation.png', 'caption': 'Passo 3: Relação - Site e Código de fora. Site e valores do print são exemplos; use os dados da integração do pedido.'},
+            {'file': 'payment-selection.png', 'after_step': 2,
+             'caption': 'Passos 1–2: selecione a forma correta e pressione Ctrl+R. A seleção do print é apenas exemplo.'},
+            {'file': 'payment-relation.png', 'after_step': 3,
+             'caption': 'Passo 3: Relação - Site e Código de fora. Site e valores do print são exemplos; use os dados da integração do pedido.'},
         ],
     }
 

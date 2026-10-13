@@ -2,7 +2,7 @@
 
 ## Precisão das orientações — 13/10/2026
 
-O caso 131661 passou a ter uma resposta revisada para a mensagem **Forma de pagamento não integrada**: Cadastros → Formas de Pagamento → selecionar a modalidade correspondente → Ctrl+R → Relação - Site → cadastrar o Código de fora da integração → salvar e reprocessar. A bandeira não determina crédito/débito, e o UUID de diagnóstico não deve ser copiado como código de pagamento. Quando o código não está disponível, a resposta pede o detalhe específico do sincronizador.
+Os casos 131661 e 131731 passam a ter uma resposta revisada para mensagens de **forma de pagamento não integrada, não configurada, não relacionada ou não associada**: Cadastros → Formas de Pagamento → selecionar a modalidade correspondente → Ctrl+R → Relação - Site → cadastrar o Código de fora da integração → salvar e reprocessar. As imagens aparecem abaixo dos passos correspondentes. A bandeira ou o nome externo não determinam sozinhos a modalidade do Master, e o UUID de diagnóstico não deve ser copiado como código de pagamento. Quando o código não está disponível, a resposta pede o detalhe específico do sincronizador. O chamado encerrado 131288 confirma que o de/para destrava a integração, mas não é usado como fonte do passo a passo porque seu registro não contém todas as etapas.
 
 Essa resposta usa texto revisado em `scripts/mapped_replies.py`, preservando os passos sem depender de uma síntese do Gemini. Foi conferida nos manuais locais e na orientação de Lucas. O chamado 128116 foi consultado na API em 13/10/2026: estava encerrado e registrava relação da forma de pagamento com integração bem-sucedida. A nota inclui o link desse histórico e a resolução registrada; isso não afirma que o pedido atual já foi resolvido.
 

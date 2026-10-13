@@ -24,7 +24,7 @@ class MappedReplyTests(unittest.TestCase):
             result = generate_note(ticket, Settings(), Mock())
         model.assert_not_called()
         self.assertEqual(result['mode'], 'reviewed_procedure')
-        self.assertEqual(result['similar_tickets'][0]['ticket'], 128116)
+        self.assertEqual(result['similar_tickets'][0]['ticket'], 131288)
         self.assertEqual(len(result['images']), 2)
         self.assertIn('Ctrl+R', render_note(result, 'marker'))
 
@@ -66,6 +66,26 @@ class MappedReplyTests(unittest.TestCase):
 
     def test_named_payment_and_error_without_uuid_is_enough(self):
         self.assertIsNotNone(mapped.match('anymarket: forma de pagamento "cartao elo" nao integrada'))
+
+    def test_payment_not_configured_uses_reviewed_ctrl_r_procedure(self):
+        query = ('Erro na baixa do pedido 404021225: Forma de pagamento "CARTÃO DE CRÉDITO" '
+                 '/ [Shopee PayLater] não está configurada. Código do erro: CEF94536')
+        source = mapped.match(query)
+        self.assertIsNotNone(source)
+        self.assertEqual(source['id'], 'reviewed-payment-relation-v1')
+        self.assertEqual([case['ticket'] for case in source['resolved_examples']], [131288, 128116])
+        self.assertEqual([item['after_step'] for item in source['images']], [2, 3])
+        for term in ('Cadastros → Formas de Pagamento', 'Ctrl+R', 'Relação - Site',
+                     'Código de fora', 'Shopee PayLater'):
+            self.assertIn(term, source['reviewed_reply'])
+        images, notices = mapped.note_images(source)
+        self.assertFalse(notices)
+        note = render_note({'reply': source['reviewed_reply'], 'images': images,
+                            'similar_tickets': source['resolved_examples']}, 'marker')
+        self.assertLess(note.index('2. Com essa forma'), note.index(images[0]['data_url']))
+        self.assertLess(note.index(images[0]['data_url']), note.index('3. Confira'))
+        self.assertLess(note.index('3. Confira'), note.index(images[1]['data_url']))
+        self.assertIn('/Ticket/Edit/131288', note)
 
     def test_different_scenarios_and_failed_attempts_do_not_repeat_recipe(self):
         for query in ('meu pedido não caiu no master', 'produto não integrado',
