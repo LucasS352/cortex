@@ -350,6 +350,12 @@ def render_note(result, marker):
     # Generated/source text is escaped. Only allowlisted reviewed images can
     # become img tags, and their URLs are built by mapped_replies.note_images.
     reply = html.escape(result['reply'])
+    def reply_link(match):
+        url = html.unescape(match.group(0))
+        safe = mapped_replies.safe_url(url)
+        return ('<a href="' + html.escape(safe, quote=True) + '">' + html.escape(url) + '</a>'
+                if safe else match.group(0))
+    reply = re.sub(r'https?://[^\s&lt;&gt;]+', reply_link, reply)
     reply = re.sub(r'\*\*([^*\n]+)\*\*', r'<strong>\1</strong>', reply)
     reply = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', reply)
     lines = ['<p><strong>Cortex — resposta sugerida ao cliente (nota interna)</strong></p>',

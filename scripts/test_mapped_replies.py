@@ -79,6 +79,24 @@ class MappedReplyTests(unittest.TestCase):
         for term in ('produto_id', 'cod_estoque', 'Código de fora', 'Adicional', 'Ctrl+R'):
             self.assertIn(term, source['reviewed_reply'])
 
+    def test_state_registration_reply_has_official_link_steps_and_images(self):
+        source = mapped.match('Ao transmitir a nota aparece Inscrição Estadual inválida.')
+        self.assertIsNotNone(source)
+        self.assertEqual(source['id'], 'reviewed-state-registration-v1')
+        self.assertEqual(source['source_url'], 'https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc')
+        self.assertEqual(len(source['images']), 3)
+        for term in ('Dados de Entrega', 'RG/IE', 'Pesquisar por CNPJ', 'Situação IE', 'Habilitado'):
+            self.assertIn(term, source['reviewed_reply'])
+        with patch.dict(os.environ, {'CORTEX_PUBLIC_URL': ''}):
+            images, notices = mapped.note_images(source)
+        self.assertEqual(len(images), 3)
+        self.assertFalse(notices)
+        self.assertFalse(images[0]['url'])
+        note = render_note({'reply': source['reviewed_reply'], 'images': images,
+                            'sources': [{'title': source['title'], 'url': source['source_url']}]}, 'marker')
+        self.assertEqual(note.count('<img src="data:image/png;base64,'), 3)
+        self.assertIn('<a href="https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc">', note)
+
     def test_exact_recipe_wins_even_when_company_history_exists(self):
         ticket = {'id': 140000, 'subject': 'Pedido não integrado',
                   'clients': [{'id': 'requester', 'email': 'cliente@example.test',
@@ -106,11 +124,12 @@ class MappedReplyTests(unittest.TestCase):
         self.assertEqual(result['mode'], 'reviewed_procedure')
         self.assertIn('cod_estoque', result['reply'])
 
-    def test_missing_origin_is_explicit_and_never_emits_broken_relative_links(self):
+    def test_missing_origin_keeps_embedded_images_without_broken_relative_links(self):
         with patch.dict(os.environ, {'CORTEX_PUBLIC_URL': ''}):
             images, notices = mapped.note_images(mapped.match('forma de pagamento não integrada'))
-        self.assertFalse(images)
-        self.assertIn('CORTEX_PUBLIC_URL', notices[0])
+        self.assertEqual(len(images), 2)
+        self.assertFalse(notices)
+        self.assertTrue(all(not image['url'] for image in images))
 
     def test_sources_keep_kb_links_and_ticket_ids_are_not_confused_with_articles(self):
         note = render_note({'reply': 'Teste', 'sources': [
