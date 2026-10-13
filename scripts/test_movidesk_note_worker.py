@@ -70,6 +70,33 @@ class WorkerTests(unittest.TestCase):
     def states(self):
         return [r['state'] for r in receiver.receipt_summary()['recent']]
 
+    def test_pasted_movidesk_image_is_exposed_as_an_action_attachment(self):
+        action = {'htmlDescription': '''<p>Veja o erro:</p><img
+            src="https://s3.amazonaws.com/movidesk-files/973C426DD20BEF2F32E0E237BDEA3FC5?AWSAccessKeyId=x&amp;Expires=1">'''}
+        self.assertEqual(worker.action_attachments(action), [{
+            'path': '973C426DD20BEF2F32E0E237BDEA3FC5',
+            'fileName': 'print_inline_1.png', 'inline': True}])
+
+    def test_pasted_external_image_is_not_downloaded(self):
+        action = {'htmlDescription': '<img src="https://example.com/customer-controlled.png">'}
+        self.assertEqual(worker.action_attachments(action), [])
+
+    def test_storage_redirects_are_restricted_to_movidesk_and_s3(self):
+        self.assertTrue(worker.safe_storage_url('https://alternativasistemas.movidesk.com/Storage/Download?id=x'))
+        self.assertTrue(worker.safe_storage_url('https://s3.amazonaws.com/movidesk-files/x?Signature=y'))
+        self.assertFalse(worker.safe_storage_url('http://alternativasistemas.movidesk.com/Storage/Download?id=x'))
+        self.assertFalse(worker.safe_storage_url('https://example.com/image.png'))
+        self.assertFalse(worker.safe_storage_url('https://movidesk.com@example.com/image.png'))
+
+    def test_inline_image_changes_customer_message_identity(self):
+        first = ticket()
+        first['actions'][0]['htmlDescription'] = (
+            '<img src="https://s3.amazonaws.com/movidesk-files/' + 'A' * 32 + '?Expires=1">')
+        second = copy.deepcopy(first)
+        second['actions'][0]['htmlDescription'] = (
+            '<img src="https://s3.amazonaws.com/movidesk-files/' + 'B' * 32 + '?Expires=1">')
+        self.assertNotEqual(worker.identity(first, self.settings)[0], worker.identity(second, self.settings)[0])
+
     def test_webhook_to_private_note_deduplicates_different_events_and_bot_loop(self):
         self.enqueue(Actions=[{'Id': 1}])
         worker.run_once(self.settings, self.api, self.generate)

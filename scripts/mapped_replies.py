@@ -73,7 +73,8 @@ def normalized(value):
 
 def match(query):
     text = normalized(query)
-    if re.search(r'\binscricao estadual\b[^\n.!?]{0,100}\binvalid[ao]\b', text):
+    if (re.search(r'\binscricao estadual\b[^\n.!?]{0,100}\binvalid[ao]\b', text) or
+            re.search(r'\bie do destinatario\b[^\n.!?]{0,60}\binvalid[ao]\b', text)):
         return {
             'id': 'reviewed-state-registration-v1', 'source_type': 'REVIEWED_PROCEDURE',
             'title': 'https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc',

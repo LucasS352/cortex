@@ -110,6 +110,11 @@ class MappedReplyTests(unittest.TestCase):
         self.assertLess(second_image, third_step)
         self.assertLess(third_step, third_image)
 
+    def test_state_registration_reply_matches_master_abbreviation_from_screenshot(self):
+        source = mapped.match('Ocorreram os seguintes erros ao enviar a NFe: IE do destinatário inválida')
+        self.assertIsNotNone(source)
+        self.assertEqual(source['id'], 'reviewed-state-registration-v1')
+
     def test_exact_recipe_wins_even_when_company_history_exists(self):
         ticket = {'id': 140000, 'subject': 'Pedido não integrado',
                   'clients': [{'id': 'requester', 'email': 'cliente@example.test',

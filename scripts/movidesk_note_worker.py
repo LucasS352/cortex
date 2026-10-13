@@ -14,6 +14,7 @@ import re
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 import mapped_replies
@@ -138,26 +139,90 @@ class Api:
         return self.request('PATCH', '/tickets', params={'id': ticket_id}, json=payload)
 
     def image(self, attachment):
-        path = str(attachment.get('path') or '')
-        if not re.fullmatch(r'[A-Za-z0-9_-]{8,200}', path):
+        path = storage_id(attachment.get('path'))
+        if not path:
             return None
         # Hash from the API, never an arbitrary URL supplied by the customer.
         time.sleep(max(0, self.settings.interval - (time.monotonic() - self.last_call)))
         self.last_call = time.monotonic()
-        with self.client.stream('GET', MOVIDESK_BASE_URL + '/storage/download',
-                                params={'token': MOVIDESK_TOKEN, 'id': path}) as response:
-            if response.status_code != 200:
-                return None
-            raw = bytearray()
-            for chunk in response.iter_bytes():
-                raw.extend(chunk)
-                if len(raw) > 4 * 1024 * 1024:
+        url, params = MOVIDESK_BASE_URL + '/storage/download', {'token': MOVIDESK_TOKEN, 'id': path}
+        for _ in range(4):
+            with self.client.stream('GET', url, params=params) as response:
+                params = None
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    target = urljoin(url, response.headers.get('location', ''))
+                    if not safe_storage_url(target):
+                        return None
+                    url = target
+                    continue
+                if response.status_code != 200:
                     return None
-            return bytes(raw)
+                raw = bytearray()
+                for chunk in response.iter_bytes():
+                    raw.extend(chunk)
+                    if len(raw) > 4 * 1024 * 1024:
+                        return None
+                return bytes(raw)
+        return None
 
 
 def plain(value):
     return html.unescape(re.sub(r'<[^>]+>', ' ', str(value or ''))).strip()
+
+
+def storage_id(value):
+    """Return only a Movidesk storage id, never an arbitrary customer URL."""
+    value = html.unescape(str(value or '')).strip()
+    if re.fullmatch(r'[A-Za-z0-9_-]{8,200}', value):
+        return value
+    match = re.fullmatch(
+        r'https://s3\.amazonaws\.com/movidesk-files/([A-Fa-f0-9]{32})(?:\?[^\s<>"\']+)?',
+        value)
+    return match.group(1) if match else ''
+
+
+def safe_storage_url(value):
+    """Allow only the documented Movidesk tenant hop and its S3 object hop."""
+    try:
+        url = urlsplit(str(value or ''))
+    except ValueError:
+        return False
+    host = (url.hostname or '').casefold()
+    return (url.scheme == 'https' and not url.username and not url.password and
+            (host.endswith('.movidesk.com') or host == 's3.amazonaws.com' or
+             host.endswith('.s3.amazonaws.com')))
+
+
+def action_attachments(action):
+    """Combine API attachments with prints pasted into Movidesk's rich editor."""
+    found, seen = [], set()
+    for attachment in action.get('attachments') or []:
+        path = storage_id(attachment.get('path'))
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        found.append({**attachment, 'path': path})
+    rich = str(action.get('htmlDescription') or '')
+    for source in re.findall(r'<img\b[^>]*\bsrc\s*=\s*["\']([^"\']+)', rich, re.I):
+        path = storage_id(source)
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        found.append({'path': path, 'fileName': f'print_inline_{len(found) + 1}.png',
+                      'inline': True})
+    return found
+
+
+def image_mime(name, raw):
+    """Detect supported image bytes; an inline print has no trustworthy suffix."""
+    if raw.startswith(b'\x89PNG\r\n\x1a\n'):
+        return 'image/png'
+    if raw.startswith(b'\xff\xd8\xff'):
+        return 'image/jpeg'
+    if len(raw) >= 12 and raw[:4] == b'RIFF' and raw[8:12] == b'WEBP':
+        return 'image/webp'
+    import mimetypes
+    return mimetypes.guess_type(str(name or ''))[0]
 
 
 def bot_action(action, settings):
@@ -178,7 +243,7 @@ def automatic_receipt_action(action):
 def actions(ticket, settings):
     return sorted((a for a in ticket.get('actions', []) if not a.get('isDeleted') and
                    not bot_action(a, settings) and not automatic_receipt_action(a) and
-                   (plain(a.get('description')) or a.get('attachments'))),
+                   (plain(a.get('description')) or action_attachments(a))),
                   key=lambda a: (str(a.get('createdDate') or ''), int(a.get('id') or 0)))
 
 
@@ -228,7 +293,7 @@ def identity(ticket, settings):
     latest = actions(ticket, settings)[-1]
     # Metadata updates and our own notes don't change the customer-message key.
     data = {'ticket': ticket['id'], 'action': latest.get('id'),
-            'content': latest.get('description'), 'attachments': latest.get('attachments')}
+            'content': latest.get('description'), 'attachments': action_attachments(latest)}
     key = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return key, str(latest.get('id'))
 
@@ -249,7 +314,6 @@ def persist_ticket(ticket):
 def generate_note(ticket, settings, api):
     """Use the same grounded assistant, with current issue and company context."""
     import base64
-    import mimetypes
     import ticket_image
     from agent_control import organization
     from technician_workbench import (connection, build_reply, evidence_for_company, environment_card,
@@ -267,18 +331,19 @@ def generate_note(ticket, settings, api):
     messages = [{'role': 'technician' if customer_action(a, ticket) else 'assistant',
                  'content': model_text(a.get('description'))} for a in history[-24:]]
     question = messages[-1]['content']
+    current_attachments = action_attachments(latest)
     outcome = classify_outcome(question)
-    if outcome and not latest.get('attachments'):
+    if outcome and not current_attachments:
         return {'reply': RESOLVED_REPLY if outcome == 'resolved' else ACKNOWLEDGED_REPLY,
                 'sources': [], 'mode': 'outcome', 'attachments': []}
     attachment_notices = []
-    for attachment in (latest.get('attachments') or [])[:2]:
+    for attachment in current_attachments[:2]:
         name = str(attachment.get('fileName') or '')
-        mime = mimetypes.guess_type(name)[0]
+        raw = api.image(attachment)
+        mime = image_mime(name, raw or b'')
         if mime not in {'image/png', 'image/jpeg', 'image/webp'}:
             attachment_notices.append('Anexo não analisado automaticamente: ' + name[:150])
             continue
-        raw = api.image(attachment)
         try:
             result = ticket_image.transcribe('data:' + mime + ';base64,' + base64.b64encode(raw).decode()) if raw else {}
         except ValueError:
@@ -287,7 +352,7 @@ def generate_note(ticket, settings, api):
             question += '\nTexto extraído do print (conferir visualmente): ' + result['text']
         else:
             attachment_notices.append('Print não pôde ser lido automaticamente: ' + name[:150])
-    if len(latest.get('attachments') or []) > 2:
+    if len(current_attachments) > 2:
         attachment_notices.append('Há outros anexos pendentes de leitura pelo técnico.')
     question += '\n' + '\n'.join(attachment_notices) if attachment_notices else ''
     org_id, org_name, _ = organization(ticket.get('clients'))
