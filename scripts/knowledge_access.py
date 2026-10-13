@@ -10,6 +10,8 @@ STOP = set('a o os as de do da dos das e em um uma para por no na nos nas com co
 DOMAIN_SPELLING = ('destinatario', 'remetente', 'inscricao', 'estadual', 'invalida', 'rejeicao',
                    'sincronizador', 'integracao', 'etiqueta', 'transportadora', 'fabricante')
 ALIASES = {
+    'criar': ('criar','cadastrar','cadastro','cadastrando'),
+    'cadastrando': ('cadastrar','cadastro','criar'),
     'nfe': ('nfe','nf-e','nota fiscal'), 'nf': ('nfe','nota fiscal'),
     'grade': ('grade','variacao','subvariacao'), 'grades': ('grade','variacao','subvariacao'),
     'cadastrar': ('cadastrar','cadastro'), 'cadastro': ('cadastro','cadastrar'),
@@ -37,6 +39,7 @@ def normalize(s):
 
 def query_plan(query):
     text=normalize(query)
+    product_creation = bool(re.search(r'\b(?:criar|cadastrar|cadastro)\b.{0,35}\bprodutos?\b', text))
     identifiers=sorted(set(re.findall(r'\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b',text)))
     # Opaque IDs can recur across different causes. Keep them separate from
     # mandatory database/rejection codes, so a new ID can still retrieve the
@@ -64,7 +67,7 @@ def query_plan(query):
     # Quoted OR operands parsed by PostgreSQL; all user text stays parameterized.
     fts=' OR '.join('"'+w+'"' for w in expansions)
     protocol=re.fullmatch(r'#?(\d{1,9})',query.strip())
-    return dict(query=query,objects=objects,codes=sorted(set(codes)),identifiers=identifiers,signatures=signatures,terms=words,expanded_terms=expansions,
+    return dict(query=query,product_creation=product_creation,objects=objects,codes=sorted(set(codes)),identifiers=identifiers,signatures=signatures,terms=words,expanded_terms=expansions,
                 fts=fts,protocol=int(protocol[1]) if protocol else None,
                 howto=bool(re.search(r'\b(como|onde|cadastrar|configurar|procedimento|passo a passo)\b',text)))
 
@@ -203,6 +206,13 @@ def rank_rows(rows,plan,module='TODOS',top_k=5):
             score-=12 if title.startswith('dev -') else 0
             if r.get('source_type') in ('OFFICIAL_KB','MANUAL') and len(title_terms)>=2:
                 score+=18
+        if plan.get('product_creation'):
+            # General creation must not rank margin, import, kits or permissions above the basic tutorial.
+            if re.search(r'\b(?:cadastro de|cadastrar|cadastrando) produtos?\b', title):
+                score += 35
+            for qualifier in ('kit','grade','variacao','importar','exportar','imagem','foto','margem','custo','acesso','usuario','categoria','tipo'):
+                if qualifier in title and qualifier not in normalize(plan['query']):
+                    score -= 35
         q=quality(r)
         score+=3 if q['evidence_status']=='official_document' else 0
         score-=8 if q['answer_use']=='investigation_only' else 0
@@ -303,7 +313,15 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None):
             row['source_url']=f'https://helpdesk.alternativasistemas.com.br/kb/article/{aid}' if article else None
             if not article:
                 row['quality_flags'].append('original_not_linked');row['answer_use']='investigation_only'
-            elif ('iframe' in (article['content_html'] or '').lower() or 'youtube.com' in (article['content_html'] or '').lower()) and len((article['content_text'] or '').strip())<900:
+            else:
+                # Preserve tutorials as structured evidence even without a transcript.
+                import html
+                original = html.unescape(article['content_html'] or '')
+                ids = re.findall(r'(?:youtube\.com/(?:embed/|watch\?v=)|youtu\.be/)([A-Za-z0-9_-]{11})(?![A-Za-z0-9_-])', original)
+                row['videos'] = [{'title': row.get('title') or 'Tutorial',
+                                  'url': 'https://youtu.be/' + video,
+                                  'article_url': row['source_url']} for video in dict.fromkeys(ids)]
+            if article and ('iframe' in (article['content_html'] or '').lower() or 'youtube.com' in (article['content_html'] or '').lower()) and len((article['content_text'] or '').strip())<900:
                 row['quality_flags'].append('video_without_transcript');row['answer_use']='investigation_only'
                 row['evidence_status']='video_reference_without_transcript'
     for row in ranked:

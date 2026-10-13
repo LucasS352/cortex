@@ -405,6 +405,7 @@ def generate_note(ticket, settings, api):
     if not meta.get('used'):
         raise RetryJob('Gemini indisponível; nenhuma nota de contingência publicada')
     reference = sources[:1] if sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
+    tutorials = [s for s in sources[:1] if s.get('applicable') and s.get('videos')]
     similar = [{'ticket': case.get('external_id'), 'title': case.get('subject'),
                 'status': case.get('status') or case.get('base_status'),
                 'active': bool(case.get('is_active')),
@@ -424,11 +425,13 @@ def generate_note(ticket, settings, api):
             'sources': [{'ticket': s.get('source_external_id') if s.get('source_type') in
                          ('VALIDATED_TICKET', 'PROBABLE_TICKET') else None,
                          'title': s.get('title'), 'url': s.get('source_url') or (s.get('metadata') or {}).get('source_url'),
-                         'provenance': s.get('provenance')} for s in reference],
+                         'provenance': s.get('provenance')} for s in (reference or tutorials)],
+            'videos': [video for source in tutorials for video in source['videos']],
             'similar_tickets': similar, 'evidence_scope': evidence_scope,
             'mode': meta.get('mode'), 'attachments': attachment_notices + media_notices, 'images': images,
             'history_notice': ('Foram localizados menos de três chamados resolvidos com procedimento aplicável.'
                                if reference and len(similar) < 3 else
+                               'Tutorial localizado na base; vídeo sem transcrição validada para gerar passos escritos.' if tutorials and not reference else
                                'Diagnóstico pendente: nenhuma solução comprovada foi selecionada.' if not reference else '')}
 
 
@@ -490,6 +493,11 @@ def render_note(result, marker):
         if source.get('provenance'):
             lines.append('<p>' + html.escape(source['provenance']) + '</p>')
     similar = result.get('similar_tickets') or []
+    for video in result.get('videos') or []:
+        url = mapped_replies.safe_url(video.get('url'))
+        if url and re.fullmatch(r'https://youtu\.be/[A-Za-z0-9_-]{11}', url):
+            lines.append('<p>Tutorial: <a href="' + html.escape(url, quote=True) + '">' +
+                         html.escape(str(video.get('title') or 'Vídeo')) + '</a></p>')
     if similar:
         lines.append('<p><strong>Observação interna — Tickets semelhantes:</strong></p><ul>')
         for case in similar:
