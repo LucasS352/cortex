@@ -121,6 +121,13 @@ async def gate(request: Request, call_next):
         ready = await run_in_threadpool(_database_ready)
         return JSONResponse({"status": "ok" if ready else "unavailable"}, status_code=200 if ready else 503,
                             headers={"Cache-Control": "no-store"})
+    # Only reviewed, bundled procedure images are public so Movidesk can render
+    # them inside a ticket action. Admin assets and source manuals stay private.
+    if request.method in {"GET", "HEAD"} and re.fullmatch(r"/procedure-images/[a-z0-9-]+\.png", path):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
     if not enabled():
         return await call_next(request)
     if path == "/login":

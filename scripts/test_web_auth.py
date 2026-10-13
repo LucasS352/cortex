@@ -37,6 +37,14 @@ class WebAuthTests(unittest.TestCase):
         self.assertEqual(page.headers["location"], "/login")
         self.assertEqual(self.client.get("/tech-assets/admin-console.js").status_code, 401)
 
+    def test_only_reviewed_procedure_images_are_public(self):
+        image = self.client.get('/procedure-images/payment-selection.png')
+        self.assertEqual(image.status_code, 200)
+        self.assertEqual(image.headers['content-type'], 'image/png')
+        self.assertIn('public', image.headers['cache-control'])
+        self.assertEqual(self.client.get('/procedure-images/../admin-console.js').status_code, 401)
+        self.assertEqual(self.client.get('/procedure-images/unknown.png').status_code, 404)
+
     def test_configured_password_length_and_hash_verification(self):
         with self.assertRaises(ValueError):
             hash_password("short")

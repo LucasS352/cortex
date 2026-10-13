@@ -61,13 +61,50 @@ class MappedReplyTests(unittest.TestCase):
             images, notices = mapped.note_images(source)
         self.assertEqual(len(images), 2)
         self.assertFalse(notices)
+        self.assertTrue(images[0]['data_url'].startswith('data:image/png;base64,'))
+        self.assertEqual(mapped.safe_image_data(images[0]['data_url']), images[0]['data_url'])
         note = render_note({'reply': source['reviewed_reply'], 'images': images,
                             'similar_tickets': source['resolved_examples']}, 'test-marker')
         self.assertIn('/Ticket/Edit/128116', note)
         self.assertIn('Resolução registrada:', note)
-        self.assertIn('/tech-assets/reply-media/payment-selection.png', note)
-        self.assertIn('com login', note)
-        self.assertNotIn('<img', note)  # Authenticated assets cannot be embedded in Movidesk.
+        self.assertIn('/procedure-images/payment-selection.png', note)
+        self.assertIn('<img src="data:image/png;base64,', note)
+        self.assertIn('max-width:100%', note)
+
+    def test_product_not_integrated_uses_resolved_ticket_131672_recipe(self):
+        source = mapped.match('Produto "229880" (código do integrador) - "5773950.362939.0-Água" (descrição) não integrado')
+        self.assertIsNotNone(source)
+        self.assertEqual(source['id'], 'reviewed-product-relation-v1')
+        self.assertEqual(source['resolved_examples'][0]['ticket'], 131672)
+        for term in ('produto_id', 'cod_estoque', 'Código de fora', 'Adicional', 'Ctrl+R'):
+            self.assertIn(term, source['reviewed_reply'])
+
+    def test_exact_recipe_wins_even_when_company_history_exists(self):
+        ticket = {'id': 140000, 'subject': 'Pedido não integrado',
+                  'clients': [{'id': 'requester', 'email': 'cliente@example.test',
+                               'organization': {'id': 'company', 'businessName': 'Empresa'}}],
+                  'actions': [{'id': 15, 'type': 2,
+                    'description': 'Produto "229880" (código do integrador) - "5773950.362939.0-Água" (descrição) não integrado',
+                    'createdBy': {'id': 'requester', 'profileType': 2}}]}
+        connection = MagicMock()
+        def execute(query, *_args):
+            name = 'movidesk_company_tickets' if 'movidesk_company_tickets' in query else None
+            return MagicMock(fetchone=Mock(return_value={'name': name}))
+        connection.__enter__.return_value.execute.side_effect = execute
+        unrelated = {'source_type': 'VALIDATED_TICKET', 'applicable': True,
+                     'answer_use': 'procedure_reference', 'title': 'Outro caso'}
+        with patch('technician_workbench.connection', return_value=connection), \
+             patch('tech_evidence.ensure_single_tenant', return_value='tenant'), \
+             patch('agent_control.organization', return_value=('company', 'Empresa', None)), \
+             patch('technician_workbench.evidence_for_company',
+                   return_value=([unrelated], [], 'same_company')) as company_search, \
+             patch.dict(os.environ, {'CORTEX_PUBLIC_URL': 'https://cortex.example'}), \
+             patch('technician_workbench.llm_client.generate') as model:
+            result = generate_note(ticket, Settings(), Mock())
+        company_search.assert_called_once()
+        model.assert_not_called()
+        self.assertEqual(result['mode'], 'reviewed_procedure')
+        self.assertIn('cod_estoque', result['reply'])
 
     def test_missing_origin_is_explicit_and_never_emits_broken_relative_links(self):
         with patch.dict(os.environ, {'CORTEX_PUBLIC_URL': ''}):
@@ -91,6 +128,12 @@ class MappedReplyTests(unittest.TestCase):
                       'https://example.com/x?token=secret', '//example.com/x',
                       'https://example.com/"onclick="x'):
             self.assertEqual(mapped.safe_url(value), '')
+
+    def test_untrusted_inline_image_data_is_rejected(self):
+        for value in ('data:text/html;base64,PHNjcmlwdD4=',
+                      'data:image/png;base64,PHNjcmlwdD4=',
+                      'data:image/svg+xml;base64,PHN2Zz4='):
+            self.assertEqual(mapped.safe_image_data(value), '')
 
 
 if __name__ == '__main__':

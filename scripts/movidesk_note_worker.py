@@ -304,17 +304,20 @@ def generate_note(ticket, settings, api):
             if has_links:
                 envs = [environment_card(e) for e in environment_rows(conn, tenant, org_id)]
         query = search_context_query(question, list(reversed(messages[:-1])))
+        reviewed = mapped_replies.match(query)
         sources, cases, evidence_scope = [], [], 'general_knowledge'
         has_directory = conn.execute("SELECT to_regclass('movidesk_company_tickets') AS name").fetchone()['name']
         if org_id and has_directory:
             sources, cases, evidence_scope = evidence_for_company(
                 conn, tenant, org_id, query, exclude_ticket_id=ticket.get('id'))
-        else:
+        elif not reviewed:
             import knowledge_access
-            reviewed = mapped_replies.match(query)
-            sources = [reviewed] if reviewed else knowledge_access.search(conn, query, top_k=5)
-            if reviewed:
-                evidence_scope = 'reviewed_procedure'
+            sources = knowledge_access.search(conn, query, top_k=5)
+        if reviewed:
+            # A reviewed exact-error recipe wins over semantic retrieval, while
+            # company cases are still retained for the internal audit trail.
+            sources = [reviewed]
+            evidence_scope = 'reviewed_procedure'
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in messages[:-1])
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
            'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
@@ -344,7 +347,8 @@ def generate_note(ticket, settings, api):
 
 
 def render_note(result, marker):
-    # All generated/source text is escaped: no model-produced HTML or external images.
+    # Generated/source text is escaped. Only allowlisted reviewed images can
+    # become img tags, and their URLs are built by mapped_replies.note_images.
     reply = html.escape(result['reply'])
     reply = re.sub(r'\*\*([^*\n]+)\*\*', r'<strong>\1</strong>', reply)
     reply = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', reply)
@@ -380,13 +384,18 @@ def render_note(result, marker):
                 lines.append('<li>Resolução registrada: ' + html.escape(plain(case['resolution'])[:700]) + '</li>')
         lines.append('</ul>')
     if result.get('images'):
-        lines.append('<p><strong>Imagens do procedimento — abrir no Cortex com login:</strong></p><ul>')
+        lines.append('<p><strong>Imagens do procedimento:</strong></p>')
         for item in result['images']:
             url = mapped_replies.safe_url(item.get('url'))
-            if url:
-                lines.append('<li><a href="' + html.escape(url, quote=True) + '">' +
-                             html.escape(item.get('caption') or 'Abrir imagem') + '</a></li>')
-        lines.append('</ul>')
+            image_src = mapped_replies.safe_image_data(item.get('data_url')) or url
+            if image_src:
+                caption = html.escape(item.get('caption') or 'Tela de referência do procedimento')
+                safe_src = html.escape(image_src, quote=True)
+                image = '<img src="' + safe_src + '" alt="' + caption + \
+                        '" width="900" style="max-width:100%;height:auto">'
+                if url:
+                    image = '<a href="' + html.escape(url, quote=True) + '">' + image + '</a>'
+                lines.append('<p>' + image + '</p><p><small>' + caption + '</small></p>')
     for notice in result.get('attachments', []):
         lines.append('<p>' + html.escape(notice) + '</p>')
     lines.append('<p><small>Confira a orientação antes de responder ao cliente. ' + marker + '</small></p>')
