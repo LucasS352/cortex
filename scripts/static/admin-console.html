@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/tech-assets/overview-dashboard.css?v=20261005-1">
   <link rel="stylesheet" href="/tech-assets/admin-theme.css?v=20261005-2">
   <link rel="stylesheet" href="/tech-assets/cortex-polish.css?v=20261006-10">
-  <link rel="stylesheet" href="/tech-assets/agent-center.css?v=20261006-enterprise">
+  <link rel="stylesheet" href="/tech-assets/agent-center.css?v=20261013-manual-pull">
   <link rel="stylesheet" href="/tech-assets/technician-workbench.css?v=5">
 </head>
 <body class="overview-page">
@@ -229,7 +229,14 @@
               <div class="studio-card-head"><div><h3>Webhook e notas internas</h3>
                 <p>Entregas recebidas, processamento e últimas sugestões do piloto.</p></div>
                 <button id="webhook-refresh" type="button" title="Consulta os eventos recebidos; não dispara um novo webhook">Consultar estado</button></div>
-              <div class="studio-card-body"><p id="webhook-summary">Consultando worker…</p>
+              <div class="studio-card-body">
+                <form id="webhook-pull-form" class="webhook-pull-form">
+                  <label for="webhook-ticket-id">Chamado</label>
+                  <input id="webhook-ticket-id" type="number" min="1" step="1" required placeholder="Ex.: 131661">
+                  <button id="webhook-pull" class="button button-primary" type="submit">Puxar e processar</button>
+                  <small id="webhook-pull-status" role="status" aria-live="polite">Busca o histórico atual no Movidesk e aciona o piloto autorizado.</small>
+                </form>
+                <p id="webhook-summary">Consultando worker…</p>
                 <div id="webhook-list"></div><div id="webhook-notes"></div></div>
             </article>
 
@@ -704,7 +711,7 @@
     </div>
   </main>
 </div>
-  <script src="/tech-assets/admin-console.js?v=20261008-sync-progress" defer></script>
+  <script src="/tech-assets/admin-console.js?v=20261013-manual-pull" defer></script>
   <script src="/tech-assets/technician-workbench.js?v=5" defer></script>
   <script src="/tech-assets/agent-center.js?v=20261006-enterprise" defer></script>
 </body></html>

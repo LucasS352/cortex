@@ -40,12 +40,14 @@ Preencher no arquivo, fora do chat:
 | `dry_run` | Consulta, gera e guarda prévia no Cortex, sem PATCH. |
 | `internal_note` | Publica a sugestão como ação interna e confirma o marcador no Movidesk. |
 
-O `.env.server` define o **teto** permitido. O painel aplica as autorizações mais restritivas em tempo de execução. Para publicar, as quatro condições abaixo precisam ser verdadeiras ao mesmo tempo:
+O `.env.server` define o **teto** permitido. O painel aplica as autorizações mais restritivas em tempo de execução. Para publicar automaticamente, as quatro condições abaixo precisam ser verdadeiras ao mesmo tempo:
 
 1. `CORTEX_AUTONOTE_MODE=internal_note` no servidor;
 2. piloto ativo no painel;
 3. pelo menos uma empresa selecionada no painel;
 4. opção **Publicar nota interna (privada)** marcada.
+
+Para operar sem consumo automático de Gemini, deixe a opção de publicação automática desmarcada. Eventos recebidos pelo webhook serão encerrados antes da geração. No cartão **Webhook e notas internas**, informe o número e use **Puxar e processar**: esse clique consulta o histórico atual e autoriza uma única geração para a última mensagem elegível. O modo manual ainda exige `internal_note`, piloto ativo, empresa selecionada e solicitante autorizado. A chave por mensagem e o marcador no Movidesk impedem publicação duplicada ao repetir o clique.
 
 Se o arquivo de estado estiver ausente, ilegível ou inconsistente, o worker rebaixa a execução para `dry_run`. A whitelist de contas do Playground serve apenas para simulações e nunca autoriza escrita no Movidesk. Alterar o teto do `.env.server` exige recriar os containers; selecionar empresas, pausar o piloto ou desmarcar a publicação privada tem efeito no worker sem redeploy.
 
@@ -83,7 +85,7 @@ https://SEU_DOMINIO/webhooks/movidesk/tickets/SEU_MOVIDESK_WEBHOOK_SECRET
 
 Configurar gatilhos para abertura/atualização dos chamados do piloto, preferencialmente ação pública recebida do cliente. Não incluir o agente Cortex como originador. O worker também filtra pelo chamado consultado na API, independentemente do payload recebido.
 
-Só há geração quando a última ação relevante for pública e do cliente. Se um técnico respondeu depois, o ticket foi encerrado/excluído ou a empresa não está autorizada, registra o motivo e não gera nota. Chamados abertos por um técnico em nome do cliente sem uma ação identificada como cliente ficam fora deste primeiro fluxo.
+Só há geração quando a última ação relevante for pública e do cliente. Se um técnico respondeu depois, o ticket foi encerrado/excluído ou a empresa não está autorizada, registra o motivo e não gera nota. Chamados abertos por um técnico em nome do cliente sem uma ação identificada como cliente ficam fora deste primeiro fluxo. Enquanto o gatilho não estiver disponível, o botão **Puxar e processar** aplica essas mesmas validações sem fazer varredura ou consulta periódica.
 
 ## Validação do piloto
 

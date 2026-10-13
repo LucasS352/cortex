@@ -38,6 +38,8 @@ class Settings:
     max_attempts: int = 5
     runtime_control: bool = False
     requester_emails: frozenset = frozenset()
+    automatic_enabled: bool = False
+    manual_internal_note: bool = False
 
     @classmethod
     def load(cls):
@@ -63,10 +65,11 @@ class Settings:
         return value
 
 
-def effective_settings(settings, state_file=ADMIN_STATE_FILE):
+def effective_settings(settings, state_file=None):
     """Apply the UI policy without ever exceeding the environment ceiling."""
     if not settings.runtime_control:
         return settings
+    state_file = ADMIN_STATE_FILE if state_file is None else state_file
     try:
         state = json.loads(Path(state_file).read_text(encoding='utf-8'))
         organizations = frozenset(str(value) for value in state.get('pilot_organization_ids', [])
@@ -74,11 +77,14 @@ def effective_settings(settings, state_file=ADMIN_STATE_FILE):
         requester_emails = frozenset(str(value).strip().casefold()
                                      for value in state.get('pilot_requester_emails', [])
                                      if re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', str(value).strip()))
-        enabled = (not bool(state.get('pilot_paused', True)) and
-                   bool(state.get('auto_internal_note', False)) and
-                   bool(organizations) and bool(requester_emails))
     except (OSError, ValueError, TypeError):
-        organizations, requester_emails, enabled = frozenset(), frozenset(), False
+        organizations, requester_emails = frozenset(), frozenset()
+        pilot_ready, automatic_enabled = False, False
+    else:
+        pilot_ready = (not bool(state.get('pilot_paused', True)) and
+                       bool(organizations) and bool(requester_emails))
+        automatic_enabled = bool(state.get('auto_internal_note', False))
+    enabled = pilot_ready and automatic_enabled
     if settings.mode == 'disabled':
         mode = 'disabled'
     elif settings.mode == 'internal_note' and enabled:
@@ -88,7 +94,8 @@ def effective_settings(settings, state_file=ADMIN_STATE_FILE):
         # but neither is allowed to write to Movidesk.
         mode = 'dry_run'
     return replace(settings, mode=mode, organizations=organizations, tickets=frozenset(),
-                   requester_emails=requester_emails)
+                   requester_emails=requester_emails, automatic_enabled=automatic_enabled,
+                   manual_internal_note=(settings.mode == 'internal_note' and pilot_ready))
 
 
 class RetryJob(Exception):
@@ -370,6 +377,13 @@ def outbox_state(key, state):
         db.execute('UPDATE internal_note_outbox SET state=?,updated_at=? WHERE key=?', (state, time.time(), key))
 
 
+def manual_pull_event(event):
+    try:
+        return bool(json.loads(event['payload_json']).get('CortexManualPull'))
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def process(event, settings, api, generator=generate_note):
     ticket = api.ticket(event['ticket_id'])
     payload = json.loads(event['payload_json'])
@@ -459,7 +473,8 @@ def process(event, settings, api, generator=generate_note):
 
 
 def run_once(settings, api, generator=generate_note):
-    settings = effective_settings(settings)
+    ceiling = settings
+    settings = effective_settings(ceiling)
     with _connect() as db:
         db.execute('INSERT OR REPLACE INTO note_worker_status VALUES (1,?,?)', (time.time(), settings.mode))
     if settings.mode == 'disabled':
@@ -467,6 +482,16 @@ def run_once(settings, api, generator=generate_note):
     event = claim(settings)
     if not event:
         return False
+    manual = manual_pull_event(event)
+    if ceiling.runtime_control and ceiling.mode == 'internal_note' and not manual and not settings.automatic_enabled:
+        # Manual-only operation must not spend Gemini quota on unsolicited events.
+        finish(event, 'skipped', 'automatico_desativado')
+        return True
+    if manual:
+        if not settings.manual_internal_note:
+            finish(event, 'skipped', 'processamento_manual_indisponivel')
+            return True
+        settings = replace(settings, mode='internal_note')
     try:
         process(event, settings, api, generator)
     except Exception as exc:

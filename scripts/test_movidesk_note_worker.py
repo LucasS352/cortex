@@ -131,6 +131,29 @@ class WorkerTests(unittest.TestCase):
         worker.run_once(self.settings, self.api, self.generate)
         self.assertEqual(len(self.api.writes), 2)
 
+    def test_manual_only_skips_automatic_event_without_model_and_processes_button_event(self):
+        state_file = Path(self.tmp.name) / 'agent-state.json'
+        state_file.write_text(json.dumps({'pilot_organization_ids': ['464'],
+                                          'pilot_requester_emails': ['lucas.teste@alternativa.com.br'],
+                                          'pilot_paused': False, 'auto_internal_note': False}), encoding='utf-8')
+        controlled = worker.Settings('internal_note', 'bot', runtime_control=True)
+        with patch.object(worker, 'ADMIN_STATE_FILE', state_file):
+            self.enqueue(Actions=[{'Id': 1}])
+            worker.run_once(controlled, self.api, self.generate)
+            self.generate.assert_not_called()
+            self.assertEqual(self.api.writes, [])
+            self.assertEqual(receiver.receipt_summary()['recent'][0]['outcome'], 'automatico_desativado')
+
+            self.api.data['actions'].append({'id': 3, 'type': 2, 'description': 'Mensagem do teste manual.',
+                                             'createdDate': '2026-10-09T12:00:00Z',
+                                             'createdBy': {'id': 'client', 'profileType': 2}})
+            self.client.post('/webhooks/movidesk/tickets/' + 'x' * 40,
+                             json={'Id': 42, 'Actions': [{'Id': 3}], 'CortexManualPull': 1})
+            worker.run_once(controlled, self.api, self.generate)
+        self.generate.assert_called_once()
+        self.assertEqual(len(self.api.writes), 1)
+        self.assertEqual(receiver.receipt_summary()['recent'][0]['state'], 'completed')
+
     def test_dry_run_keeps_reviewable_note_without_patch(self):
         self.enqueue()
         settings = worker.Settings('dry_run', 'bot', frozenset({'464'}),

@@ -74,6 +74,26 @@ def receipt_summary():
             'worker': dict(worker) if worker else None, 'notes': notes}
 
 
+def enqueue_payload(payload: dict) -> bool:
+    """Validate and durably enqueue one ticket snapshot.
+
+    Returns True when a new event was inserted and False for an identical
+    delivery that was already stored.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError('Invalid ticket payload')
+    ticket_id = payload.get('Id')
+    if isinstance(ticket_id, bool) or not isinstance(ticket_id, int) or ticket_id <= 0:
+        raise ValueError('Invalid ticket ID')
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
+    digest = hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+    with _connect() as db:
+        result = db.execute('''INSERT OR IGNORE INTO webhook_events
+            (digest,ticket_id,received_at,payload_json) VALUES (?,?,?,?)''',
+            (digest, ticket_id, time.time(), canonical))
+    return result.rowcount == 1
+
+
 @app.get('/health')
 def health():
     return {'ready': bool(MOVIDESK_WEBHOOK_SECRET and len(MOVIDESK_WEBHOOK_SECRET) >= 32)}
@@ -95,19 +115,10 @@ async def receive_ticket(secret: str, request: Request):
         payload = json.loads(body)
     except (ValueError, UnicodeDecodeError):
         return PlainTextResponse('Invalid JSON', status_code=400)
-    if not isinstance(payload, dict):
-        return PlainTextResponse('Invalid ticket payload', status_code=400)
-    ticket_id = payload.get('Id')
-    if isinstance(ticket_id, bool) or not isinstance(ticket_id, int) or ticket_id <= 0:
-        return PlainTextResponse('Invalid ticket ID', status_code=400)
-    # Canonical JSON removes irrelevant whitespace from duplicate deliveries.
-    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(',', ':'))
-    digest = hashlib.sha256(canonical.encode('utf-8')).hexdigest()
     try:
-        with _connect() as db:
-            db.execute('''INSERT OR IGNORE INTO webhook_events
-                (digest,ticket_id,received_at,payload_json) VALUES (?,?,?,?)''',
-                (digest, ticket_id, time.time(), canonical))
+        enqueue_payload(payload)
+    except ValueError as exc:
+        return PlainTextResponse(str(exc), status_code=400)
     except sqlite3.Error:
         # A failed insert must trigger Movidesk's retry, never a false success.
         return PlainTextResponse('Storage unavailable', status_code=503)

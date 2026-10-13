@@ -357,12 +357,44 @@ async function loadWebhookReceipts(){
     const alive=d.worker && Date.now()/1000-d.worker.heartbeat<900;
     const modes={disabled:'desativado',dry_run:'prévia sem publicar',internal_note:'publicação de nota interna'};
     const ceiling={disabled:'bloqueado no servidor',dry_run:'servidor limitado a prévia',internal_note:'servidor permite nota privada'};
-    $('webhook-summary').textContent=`${fmt(d.total)} entrega(s). Modo efetivo: ${modes[d.effective_mode]||d.effective_mode}. ${ceiling[d.ceiling_mode]||''}. ${fmt(d.selected_organizations||0)} empresa(s) e ${fmt(d.selected_requesters||0)} solicitante(s) autorizado(s). Worker: ${alive?'ativo':'sem atividade recente'}.`;
+    const automatic=d.requested_auto_internal_note?(modes[d.effective_mode]||d.effective_mode):'desativado';
+    const manual=d.manual_mode==='internal_note'?'publicação liberada':'indisponível';
+    $('webhook-summary').textContent=`${fmt(d.total)} entrega(s). Automático: ${automatic}. Manual: ${manual}. ${ceiling[d.ceiling_mode]||''}. ${fmt(d.selected_organizations||0)} empresa(s) e ${fmt(d.selected_requesters||0)} solicitante(s) autorizado(s). Worker: ${alive?'ativo':'sem atividade recente'}.`;
     const noteToggle=$('setting-auto-internal-note');
     if(noteToggle){noteToggle.checked=!!d.requested_auto_internal_note;noteToggle.disabled=d.ceiling_mode!=='internal_note';noteToggle.title=noteToggle.disabled?'O .env.server precisa usar CORTEX_AUTONOTE_MODE=internal_note.':'';}
     const labels={received:'Na fila',processing:'Em análise',retry:'Aguardando nova tentativa',completed:'Concluído',preview:'Prévia gerada',skipped:'Sem geração necessária',failed:'Falha',needs_review:'Requer revisão'};
     $('webhook-list').innerHTML=d.recent.length?d.recent.map(x=>`<div class="webhook-event"><b>#${esc(x.ticket_id)}</b> <span>${dateTime(x.received_at)}</span> <small>${esc(labels[x.state]||x.state)} — ${esc(x.last_error||x.outcome||'')}</small></div>`).join(''):'<p class="muted">Nenhum evento recebido.</p>';
     $('webhook-notes').innerHTML=(d.notes||[]).map(n=>`<details><summary>Nota #${esc(n.ticket_id)} · ${esc(n.state)}</summary><pre style="white-space:pre-wrap">${esc(n.text)}</pre></details>`).join('');
+    return d;
   }catch(e){$('webhook-summary').textContent='Não foi possível consultar o worker.';showError(e.message);}
 }
 $('webhook-refresh')?.addEventListener('click',loadWebhookReceipts);
+$('webhook-pull-form')?.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const input=$('webhook-ticket-id'),button=$('webhook-pull'),status=$('webhook-pull-status');
+  const ticketId=Number(input?.value);
+  if(!Number.isInteger(ticketId)||ticketId<=0){status.textContent='Informe um número de chamado válido.';return;}
+  button.disabled=true;status.textContent=`Buscando o chamado #${ticketId} no Movidesk…`;clearError();
+  try{
+    const result=await api(`/api/admin/webhooks/pull/${ticketId}`,{method:'POST'});
+    if(result.status==='already_processed'){
+      status.textContent=`A última mensagem do chamado #${ticketId} já foi processada.`;
+    }else{
+      status.textContent=`Ação #${result.action_id} carregada e enviada para processamento.`;
+      for(let attempt=0;attempt<15;attempt++){
+        await new Promise(resolve=>setTimeout(resolve,3000));
+        const snapshot=await loadWebhookReceipts();
+        const current=(snapshot?.recent||[]).find(item=>Number(item.ticket_id)===ticketId);
+        if(!current)continue;
+        if(['completed','preview','skipped','failed','needs_review'].includes(current.state)){
+          const outcome=current.last_error||current.outcome||current.state;
+          status.textContent=`Chamado #${ticketId}: ${outcome}.`;
+          break;
+        }
+        status.textContent=`Chamado #${ticketId} em processamento…`;
+      }
+    }
+    await loadWebhookReceipts();
+  }catch(error){status.textContent='Não foi possível processar o chamado.';showError(error.message);}
+  finally{button.disabled=false;}
+});

@@ -33,6 +33,14 @@ class MovideskWebhookTest(unittest.TestCase):
         self.assertEqual(result['recent'][0]['ticket_id'], 131140)
         self.assertEqual(result['recent'][0]['state'], 'received')
 
+    def test_internal_enqueue_uses_the_same_validation_and_deduplication(self):
+        event = {'Id': 131661, 'Actions': [{'Id': 7}], 'CortexManualPull': 1}
+        self.assertTrue(receiver.enqueue_payload(event))
+        self.assertFalse(receiver.enqueue_payload(event))
+        self.assertEqual(receiver.receipt_summary()['total'], 1)
+        with self.assertRaises(ValueError):
+            receiver.enqueue_payload({'Id': 0})
+
     def test_invalid_secret_and_payload_are_rejected(self):
         self.assertEqual(self.client.post('/webhooks/movidesk/tickets/wrong', json={'Id': 1}).status_code, 404)
         self.assertEqual(self.client.post(self.url, content=b'not-json').status_code, 400)

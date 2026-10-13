@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from fastapi import HTTPException
 
@@ -71,6 +71,34 @@ class PilotSettingsTests(unittest.TestCase):
                                      'auto_internal_note': True})
             status = admin_console.webhook_receipts(request)
             self.assertEqual(status['effective_mode'], 'disabled')
+
+    def test_manual_pull_fetches_latest_authorized_customer_action_and_enqueues_it(self):
+        request = SimpleNamespace(state=SimpleNamespace(cortex_authenticated=True), client=None)
+        settings = admin_console.movidesk_note_worker.Settings(
+            mode='dry_run', agent_id='bot', organizations=frozenset({'464'}),
+            requester_emails=frozenset({'lucas.teste@alternativa.com.br'}),
+            manual_internal_note=True)
+        ticket = {
+            'id': 131661, 'type': 2, 'baseStatus': 'New',
+            'clients': [{'id': 'client', 'email': 'lucas.teste@alternativa.com.br',
+                         'organization': {'id': '464', 'businessName': 'Cortex Teste'}}],
+            'actions': [{'id': 7, 'type': 2, 'description': 'Mensagem atual do cliente.',
+                         'createdDate': '2026-10-13T00:56:45Z',
+                         'createdBy': {'id': 'client', 'profileType': 2,
+                                       'email': 'lucas.teste@alternativa.com.br'}}],
+        }
+        fake_api = SimpleNamespace(ticket=Mock(return_value=ticket),
+                                   client=SimpleNamespace(close=Mock()))
+        with patch.object(admin_console.movidesk_note_worker.Settings, 'load', return_value=settings), \
+             patch.object(admin_console.movidesk_note_worker, 'effective_settings', return_value=settings), \
+             patch.object(admin_console.movidesk_note_worker, 'Api', return_value=fake_api), \
+             patch.object(admin_console.movidesk_webhook, 'enqueue_payload', return_value=True) as enqueue:
+            result = admin_console.pull_webhook_ticket(131661, request)
+        self.assertEqual(result['status'], 'queued')
+        self.assertEqual(result['action_id'], '7')
+        payload = enqueue.call_args.args[0]
+        self.assertEqual(payload['Actions'][0]['Id'], 7)
+        self.assertIn('CortexManualPull', payload)
 
 
 if __name__ == "__main__":

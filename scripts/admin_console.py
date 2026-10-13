@@ -7,6 +7,7 @@ import io
 import base64
 import os
 import re
+import sqlite3
 import time
 import urllib.error
 import urllib.request
@@ -32,6 +33,7 @@ import ticket_trends as trends
 import ticket_flow
 import agent_evaluation
 import movidesk_webhook
+import movidesk_note_worker
 import triage_router
 import knowledge_access
 from typing import Literal
@@ -293,9 +295,66 @@ def webhook_receipts(request: Request):
     result['selected_requesters'] = len(requesters)
     result['pilot_paused'] = state.get('pilot_paused', True)
     result['requested_auto_internal_note'] = state.get('auto_internal_note', False)
+    pilot_ready = (not result['pilot_paused'] and bool(selected) and bool(requesters))
+    result['manual_mode'] = ('internal_note' if ceiling == 'internal_note' and pilot_ready else 'disabled')
     # Backward-compatible name used by older panels.
     result['configured_mode'] = result['effective_mode']
     return result
+
+
+@router.post('/api/admin/webhooks/pull/{ticket_id}')
+def pull_webhook_ticket(ticket_id: int, request: Request):
+    """Fetch a pilot ticket now and enqueue its latest customer action."""
+    _local_only(request)
+    if ticket_id <= 0:
+        raise HTTPException(422, 'Número do chamado inválido.')
+    try:
+        base_settings = movidesk_note_worker.Settings.load()
+        settings = movidesk_note_worker.effective_settings(base_settings, STATE_FILE)
+        if not settings.manual_internal_note:
+            raise HTTPException(409, 'Ative o piloto e mantenha empresa e solicitante autorizados para usar o processamento manual.')
+        api = movidesk_note_worker.Api(settings)
+        try:
+            ticket = api.ticket(ticket_id)
+        finally:
+            api.client.close()
+    except HTTPException:
+        raise
+    except (ValueError, movidesk_note_worker.RetryJob) as exc:
+        raise HTTPException(503, 'Não foi possível consultar o chamado no Movidesk: ' + str(exc)) from exc
+
+    allowed, reason = movidesk_note_worker.eligible(ticket, settings)
+    if not allowed:
+        labels = {
+            'fora_do_piloto': 'A empresa do chamado não está autorizada no piloto.',
+            'chamado_interno_ou_excluido': 'O chamado é interno ou está excluído.',
+            'chamado_finalizado': 'O chamado já está finalizado.',
+            'sem_nova_mensagem_do_cliente': 'A última interação não é uma nova mensagem do cliente.',
+            'solicitante_fora_do_piloto': 'O solicitante da última mensagem não está autorizado no piloto.',
+        }
+        raise HTTPException(409, labels.get(reason, 'O chamado não está elegível para o piloto.'))
+
+    history = movidesk_note_worker.actions(ticket, settings)
+    latest = history[-1]
+    key, action_id = movidesk_note_worker.identity(ticket, settings)
+    marker = movidesk_note_worker.PREFIX + key
+    if movidesk_note_worker.marker_present(ticket, marker):
+        return {'ticket_id': ticket_id, 'action_id': action_id, 'status': 'already_processed'}
+
+    # The nonce makes an explicit retry a new queue event. The outbox identity
+    # still guarantees that repeated clicks cannot publish the same note twice.
+    payload = {
+        'Id': int(ticket['id']),
+        'Actions': [{'Id': int(latest.get('id') or 0),
+                     'Description': latest.get('description') or ''}],
+        'CortexManualPull': time.time_ns(),
+    }
+    try:
+        movidesk_webhook.enqueue_payload(payload)
+    except (ValueError, sqlite3.Error) as exc:
+        raise HTTPException(503, 'Não foi possível colocar o chamado na fila.') from exc
+    return {'ticket_id': ticket_id, 'action_id': action_id, 'status': 'queued',
+            'mode': settings.mode}
 
 
 @router.post('/api/admin/evaluations/seed')

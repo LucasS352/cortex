@@ -226,6 +226,38 @@ html[data-theme="dark"] .studio-card-head h3 {
   line-height: 1.45;
 }
 
+.webhook-pull-form {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--cx-border, #d7e2eb);
+  border-radius: 8px;
+  background: var(--cx-surface-muted, #f7fafc);
+}
+
+.webhook-pull-form label { font-size: 11px; font-weight: 700; }
+.webhook-pull-form input {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid var(--cx-border, #cbd8e3);
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--cx-text-primary, #11283a);
+  background: var(--cx-surface, #fff);
+}
+.webhook-pull-form small {
+  grid-column: 1 / -1;
+  color: var(--cx-text-secondary, #5f788e);
+  line-height: 1.45;
+}
+@media(max-width:650px){
+  .webhook-pull-form { grid-template-columns: 1fr; }
+  .webhook-pull-form small { grid-column: 1; }
+}
+
 .studio-icon-circle {
   width: 42px;
   height: 42px;
