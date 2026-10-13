@@ -95,7 +95,20 @@ class MappedReplyTests(unittest.TestCase):
         note = render_note({'reply': source['reviewed_reply'], 'images': images,
                             'sources': [{'title': source['title'], 'url': source['source_url']}]}, 'marker')
         self.assertEqual(note.count('<img src="data:image/png;base64,'), 3)
-        self.assertIn('<a href="https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc">', note)
+        exact_link = '<a href="https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc">https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc</a>'
+        self.assertIn(exact_link, note)
+        self.assertNotIn('href="https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc)"', note)
+        self.assertLess(note.index('1. Abra a nota fiscal'), note.index('state-registration-delivery.png')
+                        if 'state-registration-delivery.png' in note else note.index(images[0]['data_url']))
+        first_image = note.index(images[0]['data_url'])
+        second_step = note.index('2. Acesse <a href=')
+        second_image = note.index(images[1]['data_url'])
+        third_step = note.index('3. No resultado')
+        third_image = note.index(images[2]['data_url'])
+        self.assertLess(first_image, second_step)
+        self.assertLess(second_step, second_image)
+        self.assertLess(second_image, third_step)
+        self.assertLess(third_step, third_image)
 
     def test_exact_recipe_wins_even_when_company_history_exists(self):
         ticket = {'id': 140000, 'subject': 'Pedido não integrado',

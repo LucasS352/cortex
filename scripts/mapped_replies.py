@@ -60,10 +60,8 @@ STATE_REGISTRATION_REPLY = '''Olá!
 A mensagem “Inscrição Estadual inválida” indica que devemos conferir a IE informada nos dados de entrega da nota fiscal.
 
 1. Abra a nota fiscal no Master, acesse a aba Dados de Entrega e confira o número preenchido no campo RG/IE do destinatário.
-2. Acesse a consulta oficial do Cadastro Centralizado de Contribuinte (CCC): https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc
-3. Selecione a UF do destinatário, mantenha o ambiente Produção, informe o CNPJ e clique em Pesquisar por CNPJ.
-4. No resultado, confirme se a Situação IE está como Habilitado. Estando habilitada, copie o número exibido em Inscrição Estadual (IE) e corrija o campo RG/IE nos Dados de Entrega da nota.
-5. Salve a alteração e tente emitir a nota fiscal novamente.
+2. Acesse https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc, selecione a UF do destinatário, mantenha o ambiente Produção, informe o CNPJ e clique em Pesquisar por CNPJ.
+3. No resultado, confirme se a Situação IE está como Habilitado. Estando habilitada, copie o número exibido em Inscrição Estadual (IE), corrija o campo RG/IE nos Dados de Entrega, salve a alteração e tente emitir a nota fiscal novamente.
 
 Se a IE não estiver habilitada no CCC, não substitua o número por conta própria: confirme a situação cadastral do destinatário antes de uma nova emissão. Os dados apresentados nas imagens são apenas exemplos.'''
 
@@ -78,7 +76,7 @@ def match(query):
     if re.search(r'\binscricao estadual\b[^\n.!?]{0,100}\binvalid[ao]\b', text):
         return {
             'id': 'reviewed-state-registration-v1', 'source_type': 'REVIEWED_PROCEDURE',
-            'title': 'Consulta oficial da Inscrição Estadual no CCC',
+            'title': 'https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc',
             'problem': 'Inscrição Estadual inválida na emissão da nota fiscal',
             'solution': STATE_REGISTRATION_REPLY, 'reviewed_reply': STATE_REGISTRATION_REPLY,
             'applicable': True, 'answer_use': 'procedure_reference',
@@ -88,9 +86,12 @@ def match(query):
             'provenance': 'Procedimento e imagens revisados por Lucas para o chamado 131662 em 13/10/2026.',
             'resolved_examples': [],
             'images': [
-                {'file': 'state-registration-delivery.png', 'caption': 'Passo 1: confira o campo RG/IE na aba Dados de Entrega da nota fiscal.'},
-                {'file': 'state-registration-ccc-query.png', 'caption': 'Passos 2–3: selecione a UF, informe o CNPJ e pesquise no CCC.'},
-                {'file': 'state-registration-ccc-result.png', 'caption': 'Passo 4: confirme Situação IE como Habilitado e copie a Inscrição Estadual. Os dados são exemplos.'},
+                {'file': 'state-registration-delivery.png', 'after_step': 1,
+                 'caption': 'Passo 1: confira o campo RG/IE na aba Dados de Entrega da nota fiscal.'},
+                {'file': 'state-registration-ccc-query.png', 'after_step': 2,
+                 'caption': 'Passo 2: selecione a UF, informe o CNPJ e pesquise no CCC.'},
+                {'file': 'state-registration-ccc-result.png', 'after_step': 3,
+                 'caption': 'Passo 3: confirme Situação IE como Habilitado e copie a Inscrição Estadual. Os dados são exemplos.'},
             ],
         }
     if (re.search(r'produto\s+["“]?[^\n]{1,80}["”]?\s*\(codigo do integrador\)', text) and
@@ -153,5 +154,5 @@ def note_images(source):
             continue
         images.append({'url': origin + '/procedure-images/' + name if origin else '',
                        'data_url': 'data:image/png;base64,' + base64.b64encode(path.read_bytes()).decode(),
-                       'caption': item['caption']})
+                       'caption': item['caption'], 'after_step': item.get('after_step')})
     return images, notices

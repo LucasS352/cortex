@@ -349,17 +349,49 @@ def generate_note(ticket, settings, api):
 def render_note(result, marker):
     # Generated/source text is escaped. Only allowlisted reviewed images can
     # become img tags, and their URLs are built by mapped_replies.note_images.
-    reply = html.escape(result['reply'])
-    def reply_link(match):
-        url = html.unescape(match.group(0))
-        safe = mapped_replies.safe_url(url)
-        return ('<a href="' + html.escape(safe, quote=True) + '">' + html.escape(url) + '</a>'
-                if safe else match.group(0))
-    reply = re.sub(r'https?://[^\s&lt;&gt;]+', reply_link, reply)
-    reply = re.sub(r'\*\*([^*\n]+)\*\*', r'<strong>\1</strong>', reply)
-    reply = re.sub(r'`([^`\n]+)`', r'<code>\1</code>', reply)
-    lines = ['<p><strong>Cortex — resposta sugerida ao cliente (nota interna)</strong></p>',
-             '<p>' + reply.replace('\n', '<br>') + '</p>']
+    def inline_text(value):
+        chunks, start = [], 0
+        # Keep sentence punctuation outside the anchor so the visible address
+        # and href are exactly the official URL.
+        for found in re.finditer(r'https?://[^\s<>()\[\]{},;]+', value):
+            chunks.append(html.escape(value[start:found.start()]))
+            url = mapped_replies.safe_url(found.group(0))
+            chunks.append('<a href="' + html.escape(url, quote=True) + '">' + html.escape(url) + '</a>'
+                          if url else html.escape(found.group(0)))
+            start = found.end()
+        chunks.append(html.escape(value[start:]))
+        rendered = ''.join(chunks)
+        rendered = re.sub(r'\*\*([^*\n]+)\*\*', r'<strong>\1</strong>', rendered)
+        return re.sub(r'`([^`\n]+)`', r'<code>\1</code>', rendered)
+
+    def image_block(item):
+        url = mapped_replies.safe_url(item.get('url'))
+        image_src = mapped_replies.safe_image_data(item.get('data_url')) or url
+        if not image_src:
+            return ''
+        caption = html.escape(item.get('caption') or 'Tela de referência do procedimento')
+        safe_src = html.escape(image_src, quote=True)
+        image = '<img src="' + safe_src + '" alt="' + caption + \
+                '" width="900" style="max-width:100%;height:auto">'
+        if url:
+            image = '<a href="' + html.escape(url, quote=True) + '">' + image + '</a>'
+        return '<p>' + image + '</p><p><small>' + caption + '</small></p>'
+
+    images = result.get('images') or []
+    positioned = {}
+    for item in images:
+        step = item.get('after_step')
+        if isinstance(step, int) and step > 0:
+            positioned.setdefault(step, []).append(item)
+    lines = ['<p><strong>Cortex — resposta sugerida ao cliente (nota interna)</strong></p>']
+    for raw_line in str(result['reply']).splitlines():
+        if not raw_line.strip():
+            continue
+        lines.append('<p>' + inline_text(raw_line.strip()) + '</p>')
+        numbered = re.match(r'^(\d+)\.\s', raw_line.strip())
+        if numbered:
+            for item in positioned.get(int(numbered.group(1)), []):
+                lines.append(image_block(item))
     for source in result.get('sources', []):
         label = str(source.get('title') or 'Referência')
         if source.get('ticket'):
@@ -389,19 +421,11 @@ def render_note(result, marker):
             elif case.get('resolution'):
                 lines.append('<li>Resolução registrada: ' + html.escape(plain(case['resolution'])[:700]) + '</li>')
         lines.append('</ul>')
-    if result.get('images'):
+    remaining_images = [item for item in images if not item.get('after_step')]
+    if remaining_images:
         lines.append('<p><strong>Imagens do procedimento:</strong></p>')
-        for item in result['images']:
-            url = mapped_replies.safe_url(item.get('url'))
-            image_src = mapped_replies.safe_image_data(item.get('data_url')) or url
-            if image_src:
-                caption = html.escape(item.get('caption') or 'Tela de referência do procedimento')
-                safe_src = html.escape(image_src, quote=True)
-                image = '<img src="' + safe_src + '" alt="' + caption + \
-                        '" width="900" style="max-width:100%;height:auto">'
-                if url:
-                    image = '<a href="' + html.escape(url, quote=True) + '">' + image + '</a>'
-                lines.append('<p>' + image + '</p><p><small>' + caption + '</small></p>')
+        for item in remaining_images:
+            lines.append(image_block(item))
     for notice in result.get('attachments', []):
         lines.append('<p>' + html.escape(notice) + '</p>')
     lines.append('<p><small>Confira a orientação antes de responder ao cliente. ' + marker + '</small></p>')
