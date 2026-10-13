@@ -137,6 +137,7 @@ DEFAULT_STATE = {
     "max_concurrent": 2,
     "pilot_person_ids": [],
     "pilot_organization_ids": [],
+    "pilot_requester_emails": ["lucas.teste@alternativa.com.br"],
     "pilot_paused": True,
     "sandbox_mode": True,
     "whitelist": ["lucas.teste@alternativa.com.br"],
@@ -179,6 +180,7 @@ def set_state(update: dict):
     allowed = {
         "draft_generation_enabled", "source_types", "min_interval_seconds",
         "max_per_minute", "max_concurrent", "pilot_person_ids", "pilot_organization_ids",
+        "pilot_requester_emails",
         "pilot_paused", "sandbox_mode", "whitelist", "auto_internal_note", "specialists"
     }
     if set(update) - allowed:
@@ -206,6 +208,15 @@ def set_state(update: dict):
             raise HTTPException(422, "Whitelist deve ser uma lista.")
         clean_wl = [str(x).strip() for x in raw_wl if str(x).strip()]
         state["whitelist"] = list(dict.fromkeys(clean_wl))[:100]
+    if "pilot_requester_emails" in update:
+        raw_emails = update["pilot_requester_emails"]
+        if not isinstance(raw_emails, list):
+            raise HTTPException(422, "Solicitantes autorizados devem ser uma lista.")
+        clean_emails = [str(value).strip().casefold() for value in raw_emails if str(value).strip()]
+        if (len(clean_emails) > 100 or
+                any(not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value) for value in clean_emails)):
+            raise HTTPException(422, "E-mail de solicitante inválido.")
+        state["pilot_requester_emails"] = list(dict.fromkeys(clean_emails))
     if "specialists" in update:
         specs = update["specialists"]
         if not isinstance(specs, list):
@@ -272,12 +283,14 @@ def webhook_receipts(request: Request):
     ceiling = os.getenv('CORTEX_AUTONOTE_MODE', 'disabled')
     state = get_state()
     selected = state.get('pilot_organization_ids') or []
+    requesters = state.get('pilot_requester_emails') or []
     enabled = (not state.get('pilot_paused', True) and
-               state.get('auto_internal_note', False) and bool(selected))
+               state.get('auto_internal_note', False) and bool(selected) and bool(requesters))
     result['ceiling_mode'] = ceiling
     result['effective_mode'] = ('internal_note' if ceiling == 'internal_note' and enabled else
                                 'dry_run' if ceiling in {'dry_run', 'internal_note'} else 'disabled')
     result['selected_organizations'] = len(selected)
+    result['selected_requesters'] = len(requesters)
     result['pilot_paused'] = state.get('pilot_paused', True)
     result['requested_auto_internal_note'] = state.get('auto_internal_note', False)
     # Backward-compatible name used by older panels.
@@ -877,6 +890,7 @@ class SettingsUpdate(BaseModel):
     max_concurrent: int | None = Field(default=None, ge=1, le=5)
     pilot_person_ids: list[str] | None = Field(default=None, max_length=100)
     pilot_organization_ids: list[str] | None = Field(default=None, max_length=100)
+    pilot_requester_emails: list[str] | None = Field(default=None, max_length=100)
     pilot_paused: bool | None = None
     sandbox_mode: bool | None = None
     whitelist: list[str] | None = Field(default=None, max_length=100)

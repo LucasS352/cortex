@@ -83,6 +83,6 @@ Para verificar: `docker compose --env-file .env.server ps`, logs de `app` e `cad
 ## Cuidados operacionais
 
 - Faça backup regular de `pgdata`, `cortex_output` e `manual_media`; os volumes sobrevivem ao redeploy, mas não substituem backup.
-- `CORTEX_AUTONOTE_MODE` no `.env.server` é o teto de permissão do servidor. A lista efetiva do piloto é administrada em **Agente e políticas → Piloto & Sandbox**. Sem empresa selecionada, piloto ativo e a opção de nota privada marcada, o worker opera sem publicar. As contas do Playground não autorizam escrita no Movidesk.
+- `CORTEX_AUTONOTE_MODE` no `.env.server` é o teto de permissão do servidor. A lista efetiva do piloto é administrada em **Agente e políticas → Piloto & Sandbox**. A publicação exige, ao mesmo tempo, empresa selecionada, e-mail do solicitante autorizado, piloto ativo e a opção de nota privada marcada. As contas do Playground não autorizam escrita no Movidesk.
 - Não expor PostgreSQL, serviço `app` ou serviço `webhook` diretamente à internet. Só Caddy publica portas.
 - Os segredos do Portainer devem ser acessíveis apenas aos administradores da Stack. Rotacione o token Movidesk e os segredos se forem expostos.

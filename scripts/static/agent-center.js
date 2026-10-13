@@ -5,6 +5,7 @@
 const studioState = {
   activeTab: 'tab-sandbox',
   whitelist: [],
+  pilotRequesterEmails: [],
   pilotCompanies: [],
   selectedCompanyIds: [],
   specialists: []
@@ -65,6 +66,37 @@ function addWhitelistItem(val) {
   $('whitelist-input').value = '';
 }
 
+function renderPilotRequesterTags() {
+  const container = $('pilot-requester-tags-container');
+  if (!container) return;
+  if (!studioState.pilotRequesterEmails.length) {
+    container.innerHTML = '<span class="muted" style="font-size:12px; padding:6px 0;">Nenhum solicitante autorizado. A publicação fica bloqueada.</span>';
+    return;
+  }
+  container.innerHTML = studioState.pilotRequesterEmails.map((email, idx) => `
+    <span class="whitelist-tag">
+      <span>${esc(email)}</span>
+      <button type="button" class="tag-remove" data-idx="${idx}" title="Remover solicitante">×</button>
+    </span>`).join('');
+  container.querySelectorAll('.tag-remove').forEach(btn => {
+    btn.addEventListener('click', (event) => {
+      studioState.pilotRequesterEmails.splice(Number(event.currentTarget.dataset.idx), 1);
+      renderPilotRequesterTags();
+    });
+  });
+}
+
+function addPilotRequesterEmail(value) {
+  const email = (value || '').trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    showError('Informe um e-mail válido para o solicitante autorizado.');
+    return;
+  }
+  if (!studioState.pilotRequesterEmails.includes(email)) studioState.pilotRequesterEmails.push(email);
+  renderPilotRequesterTags();
+  $('pilot-requester-input').value = '';
+}
+
 function renderPilotCompanies() {
   const container = $('pilot-company-results');
   if (!container) return;
@@ -104,6 +136,7 @@ async function togglePilotCompany(companyId, selected) {
 // --- Render Studio Settings ---
 function renderStudioSettings(settings) {
   studioState.whitelist = Array.isArray(settings.whitelist) ? [...settings.whitelist] : ['lucas.teste@alternativa.com.br'];
+  studioState.pilotRequesterEmails = Array.isArray(settings.pilot_requester_emails) ? [...settings.pilot_requester_emails] : [];
   studioState.specialists = Array.isArray(settings.specialists) ? JSON.parse(JSON.stringify(settings.specialists)) : [];
 
   // Sandbox switch & controls
@@ -112,6 +145,7 @@ function renderStudioSettings(settings) {
   $('setting-sandbox-mode').checked = sandboxOn;
   $('setting-draft-enabled').checked = !!settings.draft_generation_enabled;
   $('setting-auto-internal-note').checked = !!settings.auto_internal_note;
+  renderPilotRequesterTags();
   loadPilotCompanies($('pilot-company-search')?.value || '');
   loadWebhookReceipts();
 
@@ -122,13 +156,13 @@ function renderStudioSettings(settings) {
     badge.className = 'studio-badge-pulse paused';
     badge.textContent = '⏸ PILOTO PAUSADO';
     pill.textContent = 'Nenhuma nota será publicada';
-  } else if (studioState.selectedCompanyIds.length) {
+  } else if (studioState.selectedCompanyIds.length && studioState.pilotRequesterEmails.length) {
     badge.className = 'studio-badge-pulse';
     badge.textContent = '● PILOTO CONTROLADO ATIVO';
-    pill.textContent = `Restrito a ${studioState.selectedCompanyIds.length} empresa(s) autorizada(s)`;
+    pill.textContent = `Restrito a ${studioState.selectedCompanyIds.length} empresa(s) e ${studioState.pilotRequesterEmails.length} solicitante(s)`;
   } else {
     badge.className = 'studio-badge-pulse paused';
-    badge.textContent = '⚠ SEM EMPRESAS AUTORIZADAS';
+    badge.textContent = '⚠ AUTORIZAÇÃO INCOMPLETA';
     pill.textContent = 'Publicação bloqueada';
   }
 
@@ -262,6 +296,7 @@ async function saveAllStudioSettings() {
     pilot_paused: !$('setting-sandbox-mode').checked,
     auto_internal_note: $('setting-auto-internal-note').checked,
     whitelist: studioState.whitelist,
+    pilot_requester_emails: studioState.pilotRequesterEmails,
     draft_generation_enabled: $('setting-draft-enabled').checked,
     min_interval_seconds: Number($('pace-min-interval').value),
     max_per_minute: Number($('pace-max-minute').value),
@@ -793,6 +828,15 @@ function initAgentStudio() {
     if (e.key === 'Enter') {
       e.preventDefault();
       addWhitelistItem(e.currentTarget.value);
+    }
+  });
+  $('pilot-requester-add-btn')?.addEventListener('click', () => {
+    addPilotRequesterEmail($('pilot-requester-input').value);
+  });
+  $('pilot-requester-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addPilotRequesterEmail(e.currentTarget.value);
     }
   });
   $('pilot-company-search-btn')?.addEventListener('click', () => loadPilotCompanies($('pilot-company-search').value.trim()));

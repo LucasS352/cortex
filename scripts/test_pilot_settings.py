@@ -16,9 +16,11 @@ class PilotSettingsTests(unittest.TestCase):
              patch.object(admin_console, "STATE_FILE", Path(directory) / "state.json"), \
              patch.object(admin_console.operations, "audit"):
             state = admin_console.set_state({"pilot_person_ids": ["123", "123"],
-                                             "pilot_organization_ids": ["company_1"]})
+                                             "pilot_organization_ids": ["company_1"],
+                                             "pilot_requester_emails": ["Lucas.Teste@Alternativa.com.br"]})
             self.assertEqual(state["pilot_person_ids"], ["123"])
             self.assertEqual(state["pilot_organization_ids"], ["company_1"])
+            self.assertEqual(state["pilot_requester_emails"], ["lucas.teste@alternativa.com.br"])
             self.assertTrue(state["human_review_required"])
             self.assertFalse(state["auto_send_enabled"])
             self.assertEqual(admin_console.get_state()["pilot_person_ids"], ["123"])
@@ -29,6 +31,13 @@ class PilotSettingsTests(unittest.TestCase):
              patch.object(admin_console.operations, "audit"):
             with self.assertRaises(HTTPException):
                 admin_console.set_state({"pilot_person_ids": ["unexpected value! "]})
+
+    def test_rejects_invalid_requester_email(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(admin_console, "STATE_FILE", Path(directory) / "state.json"), \
+             patch.object(admin_console.operations, "audit"):
+            with self.assertRaises(HTTPException):
+                admin_console.set_state({"pilot_requester_emails": ["nao-e-email"]})
 
     def test_webhook_status_reports_only_effective_internal_note_mode(self):
         request = SimpleNamespace(state=SimpleNamespace(cortex_authenticated=True), client=None)

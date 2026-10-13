@@ -40,6 +40,7 @@ def main() -> None:
         "MOVIDESK_TICKET_UI_BASE": server.get("MOVIDESK_TICKET_UI_BASE") or "https://helpdesk.alternativasistemas.com.br/Ticket/Edit",
         "CORTEX_PILOT_ORGANIZATION_IDS": server.get("CORTEX_PILOT_ORGANIZATION_IDS") or "",
         "CORTEX_PILOT_TICKET_IDS": server.get("CORTEX_PILOT_TICKET_IDS") or "",
+        "CORTEX_PILOT_REQUESTER_EMAILS": server.get("CORTEX_PILOT_REQUESTER_EMAILS") or "",
         "CORTEX_MOVIDESK_INTERVAL_SECONDS": server.get("CORTEX_MOVIDESK_INTERVAL_SECONDS") or "7",
         "CORTEX_RUNTIME_PILOT_CONTROL": "true",
     }

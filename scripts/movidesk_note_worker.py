@@ -37,15 +37,19 @@ class Settings:
     interval: float = 7.0
     max_attempts: int = 5
     runtime_control: bool = False
+    requester_emails: frozenset = frozenset()
 
     @classmethod
     def load(cls):
         ids = lambda name: frozenset(x.strip() for x in os.getenv(name, '').split(',') if x.strip())
         controlled = os.getenv('CORTEX_RUNTIME_PILOT_CONTROL', 'true').strip().casefold() in {'1', 'true', 'yes', 'on'}
-        value = cls(os.getenv('CORTEX_AUTONOTE_MODE', 'disabled'),
-                    os.getenv('MOVIDESK_BOT_PERSON_ID', '').strip(),
-                    ids('CORTEX_PILOT_ORGANIZATION_IDS'), ids('CORTEX_PILOT_TICKET_IDS'),
-                    max(6.1, float(os.getenv('CORTEX_MOVIDESK_INTERVAL_SECONDS', '7'))), 5, controlled)
+        value = cls(mode=os.getenv('CORTEX_AUTONOTE_MODE', 'disabled'),
+                    agent_id=os.getenv('MOVIDESK_BOT_PERSON_ID', '').strip(),
+                    organizations=ids('CORTEX_PILOT_ORGANIZATION_IDS'),
+                    tickets=ids('CORTEX_PILOT_TICKET_IDS'),
+                    interval=max(6.1, float(os.getenv('CORTEX_MOVIDESK_INTERVAL_SECONDS', '7'))),
+                    max_attempts=5, runtime_control=controlled,
+                    requester_emails=frozenset(x.casefold() for x in ids('CORTEX_PILOT_REQUESTER_EMAILS')))
         if value.mode not in {'disabled', 'dry_run', 'internal_note'}:
             raise ValueError('CORTEX_AUTONOTE_MODE: use disabled, dry_run ou internal_note')
         if value.mode != 'disabled' and not MOVIDESK_TOKEN:
@@ -67,10 +71,14 @@ def effective_settings(settings, state_file=ADMIN_STATE_FILE):
         state = json.loads(Path(state_file).read_text(encoding='utf-8'))
         organizations = frozenset(str(value) for value in state.get('pilot_organization_ids', [])
                                   if re.fullmatch(r'[A-Za-z0-9_-]{1,80}', str(value)))
+        requester_emails = frozenset(str(value).strip().casefold()
+                                     for value in state.get('pilot_requester_emails', [])
+                                     if re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', str(value).strip()))
         enabled = (not bool(state.get('pilot_paused', True)) and
-                   bool(state.get('auto_internal_note', False)) and bool(organizations))
+                   bool(state.get('auto_internal_note', False)) and
+                   bool(organizations) and bool(requester_emails))
     except (OSError, ValueError, TypeError):
-        organizations, enabled = frozenset(), False
+        organizations, requester_emails, enabled = frozenset(), frozenset(), False
     if settings.mode == 'disabled':
         mode = 'disabled'
     elif settings.mode == 'internal_note' and enabled:
@@ -79,7 +87,8 @@ def effective_settings(settings, state_file=ADMIN_STATE_FILE):
         # Invalid/missing UI state and a dry-run ceiling can generate previews,
         # but neither is allowed to write to Movidesk.
         mode = 'dry_run'
-    return replace(settings, mode=mode, organizations=organizations, tickets=frozenset())
+    return replace(settings, mode=mode, organizations=organizations, tickets=frozenset(),
+                   requester_emails=requester_emails)
 
 
 class RetryJob(Exception):
@@ -161,6 +170,24 @@ def customer_action(action, ticket):
             (str(author.get('id')) in client_ids and str(author.get('profileType')) != '1'))
 
 
+def requester_email(action, ticket):
+    """Return the email of the client who authored this exact action."""
+    author = action.get('createdBy') or {}
+    author_id = str(author.get('id') or '')
+    if str(author.get('profileType')) == '1':
+        return ''
+    email = str(author.get('email') or '').strip().casefold()
+    if email:
+        return email
+    for client in ticket.get('clients', []):
+        if client.get('isDeleted') or str(client.get('id') or '') != author_id:
+            continue
+        email = str(client.get('email') or '').strip().casefold()
+        if email:
+            return email
+    return ''
+
+
 def eligible(ticket, settings):
     from agent_control import organization
     org_id, _name, _issue = organization(ticket.get('clients'))
@@ -173,6 +200,8 @@ def eligible(ticket, settings):
     history = actions(ticket, settings)
     if not history or not customer_action(history[-1], ticket):
         return False, 'sem_nova_mensagem_do_cliente'
+    if requester_email(history[-1], ticket) not in settings.requester_emails:
+        return False, 'solicitante_fora_do_piloto'
     return True, ''
 
 

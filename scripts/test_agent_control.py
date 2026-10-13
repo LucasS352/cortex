@@ -17,7 +17,8 @@ import simulator_app
 def public_ticket(company_id='company_7', *, age=0, kind='2'):
     return {'ticket_id': 131216, 'type': kind, 'base_status': 'Open', 'status': 'Novo',
             'current_as_of': datetime.now(timezone.utc) - timedelta(hours=age),
-            'clients': [{'id': 'person_1', 'personType': 1,
+            'clients': [{'id': 'person_1', 'personType': 1, 'profileType': 2,
+                         'email': 'lucas.teste@alternativa.com.br',
                          'organization': {'id': company_id, 'businessName': 'Empresa piloto'}}]}
 
 

@@ -15,7 +15,8 @@ import movidesk_note_worker as worker
 
 def ticket():
     return {'id': 42, 'type': 2, 'subject': 'Erro na etiqueta', 'baseStatus': 'New',
-            'clients': [{'id': 'client', 'organization': {'id': '464', 'businessName': 'Empresa teste'}}],
+            'clients': [{'id': 'client', 'email': 'lucas.teste@alternativa.com.br',
+                         'organization': {'id': '464', 'businessName': 'Empresa teste'}}],
             'actions': [{'id': 1, 'type': 2, 'description': 'Não consigo emitir a etiqueta.',
                          'createdDate': '2026-10-09T10:00:00Z',
                          'createdBy': {'id': 'client', 'profileType': 2}}]}
@@ -48,7 +49,8 @@ class WorkerTests(unittest.TestCase):
         self.db_patch.start()
         self.secret_patch.start()
         self.client = TestClient(receiver.app)
-        self.settings = worker.Settings('internal_note', 'bot', frozenset({'464'}))
+        self.settings = worker.Settings('internal_note', 'bot', frozenset({'464'}),
+                                        requester_emails=frozenset({'lucas.teste@alternativa.com.br'}))
         self.api = FakeApi()
         self.generate = Mock(return_value={'reply': 'Confira o campo com o técnico antes de alterar.', 'sources': []})
 
@@ -81,14 +83,20 @@ class WorkerTests(unittest.TestCase):
     def test_runtime_control_requires_selected_company_active_pilot_and_private_toggle(self):
         state_file = Path(self.tmp.name) / 'agent-state.json'
         base = worker.Settings('internal_note', 'bot', runtime_control=True)
-        state_file.write_text(json.dumps({'pilot_organization_ids': ['464'], 'pilot_paused': False,
-                                          'auto_internal_note': True}), encoding='utf-8')
+        state_file.write_text(json.dumps({'pilot_organization_ids': ['464'],
+                                          'pilot_requester_emails': ['lucas.teste@alternativa.com.br'],
+                                          'pilot_paused': False, 'auto_internal_note': True}), encoding='utf-8')
         active = worker.effective_settings(base, state_file)
         self.assertEqual(active.mode, 'internal_note')
         self.assertEqual(active.organizations, frozenset({'464'}))
-        for update in ({'pilot_organization_ids': [], 'pilot_paused': False, 'auto_internal_note': True},
-                       {'pilot_organization_ids': ['464'], 'pilot_paused': True, 'auto_internal_note': True},
-                       {'pilot_organization_ids': ['464'], 'pilot_paused': False, 'auto_internal_note': False}):
+        for update in ({'pilot_organization_ids': [], 'pilot_requester_emails': ['lucas.teste@alternativa.com.br'],
+                        'pilot_paused': False, 'auto_internal_note': True},
+                       {'pilot_organization_ids': ['464'], 'pilot_requester_emails': [],
+                        'pilot_paused': False, 'auto_internal_note': True},
+                       {'pilot_organization_ids': ['464'], 'pilot_requester_emails': ['lucas.teste@alternativa.com.br'],
+                        'pilot_paused': True, 'auto_internal_note': True},
+                       {'pilot_organization_ids': ['464'], 'pilot_requester_emails': ['lucas.teste@alternativa.com.br'],
+                        'pilot_paused': False, 'auto_internal_note': False}):
             state_file.write_text(json.dumps(update), encoding='utf-8')
             guarded = worker.effective_settings(base, state_file)
             self.assertEqual(guarded.mode, 'dry_run')
@@ -104,8 +112,9 @@ class WorkerTests(unittest.TestCase):
 
     def test_runtime_company_selection_cannot_be_bypassed_by_environment_ticket(self):
         state_file = Path(self.tmp.name) / 'agent-state.json'
-        state_file.write_text(json.dumps({'pilot_organization_ids': ['464'], 'pilot_paused': False,
-                                          'auto_internal_note': True}), encoding='utf-8')
+        state_file.write_text(json.dumps({'pilot_organization_ids': ['464'],
+                                          'pilot_requester_emails': ['lucas.teste@alternativa.com.br'],
+                                          'pilot_paused': False, 'auto_internal_note': True}), encoding='utf-8')
         base = worker.Settings('internal_note', 'bot', frozenset({'other'}), frozenset({'42'}),
                                runtime_control=True)
         controlled = worker.effective_settings(base, state_file)
@@ -124,7 +133,8 @@ class WorkerTests(unittest.TestCase):
 
     def test_dry_run_keeps_reviewable_note_without_patch(self):
         self.enqueue()
-        settings = worker.Settings('dry_run', 'bot', frozenset({'464'}))
+        settings = worker.Settings('dry_run', 'bot', frozenset({'464'}),
+                                   requester_emails=frozenset({'lucas.teste@alternativa.com.br'}))
         worker.run_once(settings, self.api, self.generate)
         self.assertEqual(self.api.writes, [])
         self.assertEqual(self.states(), ['preview'])
@@ -136,6 +146,15 @@ class WorkerTests(unittest.TestCase):
         worker.run_once(self.settings, self.api, self.generate)
         self.generate.assert_not_called()
         self.assertEqual(self.states(), ['skipped'])
+
+    def test_unauthorized_requester_is_skipped_before_generation(self):
+        self.api.data['clients'][0]['email'] = 'outro.cliente@alternativa.com.br'
+        self.enqueue()
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_not_called()
+        self.assertEqual(self.states(), ['skipped'])
+        self.assertEqual(receiver.receipt_summary()['recent'][0]['outcome'],
+                         'solicitante_fora_do_piloto')
 
     def test_recent_agent_reply_prevents_automated_followup(self):
         self.api.data['actions'].append({'id': 2, 'type': 2, 'description': 'Já estou verificando.',

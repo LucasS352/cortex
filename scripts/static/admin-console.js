@@ -357,7 +357,7 @@ async function loadWebhookReceipts(){
     const alive=d.worker && Date.now()/1000-d.worker.heartbeat<900;
     const modes={disabled:'desativado',dry_run:'prévia sem publicar',internal_note:'publicação de nota interna'};
     const ceiling={disabled:'bloqueado no servidor',dry_run:'servidor limitado a prévia',internal_note:'servidor permite nota privada'};
-    $('webhook-summary').textContent=`${fmt(d.total)} entrega(s). Modo efetivo: ${modes[d.effective_mode]||d.effective_mode}. ${ceiling[d.ceiling_mode]||''}. ${fmt(d.selected_organizations||0)} empresa(s) autorizada(s). Worker: ${alive?'ativo':'sem atividade recente'}.`;
+    $('webhook-summary').textContent=`${fmt(d.total)} entrega(s). Modo efetivo: ${modes[d.effective_mode]||d.effective_mode}. ${ceiling[d.ceiling_mode]||''}. ${fmt(d.selected_organizations||0)} empresa(s) e ${fmt(d.selected_requesters||0)} solicitante(s) autorizado(s). Worker: ${alive?'ativo':'sem atividade recente'}.`;
     const noteToggle=$('setting-auto-internal-note');
     if(noteToggle){noteToggle.checked=!!d.requested_auto_internal_note;noteToggle.disabled=d.ceiling_mode!=='internal_note';noteToggle.title=noteToggle.disabled?'O .env.server precisa usar CORTEX_AUTONOTE_MODE=internal_note.':'';}
     const labels={received:'Na fila',processing:'Em análise',retry:'Aguardando nova tentativa',completed:'Concluído',preview:'Prévia gerada',skipped:'Sem geração necessária',failed:'Falha',needs_review:'Requer revisão'};

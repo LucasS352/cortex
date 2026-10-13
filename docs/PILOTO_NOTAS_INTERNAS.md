@@ -29,7 +29,7 @@ Preencher no arquivo, fora do chat:
 - `MOVIDESK_BOT_PERSON_ID`: ID real de um agente autorizado a incluir ações internas; recomendado agente exclusivo do Cortex.
 - `MOVIDESK_TICKET_UI_BASE`: endereço da tela de edição de tickets usado nos links de chamados semelhantes.
 - `CORTEX_RUNTIME_PILOT_CONTROL=true`: torna o painel a fonte efetiva da lista de empresas do piloto. Este é o padrão dos arquivos Compose.
-- `CORTEX_PILOT_TICKET_IDS` e `CORTEX_PILOT_ORGANIZATION_IDS`: mantidos somente para diagnóstico e execução direta do worker fora do controle do painel. Com o controle em tempo de execução ativo, esses valores não contornam a seleção feita na interface.
+- `CORTEX_PILOT_TICKET_IDS`, `CORTEX_PILOT_ORGANIZATION_IDS` e `CORTEX_PILOT_REQUESTER_EMAILS`: mantidos somente para diagnóstico e execução direta do worker fora do controle do painel. Com o controle em tempo de execução ativo, esses valores não contornam a seleção feita na interface.
 - `CORTEX_IMAGE`: imagem publicada, como `ghcr.io/lucass352/cortex:<commit>`.
 
 `CORTEX_AUTONOTE_MODE` controla este worker:
