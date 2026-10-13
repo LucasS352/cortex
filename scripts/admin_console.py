@@ -36,6 +36,8 @@ import movidesk_webhook
 import movidesk_note_worker
 import triage_router
 import knowledge_access
+import sync_current_tickets
+from tech_evidence import ensure_single_tenant
 from typing import Literal
 from datetime import date
 
@@ -302,6 +304,15 @@ def webhook_receipts(request: Request):
     return result
 
 
+def persist_live_ticket(ticket):
+    """Update one ticket and its company links without rebuilding the snapshot."""
+    with psycopg.connect(POSTGRES_DSN, row_factory=dict_row, connect_timeout=5,
+                         options='-c statement_timeout=15000 -c lock_timeout=5000') as conn:
+        tenant = ensure_single_tenant(conn)
+        if not sync_current_tickets.upsert_ticket(conn, tenant, ticket):
+            raise ValueError('Movidesk retornou um identificador inválido')
+
+
 @router.post('/api/admin/webhooks/pull/{ticket_id}')
 def pull_webhook_ticket(ticket_id: int, request: Request):
     """Fetch a pilot ticket now and enqueue its latest customer action."""
@@ -334,6 +345,13 @@ def pull_webhook_ticket(ticket_id: int, request: Request):
         }
         raise HTTPException(409, labels.get(reason, 'O chamado não está elegível para o piloto.'))
 
+    # Keep this exact live ticket available to dashboards and company-scoped
+    # retrieval. A manual pull must not require a full Movidesk synchronization.
+    try:
+        persist_live_ticket(ticket)
+    except (psycopg.Error, ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(503, 'O chamado foi consultado no Movidesk, mas não pôde ser atualizado na base local.') from exc
+
     history = movidesk_note_worker.actions(ticket, settings)
     latest = history[-1]
     key, action_id = movidesk_note_worker.identity(ticket, settings)
@@ -354,7 +372,7 @@ def pull_webhook_ticket(ticket_id: int, request: Request):
     except (ValueError, sqlite3.Error) as exc:
         raise HTTPException(503, 'Não foi possível colocar o chamado na fila.') from exc
     return {'ticket_id': ticket_id, 'action_id': action_id, 'status': 'queued',
-            'mode': settings.mode}
+            'mode': settings.mode, 'ticket_refreshed': True}
 
 
 @router.post('/api/admin/evaluations/seed')

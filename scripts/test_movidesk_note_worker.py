@@ -187,6 +187,17 @@ class WorkerTests(unittest.TestCase):
         worker.run_once(self.settings, self.api, self.generate)
         self.generate.assert_not_called()
 
+    def test_movidesk_opening_receipt_does_not_hide_customer_message(self):
+        self.api.data['actions'].append({'id': 2, 'type': 2,
+            'description': 'Olá! O seu chamado foi recebido, e iremos realizar a triagem para um atendente do suporte auxiliar no atendimento.',
+            'createdDate': '2026-10-09T12:00:00Z',
+            'createdBy': {'id': 'agent', 'profileType': 3}})
+        self.enqueue(Actions=[{'Id': 2}])
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_called_once()
+        self.assertEqual(len(self.api.writes), 1)
+        self.assertEqual(receiver.receipt_summary()['recent'][0]['state'], 'completed')
+
     def test_customer_reply_during_generation_does_not_receive_old_draft(self):
         def generate(*_):
             self.api.data['actions'][0]['description'] = 'Na verdade é outro erro.'

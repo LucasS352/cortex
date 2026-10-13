@@ -165,9 +165,20 @@ def bot_action(action, settings):
             bool(settings.agent_id and str((action.get('createdBy') or {}).get('id')) == settings.agent_id))
 
 
+def automatic_receipt_action(action):
+    """Identify Movidesk's fixed opening acknowledgement, not a technician reply."""
+    if str(action.get('type')) != '2':
+        return False
+    text = plain(action.get('description')).casefold()
+    return ('seu chamado foi recebido' in text and
+            'iremos realizar a triagem' in text and
+            'atendente do suporte' in text)
+
+
 def actions(ticket, settings):
     return sorted((a for a in ticket.get('actions', []) if not a.get('isDeleted') and
-                   not bot_action(a, settings) and (plain(a.get('description')) or a.get('attachments'))),
+                   not bot_action(a, settings) and not automatic_receipt_action(a) and
+                   (plain(a.get('description')) or a.get('attachments'))),
                   key=lambda a: (str(a.get('createdDate') or ''), int(a.get('id') or 0)))
 
 

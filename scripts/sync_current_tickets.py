@@ -156,16 +156,15 @@ def upsert_company_links(conn, tenant_id, ticket):
             ON CONFLICT DO NOTHING""", (tenant_id, company_id, ticket_id))
 
 
-def upsert_page(conn, tenant_id, run_id, tickets):
-    statement = refined_sql()
-    changed = 0
-    tiers = Counter()
-    for ticket in tickets:
-        external_id = ticket.get("id")
-        if not isinstance(external_id, int):
-            continue
-        payload = json.dumps(ticket, ensure_ascii=False)
-        row = conn.execute("""
+def upsert_ticket(conn, tenant_id, ticket, run_id=None):
+    """Persist one live ticket without requiring a complete snapshot refresh."""
+    raw_external_id = ticket.get("id")
+    if isinstance(raw_external_id, bool) or not str(raw_external_id).isdigit():
+        return None
+    external_id = int(raw_external_id)
+    ticket = {**ticket, "id": external_id}
+    payload = json.dumps(ticket, ensure_ascii=False)
+    row = conn.execute("""
             INSERT INTO raw_tickets
                 (tenant_id, source_provider, external_id, payload, created_date, processing_status)
             VALUES (%s, 'movidesk', %s, %s::jsonb, %s, 'done')
@@ -173,25 +172,35 @@ def upsert_page(conn, tenant_id, run_id, tickets):
             DO UPDATE SET payload=EXCLUDED.payload, created_date=EXCLUDED.created_date,
                 ingested_at=NOW(), processing_status='done', processed_at=NOW()
             RETURNING id
-        """, (tenant_id, external_id, payload, ticket.get("createdDate"))).fetchone()
-        record = process_ticket_v2(str(row["id"]), str(tenant_id), external_id, ticket)
-        conn.execute(statement, tuple(record[name] for name in REFINED_COLUMNS))
-        upsert_company_links(conn, tenant_id, ticket)
-        if ticket.get("baseStatus") not in ("Resolved", "Closed", "Canceled"):
-            dashboard_data = {
-                "subject": record["subject"], "category": record["category"],
-                "urgency": record["urgency"], "status": record["status"],
-                "base_status": record["base_status"], "created_date": record["created_date"],
-                "problem_statement": record["problem_statement"],
-                "technical_narrative": record["technical_narrative"],
-                "client_business_name": record["client_business_name"],
-                "clients": ticket.get("clients") or [], "owner": ticket.get("owner"),
-                "owner_team": ticket.get("ownerTeam"),
-            }
-            conn.execute("""
+    """, (tenant_id, external_id, payload, ticket.get("createdDate"))).fetchone()
+    record = process_ticket_v2(str(row["id"]), str(tenant_id), external_id, ticket)
+    conn.execute(refined_sql(), tuple(record[name] for name in REFINED_COLUMNS))
+    upsert_company_links(conn, tenant_id, ticket)
+    if run_id is not None and ticket.get("baseStatus") not in ("Resolved", "Closed", "Canceled"):
+        dashboard_data = {
+            "subject": record["subject"], "category": record["category"],
+            "urgency": record["urgency"], "status": record["status"],
+            "base_status": record["base_status"], "created_date": record["created_date"],
+            "problem_statement": record["problem_statement"],
+            "technical_narrative": record["technical_narrative"],
+            "client_business_name": record["client_business_name"],
+            "clients": ticket.get("clients") or [], "owner": ticket.get("owner"),
+            "owner_team": ticket.get("ownerTeam"),
+        }
+        conn.execute("""
                 INSERT INTO movidesk_open_snapshot (run_id, tenant_id, external_id, dashboard_data)
                 VALUES (%s, %s, %s, %s::jsonb) ON CONFLICT DO NOTHING
-            """, (run_id, tenant_id, external_id, json.dumps(dashboard_data, ensure_ascii=False, default=str)))
+        """, (run_id, tenant_id, external_id, json.dumps(dashboard_data, ensure_ascii=False, default=str)))
+    return record
+
+
+def upsert_page(conn, tenant_id, run_id, tickets):
+    changed = 0
+    tiers = Counter()
+    for ticket in tickets:
+        record = upsert_ticket(conn, tenant_id, ticket, run_id)
+        if not record:
+            continue
         changed += 1
         tiers[record["quality_tier"]] += 1
     conn.commit()

@@ -92,6 +92,7 @@ class PilotSettingsTests(unittest.TestCase):
         with patch.object(admin_console.movidesk_note_worker.Settings, 'load', return_value=settings), \
              patch.object(admin_console.movidesk_note_worker, 'effective_settings', return_value=settings), \
              patch.object(admin_console.movidesk_note_worker, 'Api', return_value=fake_api), \
+             patch.object(admin_console, 'persist_live_ticket') as persist, \
              patch.object(admin_console.movidesk_webhook, 'enqueue_payload', return_value=True) as enqueue:
             result = admin_console.pull_webhook_ticket(131661, request)
         self.assertEqual(result['status'], 'queued')
@@ -99,6 +100,41 @@ class PilotSettingsTests(unittest.TestCase):
         payload = enqueue.call_args.args[0]
         self.assertEqual(payload['Actions'][0]['Id'], 7)
         self.assertIn('CortexManualPull', payload)
+        persist.assert_called_once_with(ticket)
+        self.assertTrue(result['ticket_refreshed'])
+
+    def test_manual_pull_uses_customer_message_before_movidesk_automatic_receipt(self):
+        request = SimpleNamespace(state=SimpleNamespace(cortex_authenticated=True), client=None)
+        settings = admin_console.movidesk_note_worker.Settings(
+            mode='internal_note', agent_id='bot', organizations=frozenset({'2021612901'}),
+            requester_emails=frozenset({'lucas.teste@alternativa.com.br'}),
+            manual_internal_note=True)
+        ticket = {
+            'id': '131662', 'type': 2, 'baseStatus': 'New',
+            'clients': [{'id': 'client', 'email': 'lucas.teste@alternativa.com.br',
+                         'organization': {'id': '2021612901', 'businessName': 'Cortex Teste'}}],
+            'actions': [
+                {'id': 1, 'type': 2, 'description': 'Inscrição estadual inválida.',
+                 'createdDate': '2026-10-13T10:00:00Z',
+                 'createdBy': {'id': 'client', 'profileType': 2,
+                               'email': 'lucas.teste@alternativa.com.br'}},
+                {'id': 2, 'type': 2,
+                 'description': 'Olá! O seu chamado foi recebido, e iremos realizar a triagem para um atendente do suporte auxiliar no atendimento.',
+                 'createdDate': '2026-10-13T10:00:01Z',
+                 'createdBy': {'id': 'agent', 'profileType': 3}},
+            ],
+        }
+        fake_api = SimpleNamespace(ticket=Mock(return_value=ticket),
+                                   client=SimpleNamespace(close=Mock()))
+        with patch.object(admin_console.movidesk_note_worker.Settings, 'load', return_value=settings), \
+             patch.object(admin_console.movidesk_note_worker, 'effective_settings', return_value=settings), \
+             patch.object(admin_console.movidesk_note_worker, 'Api', return_value=fake_api), \
+             patch.object(admin_console, 'persist_live_ticket') as persist, \
+             patch.object(admin_console.movidesk_webhook, 'enqueue_payload') as enqueue:
+            result = admin_console.pull_webhook_ticket(131662, request)
+        self.assertEqual(result['action_id'], '1')
+        self.assertEqual(enqueue.call_args.args[0]['Actions'][0]['Id'], 1)
+        persist.assert_called_once_with(ticket)
 
 
 if __name__ == "__main__":

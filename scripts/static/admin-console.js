@@ -395,6 +395,6 @@ $('webhook-pull-form')?.addEventListener('submit',async event=>{
       }
     }
     await loadWebhookReceipts();
-  }catch(error){status.textContent='Não foi possível processar o chamado.';showError(error.message);}
+  }catch(error){status.textContent=`Não foi possível processar o chamado: ${error.message}`;showError(error.message);}
   finally{button.disabled=false;}
 });
