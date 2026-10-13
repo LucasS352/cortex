@@ -59,11 +59,13 @@ STATE_REGISTRATION_REPLY = '''Olá!
 
 A mensagem “Inscrição Estadual inválida” indica que devemos conferir a IE informada nos dados de entrega da nota fiscal.
 
-1. Abra a nota fiscal no Master, acesse a aba Dados de Entrega e confira o número preenchido no campo RG/IE do destinatário.
-2. Acesse https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc, selecione a UF do destinatário, mantenha o ambiente Produção, informe o CNPJ e clique em Pesquisar por CNPJ.
-3. No resultado, confirme se a Situação IE está como Habilitado. Estando habilitada, copie o número exibido em Inscrição Estadual (IE), corrija o campo RG/IE nos Dados de Entrega, salve a alteração e tente emitir a nota fiscal novamente.
+1. Abra a nota fiscal no Master, acesse a aba Dados de Entrega e anote o CNPJ, a UF e o número preenchido no campo RG/IE do destinatário.
+2. Acesse https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc, selecione a mesma UF da nota, mantenha o ambiente Produção, informe o CNPJ e clique em Pesquisar por CNPJ.
+3. No resultado, confirme se a Situação IE está como Habilitado e compare a UF e a Inscrição Estadual (IE) com os dados do Master. Não utilize uma IE pertencente a outra UF.
+4. Se houver divergência, corrija a IE no cadastro do cliente ou fornecedor para evitar novos erros e atualize também o campo RG/IE nos Dados de Entrega da nota atual. Recarregue os dados do destinatário na nota quando essa opção estiver disponível.
+5. Salve a alteração, confira novamente CNPJ, UF e RG/IE e tente transmitir a NF-e.
 
-Se a IE não estiver habilitada no CCC, não substitua o número por conta própria: confirme a situação cadastral do destinatário antes de uma nova emissão. Os dados apresentados nas imagens são apenas exemplos.'''
+Se a IE não estiver habilitada no CCC, se o CNPJ não possuir IE nessa UF ou se os dados continuarem divergentes, não informe “ISENTO” nem remova a IE por conta própria. Confirme a situação cadastral e o endereço com o destinatário antes de uma nova emissão. Os dados apresentados nas imagens são apenas exemplos.'''
 
 
 def normalized(value):
@@ -84,15 +86,35 @@ def match(query):
             'quality_flags': [], 'applicability_reasons': [],
             'reviewed_at': '2026-10-13',
             'source_url': 'https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc',
-            'provenance': 'Procedimento e imagens revisados por Lucas para o chamado 131662 em 13/10/2026.',
-            'resolved_examples': [],
+            'provenance': ('Procedimento e imagens revisados por Lucas para o chamado 131662; '
+                           'resultados confirmados nos chamados encerrados 129530, 118832, 99143 e 104696.'),
+            'resolved_examples': [
+                {'ticket': 129530, 'title': 'SUP - NFE - IE do destinatário inválida',
+                 'status': 'Fechado — emissão confirmada', 'active': False,
+                 'resolution': ('A Inscrição Estadual foi atualizada e a nota foi transmitida com sucesso. '
+                                'Confirma o ajuste da IE antes de uma nova transmissão.')},
+                {'ticket': 118832,
+                 'title': 'SUP - NFE - Erro ao emitir nota fiscal | IE do destinatário inválida',
+                 'status': 'Fechado — emissão confirmada', 'active': False,
+                 'resolution': ('O CNPJ foi consultado, a IE divergente foi corrigida no cadastro do cliente, '
+                                'os dados da nota foram recarregados e a nota foi emitida.')},
+                {'ticket': 99143,
+                 'title': 'Erro ao emitir NF-e | IE do destinatário inválida',
+                 'status': 'Fechado — transmissão confirmada', 'active': False,
+                 'resolution': ('Os dados do cadastro do cliente estavam divergentes. Após ajustar o cadastro '
+                                'e a NF-e, a nota foi transmitida.')},
+                {'ticket': 104696, 'title': 'SUP - ERR - Erro Emissão NF',
+                 'status': 'Fechado — emissão confirmada', 'active': False,
+                 'resolution': ('A IE estava gravada com pontuação. Após conferir e ajustar o formato do número, '
+                                'a nota foi emitida sem erros.')},
+            ],
             'images': [
                 {'file': 'state-registration-delivery.png', 'after_step': 1,
                  'caption': 'Passo 1: confira o campo RG/IE na aba Dados de Entrega da nota fiscal.'},
                 {'file': 'state-registration-ccc-query.png', 'after_step': 2,
                  'caption': 'Passo 2: selecione a UF, informe o CNPJ e pesquise no CCC.'},
                 {'file': 'state-registration-ccc-result.png', 'after_step': 3,
-                 'caption': 'Passo 3: confirme Situação IE como Habilitado e copie a Inscrição Estadual. Os dados são exemplos.'},
+                 'caption': 'Passo 3: confirme Situação IE como Habilitado e compare a UF e a Inscrição Estadual. Os dados são exemplos.'},
             ],
         }
     if (re.search(r'produto\s+["“]?[^\n]{1,80}["”]?\s*\(codigo do integrador\)', text) and

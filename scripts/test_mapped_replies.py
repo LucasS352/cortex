@@ -27,6 +27,26 @@ class MappedReplyTests(unittest.TestCase):
         self.assertEqual(len(result['images']), 2)
         self.assertIn('Ctrl+R', render_note(result, 'marker'))
 
+    def test_worker_carries_three_confirmed_state_registration_cases_into_note(self):
+        ticket = {'id': 131726, 'subject': 'Erro nota', 'clients': [], 'actions': [
+            {'id': 10, 'type': 2, 'description': 'IE do destinatário inválida',
+             'createdBy': {'id': 'requester', 'profileType': 2}}]}
+        connection = MagicMock()
+        connection.__enter__.return_value.execute.return_value.fetchone.return_value = {'name': None}
+        with patch('technician_workbench.connection', return_value=connection), \
+             patch('tech_evidence.ensure_single_tenant', return_value='tenant'), \
+             patch('agent_control.organization', return_value=('', '', None)), \
+             patch.dict(os.environ, {'CORTEX_PUBLIC_URL': 'https://cortex.example'}), \
+             patch('technician_workbench.llm_client.generate') as model:
+            result = generate_note(ticket, Settings(), Mock())
+        model.assert_not_called()
+        self.assertEqual(result['mode'], 'reviewed_procedure')
+        self.assertGreaterEqual(len(result['similar_tickets']), 3)
+        note = render_note(result, 'marker')
+        for ticket_id in (129530, 118832, 99143):
+            self.assertIn('/Ticket/Edit/' + str(ticket_id), note)
+        self.assertIn('Recarregue os dados do destinatário', note)
+
     def test_ticket_131661_gets_complete_procedure_without_model_omitting_shortcut(self):
         query = ('Pedido LU-1558670119374371 (INTEGRACOMMERCE - CineMagiaMagalu08) '
                  'com Forma de Pagamento não integrada efd67646-5229-49d0-90fa-44a3f7241704.')
@@ -85,6 +105,11 @@ class MappedReplyTests(unittest.TestCase):
         self.assertEqual(source['id'], 'reviewed-state-registration-v1')
         self.assertEqual(source['source_url'], 'https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc')
         self.assertEqual(len(source['images']), 3)
+        self.assertGreaterEqual(len(source['resolved_examples']), 3)
+        self.assertEqual([case['ticket'] for case in source['resolved_examples'][:3]],
+                         [129530, 118832, 99143])
+        self.assertTrue(all(not case['active'] and case['resolution']
+                            for case in source['resolved_examples']))
         for term in ('Dados de Entrega', 'RG/IE', 'Pesquisar por CNPJ', 'Situação IE', 'Habilitado'):
             self.assertIn(term, source['reviewed_reply'])
         with patch.dict(os.environ, {'CORTEX_PUBLIC_URL': ''}):
@@ -93,8 +118,12 @@ class MappedReplyTests(unittest.TestCase):
         self.assertFalse(notices)
         self.assertFalse(images[0]['url'])
         note = render_note({'reply': source['reviewed_reply'], 'images': images,
-                            'sources': [{'title': source['title'], 'url': source['source_url']}]}, 'marker')
+                            'sources': [{'title': source['title'], 'url': source['source_url']}],
+                            'similar_tickets': source['resolved_examples']}, 'marker')
         self.assertEqual(note.count('<img src="data:image/png;base64,'), 3)
+        for ticket_id in (129530, 118832, 99143, 104696):
+            self.assertIn('/Ticket/Edit/' + str(ticket_id), note)
+        self.assertGreaterEqual(note.count('Resolução registrada:'), 4)
         exact_link = '<a href="https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc">https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc</a>'
         self.assertIn(exact_link, note)
         self.assertNotIn('href="https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc)"', note)
