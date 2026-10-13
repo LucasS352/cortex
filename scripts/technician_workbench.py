@@ -14,6 +14,7 @@ from config import POSTGRES_DSN
 from tech_evidence import ensure_single_tenant
 import knowledge_access
 import llm_client
+import mapped_replies
 
 router = APIRouter(prefix="/api/workbench", tags=["Assistente do técnico"])
 SECRET = re.compile(r"\b(?:senha|password|passwd|token|secret|api[_ -]?key)\s*[:=]|://[^/\s]+@", re.I)
@@ -181,6 +182,9 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
                          exclude_ticket_id=None, limit: int = 8):
     """Search company history first and use the general corpus only as fallback."""
     cases = company_similar_cases(conn, tenant, company_id, query, limit, exclude_ticket_id) if company_id else []
+    reviewed = mapped_replies.match(query)
+    if reviewed:
+        return [reviewed], cases, "reviewed_procedure"
     local_source = next((source for case in cases if (source := company_case_source(case))), None)
     if local_source:
         return [local_source], cases, "company_history"
@@ -434,6 +438,11 @@ def source_fallback(primary, company_case=False):
 
 def build_reply(row, history, facts, envs, sources, question, cases=(), audience='technician'):
     primary = sources[0] if sources else None
+    # Only a recipe selected by current-context retrieval can bypass generation.
+    # Return the repository-reviewed text, never a reply injected by source data.
+    reviewed = mapped_replies.match(question)
+    if reviewed and primary and primary.get('id') == reviewed['id']:
+        return reviewed['reviewed_reply'], {'used': True, 'mode': 'reviewed_procedure', 'model': None}
     grounded = bool(primary and primary.get("applicable") and primary.get("answer_use") != "investigation_only")
     # The first hit remains the only possible procedural reference. Weaker hits
     # may help formulate a question, but must never silently replace it.
@@ -477,6 +486,7 @@ A mensagem ATUAL define o problema em análise; o assunto inicial do atendimento
 Identifique o que o interlocutor já informou (erro, tela/processo, ação e resultado). Não peça novamente esses dados. Quando faltar algo decisivo, peça apenas o dado específico que falta e explique por quê. Faça no máximo duas perguntas objetivas.
 Se o texto do erro já foi informado e faltar somente um código, pergunte apenas qual código o acompanha, se houver. Não exija um código que pode não aparecer.
 Se houver fonte principal aplicável, comece pelo achado mais relevante e proponha um teste concreto. Se o erro exato e a correção constam nela, diga qual condição verificar, o ajuste condicional e como validar o resultado.
+Preserve os passos operacionais documentados: caminho da tela, registro a selecionar, atalho, campo, valor de origem e confirmação. Não substitua um procedimento concreto por "verifique as configurações de integração". Nunca copie códigos, IDs ou seleções de exemplo como valores do pedido atual. Se faltar o código de relacionamento, peça somente esse dado; o UUID do erro não é automaticamente o código a cadastrar.
 Antes de recomendar mudar uma configuração, confirme que a forma de operação desejada pelo cliente coincide com a referência. Encontrar o mesmo valor de campo ou o mesmo sintoma não comprova sozinho que a alteração é apropriada.
 Se NÃO houver fonte aplicável, ainda ajude a investigar: interprete o relato, apresente uma hipótese explicitamente como hipótese, proponha uma verificação segura e peça a evidência mínima necessária. Não repita a frase genérica de que não encontrou procedimento.
 O técnico decide o que executa. Nunca trate hipótese como fato confirmado, nem diga que um chamado foi criado.

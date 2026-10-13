@@ -1,5 +1,19 @@
 # Piloto de notas internas Movidesk — 09/10/2026
 
+## Precisão das orientações — 13/10/2026
+
+O caso 131661 passou a ter uma resposta revisada para a mensagem **Forma de pagamento não integrada**: Cadastros → Formas de Pagamento → selecionar a modalidade correspondente → Ctrl+R → Relação - Site → cadastrar o Código de fora da integração → salvar e reprocessar. A bandeira não determina crédito/débito, e o UUID de diagnóstico não deve ser copiado como código de pagamento. Quando o código não está disponível, a resposta pede o detalhe específico do sincronizador.
+
+Essa resposta usa texto revisado em `scripts/mapped_replies.py`, preservando os passos sem depender de uma síntese do Gemini. Foi conferida nos manuais locais e na orientação de Lucas. O chamado 128116 foi consultado na API em 13/10/2026: estava encerrado e registrava relação da forma de pagamento com integração bem-sucedida. A nota inclui o link desse histórico e a resolução registrada; isso não afirma que o pedido atual já foi resolvido.
+
+A regra não se aplica a relatos genéricos de pedido ausente, ao cenário ANY_PAGAMENTO_STATUS (pedido integrado sem forma de pagamento), nem a mensagens informando tentativa sem sucesso. Esses casos seguem a investigação existente. Para respostas não mapeadas, o prompt exige preservar tela, atalho e campos efetivamente documentados, sem inventar valores.
+
+As fontes históricas e artigos da base agora conservam seus links na nota. Chamados ainda ativos recebem aviso explícito de que não comprovam solução. Os números e resoluções históricas ficam fora do texto sugerido ao cliente.
+
+Dois prints originais foram incluídos na imagem Docker, em `scripts/static/reply-media`, com legendas e origem registrada. A nota inclui links absolutos a esses prints quando `CORTEX_PUBLIC_URL` está configurada. **É necessário login no Cortex para abri-los**; não são imagens embutidas na resposta ao cliente. Sem URL pública configurada ou sem arquivo, a nota informa a pendência em vez de inventar um link.
+
+Validação antes do piloto de 14/10: implantar a imagem atualizada preservando os volumes; abrir os dois links com login; gerar uma prévia com o erro do 131661; confirmar Ctrl+R, Código de fora e fonte 128116; testar um relato genérico e uma tentativa que não resolveu. A publicação antiga do 131661 é deduplicada e não será substituída automaticamente ao atualizar o código.
+
 ## Fluxo implementado
 
 Movidesk envia POST → receptor autentica e persiste → worker consulta o ticket individual atualizado → identifica a última mensagem pública do cliente → lê contexto e até dois prints PNG/JPEG/WebP anexados à ação → pesquisa primeiro os chamados da mesma empresa → usa um histórico encerrado e bem documentado quando aplicável, ou cai para a base geral → Gemini prepara a resposta → worker relê o chamado → adiciona uma ação **interna (`type: 1`) no mesmo ticket**.

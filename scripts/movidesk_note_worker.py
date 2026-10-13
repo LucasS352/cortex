@@ -16,6 +16,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 import httpx
+import mapped_replies
 
 from config import MOVIDESK_BASE_URL, MOVIDESK_TOKEN
 from movidesk_webhook import _connect
@@ -299,7 +300,10 @@ def generate_note(ticket, settings, api):
                 conn, tenant, org_id, query, exclude_ticket_id=ticket.get('id'))
         else:
             import knowledge_access
-            sources = knowledge_access.search(conn, query, top_k=5)
+            reviewed = mapped_replies.match(query)
+            sources = [reviewed] if reviewed else knowledge_access.search(conn, query, top_k=5)
+            if reviewed:
+                evidence_scope = 'reviewed_procedure'
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in messages[:-1])
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
            'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
@@ -309,11 +313,23 @@ def generate_note(ticket, settings, api):
     reference = sources[:1] if sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
     similar = [{'ticket': case.get('external_id'), 'title': case.get('subject'),
                 'status': case.get('status') or case.get('base_status'),
-                'active': bool(case.get('is_active'))} for case in cases[:5]]
+                'active': bool(case.get('is_active')),
+                'resolution': case.get('solution_statement') if not case.get('is_active') and
+                    not case.get('hard_block_reason') and case.get('quality_tier') in ('GOLD', 'SILVER') else None}
+               for case in cases[:5]]
+    images, media_notices = [], []
+    if reference:
+        images, media_notices = mapped_replies.note_images(reference[0])
+        existing_ids = {str(case['ticket']) for case in similar} | {str(ticket['id'])}
+        similar.extend(case for case in reference[0].get('resolved_examples', [])
+                       if str(case['ticket']) not in existing_ids)
     return {'reply': reply,
-            'sources': [{'ticket': s.get('source_external_id'), 'title': s.get('title')} for s in reference],
+            'sources': [{'ticket': s.get('source_external_id') if s.get('source_type') in
+                         ('VALIDATED_TICKET', 'PROBABLE_TICKET') else None,
+                         'title': s.get('title'), 'url': s.get('source_url') or (s.get('metadata') or {}).get('source_url'),
+                         'provenance': s.get('provenance')} for s in reference],
             'similar_tickets': similar, 'evidence_scope': evidence_scope,
-            'mode': meta.get('mode'), 'attachments': attachment_notices}
+            'mode': meta.get('mode'), 'attachments': attachment_notices + media_notices, 'images': images}
 
 
 def render_note(result, marker):
@@ -327,7 +343,13 @@ def render_note(result, marker):
         label = str(source.get('title') or 'Referência')
         if source.get('ticket'):
             label += ' — chamado ' + str(source['ticket'])
-        lines.append('<p>Fonte: ' + html.escape(label) + '</p>')
+        url = mapped_replies.safe_url(source.get('url'))
+        if str(source.get('ticket') or '').isdigit():
+            url = mapped_replies.safe_url(TICKET_UI_BASE + '/' + str(source['ticket']))
+        link = '<a href="' + html.escape(url, quote=True) + '">' + html.escape(label) + '</a>' if url else html.escape(label)
+        lines.append('<p>Fonte: ' + link + '</p>')
+        if source.get('provenance'):
+            lines.append('<p>' + html.escape(source['provenance']) + '</p>')
     similar = result.get('similar_tickets') or []
     if similar:
         lines.append('<p><strong>Observação interna — Tickets semelhantes:</strong></p><ul>')
@@ -341,6 +363,18 @@ def render_note(result, marker):
                              '">' + html.escape(label) + '</a></li>')
             else:
                 lines.append('<li>' + html.escape(label) + '</li>')
+            if case.get('active'):
+                lines.append('<li>Em andamento: indica recorrência; não comprova solução.</li>')
+            elif case.get('resolution'):
+                lines.append('<li>Resolução registrada: ' + html.escape(plain(case['resolution'])[:700]) + '</li>')
+        lines.append('</ul>')
+    if result.get('images'):
+        lines.append('<p><strong>Imagens do procedimento — abrir no Cortex com login:</strong></p><ul>')
+        for item in result['images']:
+            url = mapped_replies.safe_url(item.get('url'))
+            if url:
+                lines.append('<li><a href="' + html.escape(url, quote=True) + '">' +
+                             html.escape(item.get('caption') or 'Abrir imagem') + '</a></li>')
         lines.append('</ul>')
     for notice in result.get('attachments', []):
         lines.append('<p>' + html.escape(notice) + '</p>')
