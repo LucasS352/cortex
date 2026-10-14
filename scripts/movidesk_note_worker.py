@@ -311,6 +311,30 @@ def persist_ticket(ticket):
                    (ticket['id'], time.time(), json.dumps(ticket, ensure_ascii=False)))
 
 
+def persist_operational_ticket(ticket):
+    """Apply one fresh Movidesk ticket to the operational PostgreSQL model.
+
+    This is the lightweight webhook path. It deliberately does not create a
+    full snapshot run and does not promote the ticket to approved knowledge.
+    """
+    import psycopg
+    from psycopg.rows import dict_row
+    from config import POSTGRES_DSN
+    import sync_current_tickets
+    from tech_evidence import ensure_single_tenant
+
+    try:
+        with psycopg.connect(POSTGRES_DSN, row_factory=dict_row, connect_timeout=5,
+                             options='-c statement_timeout=15000 -c lock_timeout=5000') as conn:
+            tenant = ensure_single_tenant(conn)
+            if not sync_current_tickets.upsert_ticket(conn, tenant, ticket):
+                raise RetryJob('Movidesk retornou um identificador inválido')
+    except RetryJob:
+        raise
+    except Exception as exc:
+        raise RetryJob('Falha temporária ao atualizar o chamado na base operacional') from exc
+
+
 def generate_note(ticket, settings, api):
     """Use the same grounded assistant, with current issue and company context."""
     import base64
@@ -579,7 +603,7 @@ def manual_pull_event(event):
         return False
 
 
-def process(event, settings, api, generator=generate_note):
+def process(event, settings, api, generator=generate_note, sync_only_reason=''):
     ticket = api.ticket(event['ticket_id'])
     payload = json.loads(event['payload_json'])
     expected = max((int(a.get('Id') or 0) for a in payload.get('Actions', []) if isinstance(a, dict)), default=0)
@@ -594,6 +618,13 @@ def process(event, settings, api, generator=generate_note):
         if current and re.sub(r'\s+', ' ', plain(announced['Description'])) != re.sub(r'\s+', ' ', plain(current.get('description'))):
             raise RetryJob('Texto da ação na API difere do webhook; aguardando consistência')
     persist_ticket(ticket)
+    # Make the exact ticket visible to dashboards and retrieval before the AI
+    # reasons about it. A database outage retries the event instead of allowing
+    # a response based on an older nightly snapshot.
+    persist_operational_ticket(ticket)
+    if sync_only_reason:
+        finish(event, 'skipped', sync_only_reason)
+        return
     ok, reason = eligible(ticket, settings)
     if not ok:
         finish(event, 'skipped', reason)
@@ -665,6 +696,7 @@ def process(event, settings, api, generator=generate_note):
         raise RetryJob('PATCH aceito; aguardando a nota aparecer na consulta do Movidesk')
     outbox_state(key, 'sent')
     persist_ticket(confirmed)
+    persist_operational_ticket(confirmed)
     finish(event, 'completed', 'nota_interna_publicada')
 
 
@@ -680,8 +712,10 @@ def run_once(settings, api, generator=generate_note):
         return False
     manual = manual_pull_event(event)
     if ceiling.runtime_control and ceiling.mode == 'internal_note' and not manual and not settings.automatic_enabled:
-        # Manual-only operation must not spend Gemini quota on unsolicited events.
-        finish(event, 'skipped', 'automatico_desativado')
+        # The AI toggle controls note generation, not operational freshness.
+        # Consume the webhook and upsert this exact ticket without spending
+        # Gemini quota or publishing anything.
+        process(event, settings, api, generator, sync_only_reason='automatico_desativado')
         return True
     if manual:
         if not settings.manual_internal_note:

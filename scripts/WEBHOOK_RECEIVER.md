@@ -2,7 +2,7 @@
 
 ## Estado atual
 
-**Atualização 09/10/2026:** o receptor continua somente recebendo/persistindo. O serviço separado `movidesk_note_worker.py` consome a fila, consulta o chamado completo e pode publicar uma sugestão como ação interna. Configuração, deduplicação, ensaio e limites estão em [Piloto de notas internas](../docs/PILOTO_NOTAS_INTERNAS.md). A publicação real na conta ainda deve ser validada no chamado do piloto.
+**Atualização 14/10/2026:** o receptor continua somente recebendo e enfileirando, para responder rapidamente ao Movidesk. O serviço separado `movidesk_note_worker.py` consome a fila, consulta o chamado completo e atualiza apenas esse ticket nas tabelas operacionais antes de qualquer análise. Essa sincronização incremental continua mesmo quando a geração automática de notas está pausada. A carga completa fica agendada para 00:00 no horário de Brasília e atua como reconciliação diária. O worker também pode publicar uma sugestão como ação interna. Configuração, deduplicação, ensaio e limites estão em [Piloto de notas internas](../docs/PILOTO_NOTAS_INTERNAS.md).
 
 O serviço `movidesk_webhook:app` escuta somente em `127.0.0.1:8003` e recebe `POST /webhooks/movidesk/tickets/{secret}`. O segredo de URL é gerado e mantido em `.env` como `MOVIDESK_WEBHOOK_SECRET`. O serviço valida o segredo, limita o corpo a 2 MiB, exige JSON com `Id` numérico, deduplica pacotes iguais em `scripts/output/movidesk_webhooks.sqlite3` e responde `Ok` rapidamente. Não consulta a API, não gera resposta de IA e não escreve no Movidesk.
 

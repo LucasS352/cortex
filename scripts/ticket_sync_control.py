@@ -25,7 +25,9 @@ from config import POSTGRES_DSN
 OUTPUT = Path(__file__).parent / "output"
 STATE_FILE = OUTPUT / "ticket_sync_schedule.json"
 LOCAL_ZONE = ZoneInfo("America/Sao_Paulo")
-DEFAULT = {"enabled": False, "time": "06:00", "last_auto_date": None}
+SCHEDULE_VERSION = 2
+DEFAULT = {"enabled": True, "time": "00:00", "last_auto_date": None,
+           "version": SCHEDULE_VERSION}
 _lock = threading.RLock()
 _process: subprocess.Popen | None = None
 _scheduler: threading.Thread | None = None
@@ -41,7 +43,16 @@ class SyncBusy(Exception):
 def _read_state() -> dict:
     try:
         data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        return {**DEFAULT, **data} if isinstance(data, dict) else dict(DEFAULT)
+        if not isinstance(data, dict):
+            return dict(DEFAULT)
+        state = {**DEFAULT, **data}
+        # Version 1 shipped with the original 06:00 default. Move existing
+        # installations to the requested midnight full refresh once, while
+        # preserving the last-run marker. Later user choices are left intact.
+        if int(data.get("version") or 1) < SCHEDULE_VERSION:
+            state.update(enabled=True, time="00:00", version=SCHEDULE_VERSION)
+            _write_state(state)
+        return state
     except (OSError, ValueError):
         return dict(DEFAULT)
 

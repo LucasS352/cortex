@@ -52,7 +52,7 @@ async function loadSyncStatus(){
     $('sync-run-detail').textContent=`${phase} · ${amount} · ${elapsed} min. ${stalled?'Aguardando resposta do Movidesk.':progress.retrying?'Repetindo consulta após falha temporária.':'O painel mantém a última carga concluída até terminar.'}`;
   }else $('sync-run-detail').textContent=run.status==='completed'?`${syncDate(run.completed_at)} · ${fmt((run.new_count||0)+(run.older_open_count||0))} chamados consultados`:(data.last_error||'Confira a conexão e tente novamente.');
   const plan=data.schedule||{};
-  if(!$('sync-schedule').open){$('sync-time').value=plan.time||'06:00';$('sync-enabled').checked=Boolean(plan.enabled);}
+  if(!$('sync-schedule').open){$('sync-time').value=plan.time||'00:00';$('sync-enabled').checked=Boolean(plan.enabled);}
   $('sync-schedule-summary').textContent=plan.enabled?`Automático · ${plan.time} (Brasília)`:'Agendar atualização';
   if(finishedSinceLastCheck||(lastSyncRunId!==null&&run.id!==lastSyncRunId&&run.status==='completed'&&!isRunning))await refresh();
   lastSyncRunId=run.id??null;

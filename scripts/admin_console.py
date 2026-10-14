@@ -36,8 +36,6 @@ import movidesk_webhook
 import movidesk_note_worker
 import triage_router
 import knowledge_access
-import sync_current_tickets
-from tech_evidence import ensure_single_tenant
 from typing import Literal
 from datetime import date
 
@@ -306,11 +304,10 @@ def webhook_receipts(request: Request):
 
 def persist_live_ticket(ticket):
     """Update one ticket and its company links without rebuilding the snapshot."""
-    with psycopg.connect(POSTGRES_DSN, row_factory=dict_row, connect_timeout=5,
-                         options='-c statement_timeout=15000 -c lock_timeout=5000') as conn:
-        tenant = ensure_single_tenant(conn)
-        if not sync_current_tickets.upsert_ticket(conn, tenant, ticket):
-            raise ValueError('Movidesk retornou um identificador inválido')
+    try:
+        movidesk_note_worker.persist_operational_ticket(ticket)
+    except movidesk_note_worker.RetryJob as exc:
+        raise ValueError(str(exc)) from exc
 
 
 @router.post('/api/admin/webhooks/pull/{ticket_id}')

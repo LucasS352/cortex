@@ -48,6 +48,7 @@ class WorkerTests(unittest.TestCase):
         self.secret_patch = patch.object(receiver, 'MOVIDESK_WEBHOOK_SECRET', 'x' * 40)
         self.db_patch.start()
         self.secret_patch.start()
+        self.operational_sync = patch.object(worker, 'persist_operational_ticket').start()
         self.client = TestClient(receiver.app)
         self.settings = worker.Settings('internal_note', 'bot', frozenset({'464'}),
                                         requester_emails=frozenset({'lucas.teste@alternativa.com.br'}))
@@ -55,8 +56,7 @@ class WorkerTests(unittest.TestCase):
         self.generate = Mock(return_value={'reply': 'Confira o campo com o técnico antes de alterar.', 'sources': []})
 
     def tearDown(self):
-        self.db_patch.stop()
-        self.secret_patch.stop()
+        patch.stopall()
         self.tmp.cleanup()
 
     def enqueue(self, **fields):
@@ -106,6 +106,15 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(len(self.api.writes), 1)
         self.generate.assert_called_once()
         self.assertIn(worker.PREFIX, self.api.writes[0][1])
+        self.assertGreaterEqual(self.operational_sync.call_count, 1)
+
+    def test_operational_sync_failure_retries_before_generation(self):
+        self.enqueue(Actions=[{'Id': 1}])
+        self.operational_sync.side_effect = worker.RetryJob('banco indisponível')
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_not_called()
+        self.assertEqual(self.api.writes, [])
+        self.assertEqual(self.states(), ['retry'])
 
     def test_runtime_control_requires_selected_company_active_pilot_and_private_toggle(self):
         state_file = Path(self.tmp.name) / 'agent-state.json'
@@ -169,6 +178,7 @@ class WorkerTests(unittest.TestCase):
             worker.run_once(controlled, self.api, self.generate)
             self.generate.assert_not_called()
             self.assertEqual(self.api.writes, [])
+            self.operational_sync.assert_called_once()
             self.assertEqual(receiver.receipt_summary()['recent'][0]['outcome'], 'automatico_desativado')
 
             self.api.data['actions'].append({'id': 3, 'type': 2, 'description': 'Mensagem do teste manual.',
