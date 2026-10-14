@@ -92,6 +92,7 @@ from tech_evidence import revision as evidence_revision
 from master_telemetry import router as master_telemetry_router
 from technician_workbench import router as technician_workbench_router
 from admin_console import router as admin_console_router, get_state as get_agent_admin_state
+from knowledge_training_api import router as knowledge_training_router
 import web_auth
 import ticket_sync_control
 import agent_operations
@@ -134,7 +135,13 @@ app.include_router(tech_desk_router)
 app.include_router(master_telemetry_router)
 app.include_router(technician_workbench_router)
 app.include_router(admin_console_router)
+app.include_router(knowledge_training_router)
 app.mount("/tech-assets", StaticFiles(directory=str(Path(__file__).parent / "static")), name="tech-assets")
+
+
+@app.get("/treinamento", response_class=HTMLResponse, include_in_schema=False)
+def get_training_page():
+    return HTMLResponse((Path(__file__).parent / "static" / "treinamento.html").read_text(encoding="utf-8"))
 
 REVIEWED_REPLY_MEDIA = Path(__file__).parent / "static" / "reply-media"
 

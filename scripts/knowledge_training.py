@@ -1,0 +1,731 @@
+"""Ambiente de Treinamento do CORTEX: ticket -> candidato -> curadoria -> conhecimento canônico.
+
+Regras de segurança (não negociáveis):
+  1. Nenhum ticket vira conhecimento oficial sem decisão humana registrada em auditoria.
+  2. Similaridade textual não basta: módulo, versão do Master, UF, integração e regime
+     tributário são comparados antes de tratar duas soluções como equivalentes.
+  3. O histórico Movidesk continua separado. Só versões publicadas são espelhadas em
+     ticket_knowledge_nodes (source_id 'canon:<item>'), onde o RAG atual já busca.
+"""
+from __future__ import annotations
+
+import json
+import re
+import unicodedata
+import urllib.request
+from pathlib import Path
+from threading import RLock
+
+import psycopg
+from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
+
+from config import POSTGRES_DSN, GEMINI_API_KEY, GEMINI_EMBEDDING_MODEL, GEMINI_EMBEDDING_DIMENSIONS, PROJECT_ROOT
+import knowledge_curation as taxonomy
+
+MIGRATION = Path(PROJECT_ROOT) / 'infra' / '006_canonical_knowledge.sql'
+SUGGESTION_THRESHOLD = 55
+_schema_ready = False
+_schema_lock = RLock()
+
+
+# ───────────────────────────── infraestrutura ─────────────────────────────
+
+def connect():
+    return psycopg.connect(POSTGRES_DSN, row_factory=dict_row, connect_timeout=5,
+                           options='-c statement_timeout=20000 -c lock_timeout=5000')
+
+
+def ensure_schema():
+    """Aplica a migration 006 (idempotente) — volumes antigos não rodam initdb de novo."""
+    global _schema_ready
+    with _schema_lock:
+        if _schema_ready:
+            return
+        with connect() as conn:
+            conn.execute(MIGRATION.read_text(encoding='utf-8'))
+        _schema_ready = True
+
+
+def audit(conn, entity, entity_id, action, actor, reason=None, before=None, after=None):
+    dump = lambda v: Jsonb(json.loads(json.dumps(v, default=str))) if v is not None else None
+    conn.execute('''INSERT INTO cortex_kb.audit(entity,entity_id,action,actor,reason,before,after)
+        VALUES (%s,%s,%s,%s,%s,%s,%s)''', (entity, entity_id, action, actor, reason, dump(before), dump(after)))
+
+
+def norm(value):
+    text = unicodedata.normalize('NFKD', str(value or '').casefold())
+    return re.sub(r'\s+', ' ', ''.join(c for c in text if not unicodedata.combining(c))).strip()
+
+
+# ───────────────────────────── higienização (LGPD) ─────────────────────────────
+
+_SANITIZERS = (
+    (re.compile(r'(?i)\b(senha|password|passwd|token|secret|api[_ -]?key)\b\s*[:=]\s*\S+'), r'\1: [credencial removida]'),
+    (re.compile(r'(?i)(://)[^/\s:@]+:[^/\s@]+@'), r'\1[credencial]@'),
+    (re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+'), '[email]'),
+    (re.compile(r'\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b'), '[cnpj]'),
+    (re.compile(r'\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b'), '[cpf]'),
+    (re.compile(r'(?<!\d)(?:\+?55\s?)?\(?\d{2}\)?\s?9?\d{4}-?\d{4}(?!\d)'), '[telefone]'),
+)
+
+
+def sanitize(text):
+    text = str(text or '')
+    for pattern, replacement in _SANITIZERS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
+# ───────────────────────────── 1. o ticket é útil? ─────────────────────────────
+
+_WEAK = re.compile(r'reinici|sem retorno|nao respondeu|nao retornou|inatividade|encerrad[oa] automatic|'
+                   r'duplicad|resolveu sozinh|normalizou sozinh|voltou a funcionar sozinh|abrir outro (ticket|chamado)')
+_CONFIRM = re.compile(r'funcionou|deu certo|resolvid|resolveu|ok,? obrigad|agora (foi|esta|ta) (ok|certo|funcionando)|perfeito')
+_STEPS = re.compile(r'(^|\n)\s*(\d+[.)-]|passo|- )|acess(e|ar) o menu|configura(c|r)|cadastr|marque|desmarque|altere|parametr|>')
+_ERROR = re.compile(r'rejei(c|ç)|erro\s*\d+|codigo\s*\d+|exception|falha (na|ao)|\b[a-z]*error\b')
+_AGENT_PROFILES = {1, 3}
+
+
+def is_agent(action):
+    created_by = action.get('createdBy') or {}
+    return created_by.get('profileType') in _AGENT_PROFILES or action.get('type') == 1
+
+
+def usefulness(ticket, actions=()):
+    """Pontua 0-100 se um ticket resolvido tende a gerar conhecimento reutilizável.
+
+    É triagem, não validação: mesmo 100 pontos só gera uma *sugestão* para revisão.
+    """
+    signals, score = [], 0
+
+    def add(weight, label):
+        nonlocal score
+        score += weight
+        signals.append({'weight': weight, 'label': label})
+
+    if ticket.get('hard_block_reason'):
+        return 0, [{'weight': -100, 'label': f"Bloqueado pela refinaria: {ticket['hard_block_reason']}"}], False
+    if (ticket.get('base_status') or '') not in ('Resolved', 'Closed'):
+        add(-40, 'Ticket ainda não resolvido')
+    else:
+        add(15, 'Ticket resolvido/fechado')
+    solution = norm(ticket.get('solution_statement'))
+    if len(solution) >= 80:
+        add(20, 'Solução registrada com detalhe')
+    elif len(solution) < 30:
+        add(-15, 'Sem solução registrada')
+    tier = (ticket.get('quality_tier') or '').upper()
+    if tier == 'GOLD':
+        add(15, 'Classificado como GOLD pela refinaria')
+    elif tier == 'SILVER':
+        add(8, 'Classificado como SILVER pela refinaria')
+    evidence = (ticket.get('evidence_level') or '').upper()
+    if evidence in ('STRONG', 'CONFIRMED', 'HIGH'):
+        add(15, f'Evidência de resolução {evidence}')
+    elif evidence == 'MEDIUM':
+        add(8, 'Evidência de resolução média')
+
+    texts = [norm(a.get('description')) for a in actions]
+    full = ' '.join([norm(ticket.get('subject')), norm(ticket.get('problem_statement')), solution, *texts])
+    if ticket.get('detected_error_codes') or _ERROR.search(full):
+        add(10, 'Mensagem/código de erro identificável')
+    agent_texts = [t for a, t in zip(actions, texts) if is_agent(a)]
+    if _STEPS.search(solution) or any(_STEPS.search(t) for t in agent_texts):
+        add(10, 'Técnico descreveu procedimento')
+    last_agent = max((i for i, a in enumerate(actions) if is_agent(a)), default=-1)
+    if any(_CONFIRM.search(t) for a, t in list(zip(actions, texts))[last_agent + 1:] if not is_agent(a)):
+        add(15, 'Cliente confirmou a solução')
+    if _WEAK.search(solution) or (agent_texts and _WEAK.search(agent_texts[-1])):
+        add(-25, 'Resolução fraca (reinício, sem retorno, duplicado ou inatividade)')
+    if (ticket.get('noise_score') or 0) > 50:
+        add(-10, 'Muito ruído na conversa')
+
+    score = max(0, min(100, score))
+    return score, signals, score >= SUGGESTION_THRESHOLD
+
+
+# ───────────────────────────── 2. extração estruturada ─────────────────────────────
+
+EXTRACTION_FIELDS = ('title', 'symptom', 'error_messages', 'root_cause', 'procedure', 'prerequisites',
+                     'expected_result', 'applicability', 'module_hint', 'evidence', 'confidence')
+
+PROMPT = """Você é o curador técnico da Alternativa Sistemas (ERP Master).
+Transforme o atendimento abaixo em um PROCEDIMENTO TÉCNICO REUTILIZÁVEL.
+
+Regras obrigatórias:
+- Use SOMENTE o que está no atendimento. Se algo não estiver explícito, use null ou lista vazia.
+- Não invente versões, menus, telas ou causas. Não inclua nomes, empresas, CNPJ, e-mails ou telefones.
+- "procedure" deve ser passo a passo numerado, genérico para qualquer cliente.
+- "evidence" deve conter TRECHOS LITERAIS copiados do atendimento que comprovem causa, procedimento e confirmação.
+- Se o atendimento não mostra uma solução real, devolva confidence "LOW" e explique em root_cause.
+
+Responda APENAS com JSON válido neste formato:
+{{"title": "...", "symptom": "...", "error_messages": ["..."], "root_cause": "...",
+ "procedure": "1. ...\\n2. ...", "prerequisites": null, "expected_result": "...",
+ "applicability": {{"master_version": null, "ufs": [], "integrations": [], "tax_regime": null}},
+ "module_hint": "fiscal|products|integrations|sales|finance|logistics|purchases|registration|production|infrastructure|unclassified",
+ "evidence": {{"root_cause_quote": null, "procedure_quote": null, "confirmation_quote": null}},
+ "confidence": "HIGH|MEDIUM|LOW"}}
+
+ATENDIMENTO #{ticket_id}
+{ticket_text}
+"""
+
+
+def ticket_text(ticket, actions=(), limit=14000):
+    labels = lambda a: 'Nota interna' if a.get('type') == 1 else ('Técnico' if is_agent(a) else 'Cliente')
+    parts = [f"Assunto: {ticket.get('subject') or ''}",
+             f"Serviço: {ticket.get('service_full') or ''}",
+             f"Problema (refinaria): {ticket.get('problem_statement') or ''}",
+             f"Solução registrada: {ticket.get('solution_statement') or ''}"]
+    parts += [f"[{labels(a)}] {str(a.get('description') or '')[:1500]}" for a in list(actions)[-40:]
+              if (a.get('description') or '').strip()]
+    return sanitize('\n'.join(parts))[:limit]
+
+
+def _as_list(value):
+    if isinstance(value, str):
+        value = [value]
+    return [str(v).strip()[:300] for v in (value or []) if str(v or '').strip()][:15]
+
+
+def _as_text(value, size=6000):
+    return str(value).strip()[:size] if value not in (None, '', 'null') else None
+
+
+def parse_extraction(raw):
+    """Normaliza a saída do modelo; tolera cercas ```json e texto em volta."""
+    if isinstance(raw, dict):
+        data = raw
+    else:
+        match = re.search(r'\{.*\}', str(raw or ''), re.S)
+        if not match:
+            raise ValueError('O modelo não devolveu JSON.')
+        data = json.loads(match.group(0))
+    app = data.get('applicability') or {}
+    ev = data.get('evidence') or {}
+    result = {
+        'title': _as_text(data.get('title'), 200),
+        'symptom': _as_text(data.get('symptom')),
+        'error_messages': _as_list(data.get('error_messages')),
+        'root_cause': _as_text(data.get('root_cause')),
+        'procedure': _as_text(data.get('procedure'), 10000),
+        'prerequisites': _as_text(data.get('prerequisites')),
+        'expected_result': _as_text(data.get('expected_result')),
+        'applicability': {'master_version': _as_text(app.get('master_version'), 40),
+                          'ufs': [u.upper()[:2] for u in _as_list(app.get('ufs'))],
+                          'integrations': [norm(i) for i in _as_list(app.get('integrations'))],
+                          'tax_regime': _as_text(app.get('tax_regime'), 60)},
+        'module_hint': data.get('module_hint') if data.get('module_hint') in taxonomy.MODULE_NAMES else 'unclassified',
+        'evidence': {k: _as_text(ev.get(k), 600) for k in ('root_cause_quote', 'procedure_quote', 'confirmation_quote')},
+        'confidence': data.get('confidence') if data.get('confidence') in ('HIGH', 'MEDIUM', 'LOW') else 'LOW',
+    }
+    for key in ('title', 'symptom', 'procedure'):
+        if not result[key]:
+            raise ValueError(f'Extração sem o campo obrigatório "{key}".')
+    return {k: sanitize(v) if isinstance(v, str) else v for k, v in result.items()}
+
+
+def heuristic_extraction(ticket):
+    """Fallback quando o modelo está indisponível: só reorganiza o que a refinaria já tem."""
+    return parse_extraction({
+        'title': ticket.get('subject'), 'symptom': ticket.get('problem_statement') or ticket.get('subject'),
+        'error_messages': ticket.get('detected_error_codes') or [],
+        'root_cause': None, 'procedure': ticket.get('solution_statement') or '(sem procedimento registrado)',
+        'module_hint': taxonomy.classify(ticket.get('subject'), ticket.get('detected_modules') or [], ticket.get('service_full')),
+        'confidence': 'LOW'})
+
+
+def quote_found(quote, text):
+    """Anti-alucinação: o trecho citado precisa existir (≥80% dos termos) no atendimento."""
+    words = [w for w in norm(quote).split() if len(w) > 3]
+    if len(words) < 3:
+        return False
+    hay = norm(text)
+    return sum(w in hay for w in words) / len(words) >= 0.8
+
+
+def quality_checks(extraction, source_text):
+    ev, app = extraction['evidence'], extraction['applicability']
+    checks = [
+        ('error', 'Mensagem de erro identificada', bool(extraction['error_messages'])),
+        ('cause', 'Causa raiz descrita', bool(extraction['root_cause'])),
+        ('procedure_evidence', 'Procedimento comprovado por trecho do ticket', quote_found(ev.get('procedure_quote'), source_text)),
+        ('confirmation', 'Solução confirmada no histórico', quote_found(ev.get('confirmation_quote'), source_text)),
+        ('version', 'Versão do Master identificada', bool(app.get('master_version'))),
+        ('module', 'Módulo classificado', extraction['module_hint'] != 'unclassified'),
+        ('confidence', 'Confiança do extrator alta', extraction['confidence'] == 'HIGH'),
+    ]
+    return [{'key': k, 'label': label, 'ok': ok} for k, label, ok in checks]
+
+
+def extract(ticket, actions=()):
+    import llm_client
+    text = ticket_text(ticket, actions)
+    answer = llm_client.generate(PROMPT.format(ticket_id=ticket.get('external_id'), ticket_text=text),
+                                 temperature=0.1, max_tokens=4096)
+    if answer['ok']:
+        try:
+            return parse_extraction(answer['text']), text, 'gemini'
+        except (ValueError, json.JSONDecodeError):
+            pass
+    return heuristic_extraction(ticket), text, 'heuristic'
+
+
+# ───────────────────────────── 3. contexto, duplicidade e conflito ─────────────────────────────
+
+def tokens(text):
+    return {w for w in norm(text).split() if len(w) > 3}
+
+
+def jaccard(a, b):
+    a, b = tokens(a), tokens(b)
+    return len(a & b) / len(a | b) if a and b else 0.0
+
+
+def context_divergence(new_app, old_app):
+    """Dimensões em que os dois procedimentos se aplicam a cenários diferentes."""
+    old_app = old_app or {}
+    reasons = []
+    for key, label in (('integrations', 'integração'), ('ufs', 'UF')):
+        a, b = set(new_app.get(key) or []), set(old_app.get(key) or [])
+        if a and b and not a & b:
+            reasons.append(f"{label} diferente ({', '.join(sorted(a))} × {', '.join(sorted(b))})")
+    for key, label in (('master_version', 'versão do Master'), ('tax_regime', 'regime tributário')):
+        a, b = norm(new_app.get(key)), norm(old_app.get(key) or old_app.get(key + '_min'))
+        if a and b and a != b:
+            reasons.append(f'{label} diferente ({a} × {b})')
+    return reasons
+
+
+def compare(extraction, module_key, existing):
+    """Classifica a relação entre o candidato e um procedimento publicado.
+
+    duplicate          -> mesmo procedimento: anexar o ticket como nova evidência.
+    revision           -> mesmo problema, procedimento complementar: propor nova versão.
+    conflict           -> mesmo problema, procedimento divergente no mesmo contexto: revisão humana.
+    different_context  -> parecido, mas outro módulo/versão/UF/integração: pode virar variante.
+    """
+    if existing['module_key'] != module_key and 'unclassified' not in (existing['module_key'], module_key):
+        return 'different_context', ['módulo diferente']
+    divergence = context_divergence(extraction['applicability'], existing.get('applicability'))
+    if divergence:
+        return 'different_context', divergence
+    same_error = bool({norm(e) for e in extraction['error_messages']} & {norm(e) for e in existing.get('error_messages') or []})
+    problem_sim = max(jaccard(extraction['symptom'], existing['symptom']), 1.0 if same_error else 0.0)
+    procedure_sim = jaccard(extraction['procedure'], existing['procedure'])
+    if procedure_sim >= 0.55:
+        return 'duplicate', [f'procedimento {procedure_sim:.0%} equivalente']
+    if problem_sim < 0.25:
+        return 'unrelated', []
+    if procedure_sim >= 0.25:
+        return 'revision', [f'mesmo problema, procedimento {procedure_sim:.0%} semelhante']
+    return 'conflict', ['mesmo problema com procedimento divergente' + (' (mesma mensagem de erro)' if same_error else '')]
+
+
+def find_related(conn, extraction, module_key, exclude_item=None):
+    query = ' '.join([extraction['title'] or '', extraction['symptom'] or '', *extraction['error_messages']])[:1000]
+    rows = conn.execute('''
+        SELECT i.id AS item_id, i.title, i.module_key, i.subtopic_key, v.id AS version_id, v.version_no,
+               v.symptom, v.procedure, v.error_messages, v.applicability,
+               ts_rank(to_tsvector('portuguese', v.symptom||' '||v.root_cause||' '||v.procedure||' '||array_to_string(v.error_messages,' ')),
+                       websearch_to_tsquery('portuguese', %(q)s)) AS rank
+        FROM cortex_kb.items i JOIN cortex_kb.versions v ON v.id = i.current_version_id
+        WHERE i.status = 'active' AND (%(ex)s::bigint IS NULL OR i.id <> %(ex)s)
+          AND (to_tsvector('portuguese', v.symptom||' '||v.root_cause||' '||v.procedure||' '||array_to_string(v.error_messages,' '))
+               @@ websearch_to_tsquery('portuguese', %(q)s) OR similarity(i.title, %(t)s) > 0.3)
+        ORDER BY rank DESC LIMIT 8''', {'q': re.sub(r'[^\w\s]', ' ', query), 't': extraction['title'], 'ex': exclude_item}).fetchall()
+    related = []
+    for row in rows:
+        relation, reasons = compare(extraction, module_key, row)
+        if relation != 'unrelated':
+            related.append({'item_id': row['item_id'], 'title': row['title'], 'version_no': row['version_no'],
+                            'module_key': row['module_key'], 'relation': relation, 'reasons': reasons})
+    order = {'conflict': 0, 'duplicate': 1, 'revision': 2, 'different_context': 3}
+    return sorted(related, key=lambda r: order[r['relation']])
+
+
+# ───────────────────────────── carga do ticket ─────────────────────────────
+
+def load_ticket(conn, external_id):
+    from tech_evidence import ensure_single_tenant
+    tenant = ensure_single_tenant(conn)
+    ticket = conn.execute('''SELECT * FROM refined_tickets WHERE tenant_id=%s AND external_id=%s
+        ORDER BY refined_at DESC NULLS LAST LIMIT 1''', (tenant, external_id)).fetchone()
+    if not ticket:
+        raise LookupError(f'Ticket #{external_id} não encontrado no histórico sincronizado.')
+    raw = conn.execute('''SELECT payload FROM raw_tickets WHERE tenant_id=%s AND external_id=%s
+        ORDER BY ingested_at DESC LIMIT 1''', (tenant, external_id)).fetchone()
+    actions = ((raw['payload'] or {}).get('actions') or []) if raw else []
+    return dict(ticket), [a for a in actions if isinstance(a, dict)]
+
+
+# ───────────────────────────── 4. fila de curadoria ─────────────────────────────
+
+def create_candidate(external_id, actor, force=False):
+    """Analista clicou em 'Transformar em Conhecimento' (ou aceitou uma sugestão)."""
+    ensure_schema()
+    with connect() as conn:
+        open_ = conn.execute("SELECT id FROM cortex_kb.candidates WHERE ticket_external_id=%s AND status IN ('pending','conflict')",
+                             (external_id,)).fetchone()
+        if open_:
+            return get_candidate(open_['id'])
+        ticket, actions = load_ticket(conn, external_id)
+        score, signals, eligible = usefulness(ticket, actions)
+        if not eligible and not force:
+            raise PermissionError(json.dumps({'score': score, 'signals': signals}, ensure_ascii=False))
+    # Chamada ao modelo fora da transação: não segura conexão nem locks.
+    extraction, text, extractor = extract(ticket, actions)
+    module = extraction['module_hint']
+    sub = taxonomy.subtopic(module, extraction['title'], [extraction['symptom'] or ''])
+    checks = quality_checks(extraction, text)
+    with connect() as conn:
+        related = find_related(conn, extraction, module)
+        status = 'conflict' if any(r['relation'] == 'conflict' for r in related) else 'pending'
+        row = conn.execute('''INSERT INTO cortex_kb.candidates
+            (ticket_external_id,status,usefulness_score,usefulness_signals,extraction,quality_checks,
+             suggested_module,suggested_subtopic,similar_items,extractor,created_by)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id''',
+            (external_id, status, score, Jsonb(signals), Jsonb(extraction), Jsonb(checks), module, sub,
+             Jsonb(related), extractor, actor)).fetchone()
+        for r in related:
+            if r['relation'] == 'conflict':
+                conn.execute('INSERT INTO cortex_kb.conflicts(item_id,candidate_id,reason) VALUES (%s,%s,%s)',
+                             (r['item_id'], row['id'], f"Ticket #{external_id}: " + '; '.join(r['reasons'])))
+        audit(conn, 'candidate', row['id'], 'created', actor, after={'ticket': external_id, 'score': score, 'status': status})
+    return get_candidate(row['id'])
+
+
+def get_candidate(candidate_id):
+    with connect() as conn:
+        row = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s', (candidate_id,)).fetchone()
+    if not row:
+        raise LookupError('Sugestão não encontrada.')
+    return dict(row)
+
+
+def list_candidates(status=('pending', 'conflict'), module=None, limit=100):
+    ensure_schema()
+    with connect() as conn:
+        return conn.execute('''SELECT id,ticket_external_id,status,usefulness_score,suggested_module,suggested_subtopic,
+                   extraction->>'title' AS title, extraction->>'confidence' AS confidence, quality_checks, similar_items,
+                   extractor, created_by, created_at
+            FROM cortex_kb.candidates WHERE status = ANY(%s) AND (%s::text IS NULL OR suggested_module=%s)
+            ORDER BY (status='conflict') DESC, usefulness_score DESC, created_at LIMIT %s''',
+            (list(status), module, module, limit)).fetchall()
+
+
+def suggest_tickets(limit=30, module=None):
+    """Tickets resolvidos que parecem conhecimento e ainda não foram avaliados."""
+    ensure_schema()
+    from tech_evidence import ensure_single_tenant
+    with connect() as conn:
+        tenant = ensure_single_tenant(conn)
+        rows = conn.execute('''
+            WITH pool AS (
+                SELECT DISTINCT ON (r.external_id) r.*
+                FROM refined_tickets r
+                WHERE r.tenant_id=%(t)s AND r.base_status IN ('Resolved','Closed') AND r.hard_block_reason IS NULL
+                  AND COALESCE(length(r.solution_statement),0) >= 30
+                  AND NOT EXISTS (SELECT 1 FROM cortex_kb.candidates c WHERE c.ticket_external_id=r.external_id)
+                  AND NOT EXISTS (SELECT 1 FROM cortex_kb.sources s WHERE s.source_type='ticket' AND s.external_ref=r.external_id::text)
+                ORDER BY r.external_id, r.refined_at DESC
+            ), top AS (
+                SELECT * FROM pool ORDER BY final_score DESC NULLS LAST, resolved_date DESC NULLS LAST LIMIT 300
+            )
+            SELECT top.*, raw.payload->'actions' AS actions FROM top
+            LEFT JOIN LATERAL (SELECT payload FROM raw_tickets x WHERE x.tenant_id=top.tenant_id AND x.external_id=top.external_id
+                               ORDER BY ingested_at DESC LIMIT 1) raw ON true''', {'t': tenant}).fetchall()
+    out = []
+    for row in rows:
+        actions = [a for a in (row.pop('actions') or []) if isinstance(a, dict)]
+        score, signals, eligible = usefulness(row, actions)
+        mod = taxonomy.classify(row['subject'], row.get('detected_modules') or [], row.get('service_full'))
+        if eligible and (not module or module == mod):
+            out.append({'ticket_external_id': row['external_id'], 'subject': row['subject'], 'module_key': mod,
+                        'score': score, 'signals': signals, 'resolved_date': row.get('resolved_date')})
+    out.sort(key=lambda r: (-r['score'], -(r['ticket_external_id'])))
+    return out[:limit]
+
+
+# ───────────────────────────── 5. decisões humanas ─────────────────────────────
+
+def _validate_content(c):
+    for key in ('title', 'symptom', 'root_cause', 'procedure'):
+        if len((c.get(key) or '').strip()) < 5:
+            raise ValueError(f'Preencha "{key}" antes de publicar — conhecimento oficial precisa de causa e procedimento.')
+    if c['module_key'] not in taxonomy.MODULE_NAMES:
+        raise ValueError('Módulo inválido.')
+    if c['subtopic_key'] not in dict(taxonomy.subtopic_options(c['module_key'])):
+        raise ValueError('Subtópico inválido para o módulo.')
+    for key in ('title', 'symptom', 'root_cause', 'procedure', 'prerequisites', 'expected_result'):
+        if c.get(key):
+            c[key] = sanitize(c[key]).strip()
+    return c
+
+
+def _embed(text):
+    if not GEMINI_API_KEY:
+        return None
+    req = urllib.request.Request(
+        f'https://generativelanguage.googleapis.com/v1beta/{GEMINI_EMBEDDING_MODEL}:embedContent?key={GEMINI_API_KEY}',
+        data=json.dumps({'model': GEMINI_EMBEDDING_MODEL, 'content': {'parts': [{'text': text[:8000]}]},
+                         'taskType': 'RETRIEVAL_DOCUMENT'}).encode(), headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            values = json.loads(r.read())['embedding']['values']
+        # A dimensão acompanha o modelo configurado; vetor incompatível não é gravado.
+        return values if len(values) == GEMINI_EMBEDDING_DIMENSIONS else None
+    except Exception:
+        return None
+
+
+def document_text(item, version):
+    app = version['applicability'] or {}
+    scope = '; '.join(f'{k}: {", ".join(v) if isinstance(v, list) else v}' for k, v in app.items() if v)
+    return '\n'.join(p for p in (
+        f"PROCEDIMENTO OFICIAL ALTERNATIVA: {item['title']}",
+        f"Módulo: {taxonomy.MODULE_NAMES.get(item['module_key'])}",
+        f"Sintoma: {version['symptom']}",
+        f"Mensagens de erro: {'; '.join(version['error_messages'])}" if version['error_messages'] else '',
+        f"Causa: {version['root_cause']}",
+        f"Aplica-se a: {scope}" if scope else '',
+        f"Pré-requisitos: {version['prerequisites']}" if version.get('prerequisites') else '',
+        f"Procedimento:\n{version['procedure']}",
+        f"Resultado esperado: {version['expected_result']}" if version.get('expected_result') else '',
+        f"Palavras-chave: {', '.join(version['keywords'])}" if version.get('keywords') else '') if p)
+
+
+def _publish(conn, item_id, embedding_cache=None):
+    """Espelha a versão vigente em ticket_knowledge_nodes — efeito imediato no RAG, sem deploy."""
+    item = conn.execute('SELECT * FROM cortex_kb.items WHERE id=%s', (item_id,)).fetchone()
+    version = conn.execute('SELECT * FROM cortex_kb.versions WHERE id=%s', (item['current_version_id'],)).fetchone()
+    refs = [r['external_ref'] for r in conn.execute(
+        "SELECT external_ref FROM cortex_kb.sources WHERE item_id=%s AND source_type='ticket' ORDER BY id", (item_id,))]
+    text = document_text(item, version)
+    vector = embedding_cache
+    app = version['applicability'] or {}
+    values = dict(
+        source_type='OFFICIAL_KB', source_id=f'canon:{item_id}', source_external_id=int(refs[0]) if refs else None,
+        title=item['title'], content_for_embedding=text, problem=version['symptom'], diagnosis=version['root_cause'],
+        solution=version['procedure'], result=version['expected_result'],
+        modules=[taxonomy.MODULE_NAMES[item['module_key']]], detected_error_codes=version['error_messages'],
+        version_reference=(app.get('master_version') or None), tier='KB', confidence='HIGH',
+        validation_score=100, final_score=100, source_authority=100,
+        validation_evidence=[f'ticket:{r}' for r in refs][:50],
+        metadata=Jsonb({'canonical_item_id': item_id, 'version_no': version['version_no'],
+                        'applicability': app, 'approved_by': version['approved_by'], 'subtopic': item['subtopic_key']}),
+        embedding=('[' + ','.join(map(str, vector)) + ']') if vector else None,
+        embedding_generated=bool(vector), embedding_model=GEMINI_EMBEDDING_MODEL.split('/')[-1][:50])
+    existing = conn.execute("SELECT id FROM ticket_knowledge_nodes WHERE source_id=%s", (f'canon:{item_id}',)).fetchone()
+    cols = list(values)
+    if existing:
+        sets = ','.join(f'{c}=%s' + ('::vector' if c == 'embedding' else '') for c in cols)
+        conn.execute(f'UPDATE ticket_knowledge_nodes SET {sets}, updated_at=now() WHERE id=%s', [*values.values(), existing['id']])
+        node_id = existing['id']
+    else:
+        marks = ','.join('%s::vector' if c == 'embedding' else '%s' for c in cols)
+        node_id = conn.execute(f'INSERT INTO ticket_knowledge_nodes ({",".join(cols)}) VALUES ({marks}) RETURNING id',
+                               list(values.values())).fetchone()['id']
+    conn.execute('UPDATE cortex_kb.versions SET published_node_id=%s, embedding_ok=%s WHERE id=%s',
+                 (node_id, bool(vector), version['id']))
+    return node_id
+
+
+def _new_version(conn, item_id, content, actor, reason):
+    previous = conn.execute("SELECT max(version_no) AS n FROM cortex_kb.versions WHERE item_id=%s", (item_id,)).fetchone()['n'] or 0
+    conn.execute("UPDATE cortex_kb.versions SET status='superseded' WHERE item_id=%s AND status='published'", (item_id,))
+    version = conn.execute('''INSERT INTO cortex_kb.versions
+        (item_id,version_no,symptom,error_messages,root_cause,procedure,prerequisites,expected_result,
+         applicability,keywords,status,change_reason,approved_by)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'published',%s,%s) RETURNING *''',
+        (item_id, previous + 1, content['symptom'], content.get('error_messages') or [], content['root_cause'],
+         content['procedure'], content.get('prerequisites'), content.get('expected_result'),
+         Jsonb(content.get('applicability') or {}), content.get('keywords') or [], reason, actor)).fetchone()
+    conn.execute('''UPDATE cortex_kb.items SET current_version_id=%s, title=%s, module_key=%s, subtopic_key=%s,
+        status='active', updated_at=now() WHERE id=%s''',
+        (version['id'], content['title'], content['module_key'], content['subtopic_key'], item_id))
+    return version
+
+
+def approve(candidate_id, decision, content, actor, reason, target_item_id=None):
+    """decision: 'new' (novo procedimento) | 'revise' (nova versão de item existente) | 'attach' (só evidência)."""
+    if decision not in ('new', 'revise', 'attach'):
+        raise ValueError('Decisão inválida.')
+    if len((reason or '').strip()) < 5:
+        raise ValueError('Informe o motivo da decisão (fica na auditoria).')
+    if decision != 'new' and not target_item_id:
+        raise ValueError('Selecione o procedimento existente.')
+    if decision != 'attach':
+        content = _validate_content(dict(content))
+        embedding = _embed(document_text({'title': content['title'], 'module_key': content['module_key']},
+                                         {**content, 'error_messages': content.get('error_messages') or [],
+                                          'applicability': content.get('applicability') or {}}))
+    ensure_schema()
+    with connect() as conn:
+        cand = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s FOR UPDATE', (candidate_id,)).fetchone()
+        if not cand or cand['status'] not in ('pending', 'conflict'):
+            raise RuntimeError('Esta sugestão já foi decidida. Recarregue a fila.')
+        if decision == 'new':
+            item_id = conn.execute('''INSERT INTO cortex_kb.items(title,module_key,subtopic_key,created_by)
+                VALUES (%s,%s,%s,%s) RETURNING id''', (content['title'], content['module_key'], content['subtopic_key'], actor)).fetchone()['id']
+        else:
+            item = conn.execute("SELECT * FROM cortex_kb.items WHERE id=%s FOR UPDATE", (target_item_id,)).fetchone()
+            if not item:
+                raise LookupError('Procedimento não encontrado.')
+            item_id = item['id']
+        version = _new_version(conn, item_id, content, actor, reason) if decision != 'attach' else None
+        conn.execute('''INSERT INTO cortex_kb.sources(item_id,version_id,source_type,external_ref,note)
+            VALUES (%s,%s,'ticket',%s,%s) ON CONFLICT (item_id,source_type,external_ref) DO NOTHING''',
+            (item_id, version['id'] if version else None, str(cand['ticket_external_id']), reason))
+        _publish(conn, item_id, embedding if decision != 'attach' else
+                 _cached_vector(conn, item_id))
+        conn.execute('''UPDATE cortex_kb.candidates SET status=%s, decided_by=%s, decided_at=now(), decision_note=%s,
+            resulting_item_id=%s WHERE id=%s''', ('merged' if decision == 'attach' else 'approved', actor, reason, item_id, candidate_id))
+        conn.execute('''UPDATE cortex_kb.conflicts SET status='resolved', resolved_by=%s, resolved_at=now(), resolution_note=%s
+            WHERE candidate_id=%s AND status='open' ''', (actor, f'{decision}: {reason}', candidate_id))
+        audit(conn, 'candidate', candidate_id, f'approved:{decision}', actor, reason, before=dict(cand),
+              after={'item_id': item_id, 'version_no': version['version_no'] if version else None})
+    return item_detail(item_id)
+
+
+def _cached_vector(conn, item_id):
+    row = conn.execute("SELECT embedding::text AS v FROM ticket_knowledge_nodes WHERE source_id=%s AND embedding IS NOT NULL",
+                       (f'canon:{item_id}',)).fetchone()
+    return json.loads(row['v']) if row else None
+
+
+def reject(candidate_id, actor, reason):
+    if len((reason or '').strip()) < 5:
+        raise ValueError('Informe o motivo da rejeição — ajuda a calibrar as próximas sugestões.')
+    ensure_schema()
+    with connect() as conn:
+        cand = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s FOR UPDATE', (candidate_id,)).fetchone()
+        if not cand or cand['status'] not in ('pending', 'conflict'):
+            raise RuntimeError('Esta sugestão já foi decidida.')
+        conn.execute("UPDATE cortex_kb.candidates SET status='rejected',decided_by=%s,decided_at=now(),decision_note=%s WHERE id=%s",
+                     (actor, reason, candidate_id))
+        conn.execute("UPDATE cortex_kb.conflicts SET status='dismissed',resolved_by=%s,resolved_at=now(),resolution_note=%s "
+                     "WHERE candidate_id=%s AND status='open'", (actor, reason, candidate_id))
+        audit(conn, 'candidate', candidate_id, 'rejected', actor, reason)
+
+
+def deprecate(item_id, actor, reason):
+    """Retira do RAG imediatamente; histórico e versões permanecem para auditoria."""
+    if len((reason or '').strip()) < 5:
+        raise ValueError('Informe o motivo da inativação.')
+    ensure_schema()
+    with connect() as conn:
+        item = conn.execute("SELECT * FROM cortex_kb.items WHERE id=%s FOR UPDATE", (item_id,)).fetchone()
+        if not item:
+            raise LookupError('Procedimento não encontrado.')
+        conn.execute("UPDATE cortex_kb.items SET status='deprecated', updated_at=now() WHERE id=%s", (item_id,))
+        conn.execute("UPDATE cortex_kb.versions SET status='deprecated' WHERE item_id=%s AND status='published'", (item_id,))
+        conn.execute("DELETE FROM ticket_knowledge_nodes WHERE source_id=%s", (f'canon:{item_id}',))
+        audit(conn, 'item', item_id, 'deprecated', actor, reason, before=dict(item))
+
+
+def revise_item(item_id, content, actor, reason):
+    """Edição direta pelo curador (sem ticket de origem) — também gera nova versão."""
+    if len((reason or '').strip()) < 5:
+        raise ValueError('Informe o motivo da revisão.')
+    content = _validate_content(dict(content))
+    embedding = _embed(document_text(content, {**content, 'error_messages': content.get('error_messages') or [],
+                                               'applicability': content.get('applicability') or {}}))
+    ensure_schema()
+    with connect() as conn:
+        if not conn.execute("SELECT 1 FROM cortex_kb.items WHERE id=%s FOR UPDATE", (item_id,)).fetchone():
+            raise LookupError('Procedimento não encontrado.')
+        version = _new_version(conn, item_id, content, actor, reason)
+        _publish(conn, item_id, embedding)
+        audit(conn, 'item', item_id, 'revised', actor, reason, after={'version_no': version['version_no']})
+    return item_detail(item_id)
+
+
+def feedback(item_id, rating, actor, comment=None, ticket_external_id=None):
+    """Sinal de uso. Avaliações negativas recorrentes abrem revisão, nunca alteram o conteúdo."""
+    ensure_schema()
+    with connect() as conn:
+        item = conn.execute("SELECT * FROM cortex_kb.items WHERE id=%s AND status='active'", (item_id,)).fetchone()
+        if not item:
+            raise LookupError('Procedimento não encontrado ou inativo.')
+        conn.execute('''INSERT INTO cortex_kb.feedback(item_id,version_id,rating,comment,ticket_external_id,actor)
+            VALUES (%s,%s,%s,%s,%s,%s)''', (item_id, item['current_version_id'], rating, sanitize(comment) if comment else None,
+                                            ticket_external_id, actor))
+        stats = conn.execute('''SELECT count(*) FILTER (WHERE rating<0) AS neg, count(*) FILTER (WHERE rating>0) AS pos
+            FROM cortex_kb.feedback WHERE version_id=%s''', (item['current_version_id'],)).fetchone()
+        if stats['neg'] >= 3 and stats['neg'] > stats['pos'] and not conn.execute(
+                "SELECT 1 FROM cortex_kb.conflicts WHERE item_id=%s AND status='open' AND candidate_id IS NULL", (item_id,)).fetchone():
+            conn.execute("INSERT INTO cortex_kb.conflicts(item_id,reason) VALUES (%s,%s)",
+                         (item_id, f"{stats['neg']} avaliações negativas na versão vigente — revisar procedimento"))
+        return dict(stats)
+
+
+# ───────────────────────────── consultas do painel ─────────────────────────────
+
+def overview():
+    ensure_schema()
+    with connect() as conn:
+        items = conn.execute('''SELECT module_key, subtopic_key, count(*) AS n FROM cortex_kb.items
+            WHERE status='active' GROUP BY 1,2''').fetchall()
+        pending = conn.execute('''SELECT suggested_module AS module_key, count(*) AS n FROM cortex_kb.candidates
+            WHERE status IN ('pending','conflict') GROUP BY 1''').fetchall()
+        totals = conn.execute('''SELECT
+            (SELECT count(*) FROM cortex_kb.items WHERE status='active') AS active,
+            (SELECT count(*) FROM cortex_kb.items WHERE status='deprecated') AS deprecated,
+            (SELECT count(*) FROM cortex_kb.candidates WHERE status IN ('pending','conflict')) AS pending,
+            (SELECT count(*) FROM cortex_kb.conflicts WHERE status='open') AS conflicts,
+            (SELECT count(*) FROM cortex_kb.versions WHERE status='published' AND NOT embedding_ok) AS without_vector''').fetchone()
+    tree = []
+    for key, label, description in taxonomy.MODULES:
+        subs = {s: 0 for s, _ in taxonomy.subtopic_options(key)}
+        for r in items:
+            if r['module_key'] == key:
+                subs[r['subtopic_key']] = subs.get(r['subtopic_key'], 0) + r['n']
+        tree.append({'key': key, 'label': label, 'description': description,
+                     'items': sum(subs.values()), 'pending': next((p['n'] for p in pending if p['module_key'] == key), 0),
+                     'subtopics': [{'key': s, 'label': dict(taxonomy.subtopic_options(key)).get(s, s), 'items': n}
+                                   for s, n in subs.items()]})
+    return {'totals': dict(totals), 'modules': tree}
+
+
+def list_items(module=None, subtopic=None, status='active', q=None, limit=200):
+    ensure_schema()
+    with connect() as conn:
+        return conn.execute('''
+            SELECT i.id, i.title, i.module_key, i.subtopic_key, i.status, i.updated_at, v.version_no, v.embedding_ok,
+                   v.applicability, (SELECT count(*) FROM cortex_kb.sources s WHERE s.item_id=i.id) AS sources,
+                   (SELECT count(*) FROM cortex_kb.conflicts c WHERE c.item_id=i.id AND c.status='open') AS open_conflicts,
+                   (SELECT coalesce(sum(rating),0) FROM cortex_kb.feedback f WHERE f.version_id=v.id) AS feedback
+            FROM cortex_kb.items i LEFT JOIN cortex_kb.versions v ON v.id=i.current_version_id
+            WHERE i.status=%(st)s AND (%(m)s::text IS NULL OR i.module_key=%(m)s) AND (%(s)s::text IS NULL OR i.subtopic_key=%(s)s)
+              AND (%(q)s::text IS NULL OR i.title ILIKE '%%'||%(q)s||'%%' OR v.procedure ILIKE '%%'||%(q)s||'%%'
+                   OR array_to_string(v.error_messages,' ') ILIKE '%%'||%(q)s||'%%')
+            ORDER BY open_conflicts DESC, i.updated_at DESC LIMIT %(l)s''',
+            {'st': status, 'm': module, 's': subtopic, 'q': q, 'l': limit}).fetchall()
+
+
+def item_detail(item_id):
+    ensure_schema()
+    with connect() as conn:
+        item = conn.execute('SELECT * FROM cortex_kb.items WHERE id=%s', (item_id,)).fetchone()
+        if not item:
+            raise LookupError('Procedimento não encontrado.')
+        return {**item,
+                'versions': conn.execute('SELECT * FROM cortex_kb.versions WHERE item_id=%s ORDER BY version_no DESC', (item_id,)).fetchall(),
+                'sources': conn.execute('SELECT * FROM cortex_kb.sources WHERE item_id=%s ORDER BY id', (item_id,)).fetchall(),
+                'conflicts': conn.execute('SELECT * FROM cortex_kb.conflicts WHERE item_id=%s ORDER BY status, created_at DESC', (item_id,)).fetchall(),
+                'audit': conn.execute("SELECT * FROM cortex_kb.audit WHERE entity='item' AND entity_id=%s ORDER BY at DESC LIMIT 50", (item_id,)).fetchall()}
+
+
+def resolve_conflict(conflict_id, actor, note, dismiss=False):
+    if len((note or '').strip()) < 5:
+        raise ValueError('Descreva como o conflito foi tratado.')
+    ensure_schema()
+    with connect() as conn:
+        row = conn.execute("""UPDATE cortex_kb.conflicts SET status=%s, resolved_by=%s, resolved_at=now(), resolution_note=%s
+            WHERE id=%s AND status='open' RETURNING item_id""", ('dismissed' if dismiss else 'resolved', actor, note, conflict_id)).fetchone()
+        if not row:
+            raise RuntimeError('Conflito já tratado.')
+        audit(conn, 'item', row['item_id'], 'conflict_' + ('dismissed' if dismiss else 'resolved'), actor, note)

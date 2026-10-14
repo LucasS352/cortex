@@ -1,0 +1,129 @@
+-- 006 - Ambiente de Treinamento do CORTEX: conhecimento canônico versionado.
+--
+-- Princípios:
+--   * Nenhum ticket vira conhecimento oficial sem aprovação humana (candidates -> items/versions).
+--   * O histórico do Movidesk (refined_tickets / ticket_knowledge_nodes) continua separado.
+--     Só a versão PUBLICADA é espelhada em ticket_knowledge_nodes (source_type OFFICIAL_KB,
+--     source_id 'canon:<item>') para o RAG atual recuperá-la sem mudança de código.
+--   * Nada é apagado: revisões geram nova versão; a anterior vira 'superseded'.
+--   * Idempotente: aplicado também pelo app no startup (knowledge_training.ensure_schema).
+--   * Taxonomia de módulos/subtópicos reutiliza knowledge_curation.MODULES/SUBTOPICS.
+
+CREATE SCHEMA IF NOT EXISTS cortex_kb;
+
+-- Identidade e classificação de um procedimento canônico.
+CREATE TABLE IF NOT EXISTS cortex_kb.items (
+    id              bigserial PRIMARY KEY,
+    title           text NOT NULL,
+    module_key      text NOT NULL,
+    subtopic_key    text NOT NULL DEFAULT 'general',
+    status          text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'deprecated')),
+    current_version_id bigint,
+    created_by      text NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kb_items_module ON cortex_kb.items (module_key, subtopic_key, status);
+
+-- Conteúdo e condições de aplicação. Uma revisão nunca sobrescreve a anterior.
+CREATE TABLE IF NOT EXISTS cortex_kb.versions (
+    id              bigserial PRIMARY KEY,
+    item_id         bigint NOT NULL REFERENCES cortex_kb.items(id) ON DELETE CASCADE,
+    version_no      integer NOT NULL,
+    symptom         text NOT NULL,
+    error_messages  text[] NOT NULL DEFAULT '{}',
+    root_cause      text NOT NULL,
+    procedure       text NOT NULL,
+    prerequisites   text,
+    expected_result text,
+    -- {master_version_min, master_version_max, ufs[], integrations[], tax_regime, valid_from, valid_until}
+    applicability   jsonb NOT NULL DEFAULT '{}'::jsonb,
+    keywords        text[] NOT NULL DEFAULT '{}',
+    status          text NOT NULL CHECK (status IN ('published', 'superseded', 'deprecated')),
+    change_reason   text NOT NULL,
+    published_node_id bigint,
+    embedding_ok    boolean NOT NULL DEFAULT false,
+    approved_by     text NOT NULL,
+    approved_at     timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (item_id, version_no)
+);
+CREATE INDEX IF NOT EXISTS idx_kb_versions_published ON cortex_kb.versions (item_id) WHERE status = 'published';
+CREATE INDEX IF NOT EXISTS idx_kb_versions_fts ON cortex_kb.versions USING gin (
+    to_tsvector('portuguese', symptom || ' ' || root_cause || ' ' || procedure));
+
+-- Evidências: quais tickets/manuais sustentam o procedimento (N tickets -> 1 item).
+CREATE TABLE IF NOT EXISTS cortex_kb.sources (
+    id              bigserial PRIMARY KEY,
+    item_id         bigint NOT NULL REFERENCES cortex_kb.items(id) ON DELETE CASCADE,
+    version_id      bigint REFERENCES cortex_kb.versions(id) ON DELETE SET NULL,
+    source_type     text NOT NULL CHECK (source_type IN ('ticket', 'manual', 'kb_article', 'analyst')),
+    external_ref    text NOT NULL,
+    note            text,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (item_id, source_type, external_ref)
+);
+
+-- Fila de curadoria: sugestões extraídas de tickets. Nunca consultadas pelo RAG.
+CREATE TABLE IF NOT EXISTS cortex_kb.candidates (
+    id                  bigserial PRIMARY KEY,
+    ticket_external_id  integer NOT NULL,
+    status              text NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'conflict', 'approved', 'merged', 'rejected')),
+    usefulness_score    integer NOT NULL DEFAULT 0,
+    usefulness_signals  jsonb NOT NULL DEFAULT '[]'::jsonb,
+    extraction          jsonb NOT NULL,
+    quality_checks      jsonb NOT NULL DEFAULT '[]'::jsonb,
+    suggested_module    text NOT NULL DEFAULT 'unclassified',
+    suggested_subtopic  text NOT NULL DEFAULT 'general',
+    similar_items       jsonb NOT NULL DEFAULT '[]'::jsonb,
+    extractor           text NOT NULL,
+    created_by          text NOT NULL,
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    decided_by          text,
+    decided_at          timestamptz,
+    decision_note       text,
+    resulting_item_id   bigint REFERENCES cortex_kb.items(id) ON DELETE SET NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_kb_candidates_open_ticket
+    ON cortex_kb.candidates (ticket_external_id) WHERE status IN ('pending', 'conflict');
+CREATE INDEX IF NOT EXISTS idx_kb_candidates_queue ON cortex_kb.candidates (status, suggested_module, usefulness_score DESC);
+
+-- Divergências entre um ticket novo e um procedimento publicado.
+CREATE TABLE IF NOT EXISTS cortex_kb.conflicts (
+    id              bigserial PRIMARY KEY,
+    item_id         bigint NOT NULL REFERENCES cortex_kb.items(id) ON DELETE CASCADE,
+    candidate_id    bigint REFERENCES cortex_kb.candidates(id) ON DELETE SET NULL,
+    reason          text NOT NULL,
+    status          text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'dismissed')),
+    resolution_note text,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    resolved_by     text,
+    resolved_at     timestamptz
+);
+CREATE INDEX IF NOT EXISTS idx_kb_conflicts_open ON cortex_kb.conflicts (item_id) WHERE status = 'open';
+
+-- Avaliação de uso. Alimenta a curadoria, nunca altera o conhecimento sozinha.
+CREATE TABLE IF NOT EXISTS cortex_kb.feedback (
+    id                  bigserial PRIMARY KEY,
+    item_id             bigint NOT NULL REFERENCES cortex_kb.items(id) ON DELETE CASCADE,
+    version_id          bigint REFERENCES cortex_kb.versions(id) ON DELETE SET NULL,
+    rating              smallint NOT NULL CHECK (rating IN (-1, 1)),
+    comment             text,
+    ticket_external_id  integer,
+    actor               text NOT NULL,
+    created_at          timestamptz NOT NULL DEFAULT now()
+);
+
+-- Quem aprovou, alterou, mesclou, rejeitou ou inativou — e por quê.
+CREATE TABLE IF NOT EXISTS cortex_kb.audit (
+    id          bigserial PRIMARY KEY,
+    entity      text NOT NULL,
+    entity_id   bigint NOT NULL,
+    action      text NOT NULL,
+    actor       text NOT NULL,
+    reason      text,
+    before      jsonb,
+    after       jsonb,
+    at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_kb_audit_entity ON cortex_kb.audit (entity, entity_id, at DESC);
