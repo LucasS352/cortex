@@ -328,6 +328,21 @@ function displaySetting(v){if(typeof v==='boolean')return v?'Ativada':'Pausada';
 async function loadAudit(){try{const rows=await api('/api/admin/audit');$('audit-rows').innerHTML=rows.length?rows.map(r=>`<tr><td>${dateTime(r.created)}</td><td>${esc(r.action)}</td><td class="audit-detail">${esc(auditDetail(r))}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">Nenhuma alteração registrada. Novas configurações e avaliações aparecerão aqui.</td></tr>';}catch(e){showError(e.message);}}
 document.querySelectorAll('[data-perf]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('[data-perf]').forEach(x=>x.classList.toggle('active',x===b));$('performance-summary').hidden=b.dataset.perf!=='summary';$('performance-reviews').hidden=b.dataset.perf!=='reviews';$('performance-test').hidden=b.dataset.perf!=='test';if(b.dataset.perf==='test')loadEvaluations();}));
 $('performance-days').addEventListener('change',()=>{perfState.page=1;loadPerformance();});$('review-filter').addEventListener('change',()=>{perfState.page=1;loadRuns();});$('runs-prev').addEventListener('click',()=>{perfState.page--;loadRuns();});$('runs-next').addEventListener('click',()=>{perfState.page++;loadRuns();});
+function openRequestedView(){
+ const params=new URLSearchParams(window.location.search);
+ const requested=params.get('view');
+ if(!views[requested])return;
+ if(requested==='training'){
+  const ticket=params.get('ticket')||'';
+  const marker=params.get('marker')||'';
+  const trainingParams=new URLSearchParams();
+  if(/^\d+$/.test(ticket))trainingParams.set('ticket',ticket);
+  if(/^CORTEX-AI-NOTE:[a-f0-9]{64}$/i.test(marker))trainingParams.set('marker',marker);
+  $('training-frame').src='/treinamento'+(trainingParams.size?'?'+trainingParams:'');
+ }
+ go(requested);
+}
+openRequestedView();
 refresh();
 $('sync-now').addEventListener('click',startTicketSync);
 $('sync-schedule-save').addEventListener('click',saveTicketSyncSchedule);

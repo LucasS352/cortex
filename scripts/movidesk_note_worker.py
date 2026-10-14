@@ -532,7 +532,12 @@ def render_note(result, marker):
     origin = mapped_replies.safe_url(os.getenv('CORTEX_PUBLIC_URL', '').rstrip('/'))
     if origin and str(result.get('feedback_ticket') or '').isdigit():
         from urllib.parse import urlencode
-        review_url = origin + '/treinamento?' + urlencode({'ticket': result['feedback_ticket'], 'marker': marker})
+        # Open the unified Cortex shell and let it pass the review context to
+        # the embedded training page. Linking /treinamento directly loses the
+        # admin navigation and makes the reviewer feel they left Cortex.
+        review_url = origin + '/admin?' + urlencode({
+            'view': 'training', 'ticket': result['feedback_ticket'], 'marker': marker,
+        })
         lines.append('<p><a href="' + html.escape(review_url, quote=True) + '">Avaliar esta resposta e encaminhar à curadoria</a> (uso interno)</p>')
     lines.append('<p><small>Confira a orientação antes de responder ao cliente. ' + marker + '</small></p>')
     return ''.join(lines)

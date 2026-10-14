@@ -89,7 +89,7 @@ class TrainingWorkflowTests(unittest.TestCase):
         import os
         with patch.dict(os.environ, {'CORTEX_PUBLIC_URL':'https://cortex.example'}):
             note=render_note({'reply':'Resposta','feedback_ticket':131726},'CORTEX-AI-NOTE:abc')
-        self.assertIn('/treinamento?ticket=131726&amp;marker=CORTEX-AI-NOTE%3Aabc',note)
+        self.assertIn('/admin?view=training&amp;ticket=131726&amp;marker=CORTEX-AI-NOTE%3Aabc',note)
         self.assertIn('Avaliar esta resposta',note)
 
     def test_review_api_rejects_invalid_rating(self):

@@ -85,6 +85,18 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// Backward compatibility for review links already published in Movidesk.
+// The embedded page stays in place; a standalone /treinamento URL is routed
+// into the unified admin shell with the review context preserved.
+if (window.top === window.self) {
+  const current = new URLSearchParams(window.location.search);
+  const target = new URL('/admin', window.location.origin);
+  target.searchParams.set('view', 'training');
+  for (const key of ['ticket', 'marker']) {
+    if (current.get(key)) target.searchParams.set(key, current.get(key));
+  }
+  window.location.replace(target);
+}
 const API = '/api/treinamento';
 const state = { tab: 'queue', module: null, subtopic: null, taxonomy: [], images: [], q: '' };
 const $ = (s) => document.querySelector(s);

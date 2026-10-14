@@ -82,6 +82,18 @@ class WebAuthTests(unittest.TestCase):
                       admin.text)
         self.assertEqual(self.client.get("/tech-assets/cortex.webmanifest").status_code, 200)
 
+    def test_admin_contains_training_deep_link_router(self):
+        self.client.cookies.set(web_auth.COOKIE, web_auth._issue())
+        script = self.client.get("/tech-assets/admin-console.js")
+        self.assertEqual(script.status_code, 200)
+        self.assertIn("function openRequestedView()", script.text)
+        self.assertIn("$('training-frame').src='/treinamento'", script.text)
+        self.assertIn("go(requested)", script.text)
+
+        training = self.client.get("/treinamento")
+        self.assertIn("if (window.top === window.self)", training.text)
+        self.assertIn("window.location.replace(target)", training.text)
+
     def test_wrong_origin_and_wrong_password(self):
         wrong_origin = self.client.post("/login", data={"username": "admin", "password": "StrongTestPassword123!"},
                                         headers={"origin": "https://evil.example"})
