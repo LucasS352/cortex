@@ -341,7 +341,7 @@ def generate_note(ticket, settings, api):
     import ticket_image
     from agent_control import organization
     from technician_workbench import (connection, build_reply, evidence_for_company, environment_card,
-                                      environment_rows, search_context_query, resolved_support_cases,
+                                      environment_rows, search_context_query, resolved_support_cases, capability_evidence_cases,
                                       company_case_source)
     from tech_evidence import ensure_single_tenant
     from conversation_outcome import classify_outcome, RESOLVED_REPLY, ACKNOWLEDGED_REPLY
@@ -420,6 +420,7 @@ def generate_note(ticket, settings, api):
             sources = [reviewed]
             evidence_scope = 'reviewed_procedure'
         company_cases = list(cases)
+        capability_leads = capability_evidence_cases(conn, tenant, query, ticket.get('id'))
         # History attached to a solution must describe a completed procedure.
         cases = [case for case in cases if company_case_source(case)]
         known = {str(case['external_id']) for case in cases}
@@ -430,7 +431,8 @@ def generate_note(ticket, settings, api):
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in messages[:-1])
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
            'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
-    reply, meta = build_reply(row, context, facts, envs, sources, question, company_cases, audience='customer_draft')
+    reply, meta = build_reply(row, context, facts, envs, sources, question, company_cases,
+                              audience='customer_draft', capability_leads=capability_leads)
     if not meta.get('used'):
         raise RetryJob('Gemini indisponível; nenhuma nota de contingência publicada')
     reference = sources[:1] if sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
@@ -449,6 +451,19 @@ def generate_note(ticket, settings, api):
                        if str(case['ticket']) not in existing_ids)
     else:
         similar = []
+    # Capability observations are useful to the reviewing technician even when
+    # they are not complete enough to be published as a validated procedure.
+    # Keep this distinction explicit: they appear as related tickets without a
+    # resolution copied into the customer-facing answer.
+    existing_ids = {str(case.get('ticket')) for case in similar} | {str(ticket['id'])}
+    for case in capability_leads:
+        ticket_id = str(case.get('external_id') or '')
+        if ticket_id and ticket_id not in existing_ids:
+            similar.append({'ticket': ticket_id, 'title': case.get('subject'),
+                            'status': case.get('status') or case.get('base_status'),
+                            'active': (case.get('base_status') not in ('Resolved', 'Closed')),
+                            'resolution': None})
+            existing_ids.add(ticket_id)
     similar = similar[:3]
     return {'reply': reply,
             'sources': [{'ticket': s.get('source_external_id') if s.get('source_type') in
@@ -461,6 +476,8 @@ def generate_note(ticket, settings, api):
             'history_notice': ('Foram localizados menos de três chamados resolvidos com procedimento aplicável.'
                                if reference and len(similar) < 3 else
                                'Tutorial localizado na base; vídeo sem transcrição validada para gerar passos escritos.' if tutorials and not reference else
+                               'Há evidências internas da funcionalidade, mas ainda não existe um procedimento completo aprovado.'
+                               if capability_leads and not reference else
                                'Diagnóstico pendente: nenhuma solução comprovada foi selecionada.' if not reference else '')}
 
 

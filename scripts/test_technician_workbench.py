@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from technician_workbench import (safe_text, build_reply, company_case_source, connection,
                                   company_cases, evidence_for_company, environment_card,
-                                  search_context_query)
+                                  search_context_query, capability_intent)
 
 
 class WorkbenchUnitTests(unittest.TestCase):
@@ -54,6 +54,12 @@ class WorkbenchUnitTests(unittest.TestCase):
         self.assertNotIn('inscrição estadual', search_context_query('Agora estou com outro erro na etiqueta', recent))
         self.assertNotIn('inscrição estadual', search_context_query('Erro na etiqueta', recent))
 
+    def test_packing_manual_is_recognized_as_capability_question(self):
+        enabled, groups = capability_intent(
+            'Existe no Master um manual para Packing: bipar pedido, conferir itens e imprimir DANFE e etiqueta?')
+        self.assertTrue(enabled)
+        self.assertTrue({'expedition', 'scanning', 'conference', 'documents'}.issubset(groups))
+
     def test_credentials_are_rejected_from_manual_context(self):
         with self.assertRaises(HTTPException):
             safe_text('senha=super-secret')
@@ -86,6 +92,20 @@ class WorkbenchUnitTests(unittest.TestCase):
         self.assertIn('mensagem ATUAL define o problema', prompt)
         self.assertIn('ao emitir a nota', prompt)
         self.assertNotIn('Fonte principal aplicável: Etiqueta', prompt)
+
+    def test_capability_evidence_prevents_false_unknown_answer(self):
+        lead = {'external_id':101447,'subject':'Treinamento módulo expedição','status':'Resolvido',
+                'problem_statement':'Treinamento de conferência com bipagem.',
+                'technical_narrative':'Sim, temos esse modelo no ERP Master também, com checkout e picking.',
+                'solution_statement':'Expedição configurada e validada.'}
+        with patch('technician_workbench.llm_client.generate', return_value={
+            'ok':True,'text':'O Master possui o fluxo; precisamos confirmar a versão e a configuração.','error':''}) as generate:
+            reply,meta=build_reply({},'',[],[],[],'Existe packing no Master?',capability_leads=[lead])
+        self.assertIn('possui',reply)
+        prompt=generate.call_args.args[0]
+        self.assertIn('Evidências internas de existência/capacidade',prompt)
+        self.assertIn('temos esse modelo no ERP Master',prompt)
+        self.assertIn('Não responda que a funcionalidade é desconhecida',prompt)
 
     def test_usable_source_gets_sufficient_output_budget_and_grounded_fallback(self):
         source = {'id': 30897, 'source_external_id': 131549, 'source_type': 'PROBABLE_TICKET',
