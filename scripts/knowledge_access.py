@@ -69,7 +69,7 @@ def query_plan(query):
     protocol=re.fullmatch(r'#?(\d{1,9})',query.strip())
     return dict(query=query,product_creation=product_creation,objects=objects,codes=sorted(set(codes)),identifiers=identifiers,signatures=signatures,terms=words,expanded_terms=expansions,
                 fts=fts,protocol=int(protocol[1]) if protocol else None,
-                howto=bool(re.search(r'\b(como|onde|cadastrar|configurar|procedimento|passo a passo)\b',text)))
+                howto=bool(re.search(r'\b(como|onde|criar|cadastrar|configurar|procedimento|passo a passo)\b',text)))
 
 
 def family(row):
@@ -125,6 +125,14 @@ def applicability(row, query, context=None):
     actual=integrator_names(body)
     conflict=bool(expected and actual and expected.isdisjoint(actual))
     reasons=[]
+    if plan['howto']:
+        purpose = normalize(str(row.get('title') or '') + ' ' + str(row.get('problem') or ''))
+        for variants in (('importar','importacao'), ('exportar','exportacao'),
+                         ('cancelar','cancelamento'), ('transferencia','transferir'),
+                         ('kit','kits'), ('grade','grades','variacao'), ('foto','fotos','imagem','imagens')):
+            if any(re.search(r'\b'+term+r'\b', normalize(query)) for term in variants):
+                if not any(re.search(r'\b'+term+r'\b', purpose) for term in variants):
+                    reasons.append('requested_operation_not_matched')
     if conflict: reasons.append('integration_context_mismatch')
     # A shared noun is insufficient when the customer's stated failure differs.
     # E.g. "IE inválida" must not inherit a procedure for "contribuinte isento".
@@ -202,6 +210,9 @@ def rank_rows(rows,plan,module='TODOS',top_k=5):
         # Plural/inflected title matches can be absent from exact substring hits.
         score+=sum(12 for w in title_terms if w not in matched)
         if plan.get('howto'):
+            score += 60 * len(title_terms) / max(1, len(plan['terms']))
+            if title.startswith('como ') and len(title_terms) >= 2:
+                score += 65 if len(title_terms) == len(plan['terms']) else 25
             score+=12 if re.search(r'como |cadastr|procedimento|passo a passo',title) else 0
             score-=12 if title.startswith('dev -') else 0
             if r.get('source_type') in ('OFFICIAL_KB','MANUAL') and len(title_terms)>=2:
@@ -213,6 +224,11 @@ def rank_rows(rows,plan,module='TODOS',top_k=5):
             for qualifier in ('kit','grade','variacao','importar','exportar','imagem','foto','margem','custo','acesso','usuario','categoria','tipo'):
                 if qualifier in title and qualifier not in normalize(plan['query']):
                     score -= 35
+            for qualifier in ('kit','grade','foto'):
+                if qualifier in normalize(plan['query']) and qualifier not in title:
+                    score -= 60
+        if plan.get('howto') and 'massa' in title and 'massa' not in normalize(plan['query']):
+            score -= 50
         q=quality(r)
         score+=3 if q['evidence_status']=='official_document' else 0
         score-=8 if q['answer_use']=='investigation_only' else 0
@@ -227,9 +243,10 @@ def rank_rows(rows,plan,module='TODOS',top_k=5):
     return sorted(results,key=lambda r:(-r['retrieval_score'],r['id']))[:top_k]
 
 
-def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None):
-    knowledge_index.ensure_coverage()
-    curation.ensure_schema()
+def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,maintain_index=True):
+    if maintain_index:
+        knowledge_index.ensure_coverage()
+        curation.ensure_schema()
     # Nodes lack tenant IDs; never silently mix organizations.
     tenants=conn.execute('SELECT id FROM tenants ORDER BY id LIMIT 2').fetchall()
     if len(tenants)!=1: raise ValueError('Pesquisa exige corpus de uma única organização')
@@ -237,6 +254,22 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None):
     top_k=max(1,min(int(top_k),50))
     if not plan['terms'] and not plan['objects'] and not plan['codes'] and plan['protocol'] is None: return []
     rows=[]
+    # Broad OR search can exhaust the candidate budget with recent tickets.
+    # Reserve a title lane requiring every meaningful concept for how-to queries.
+    if plan['howto'] and len(plan['terms']) >= 2:
+        clauses, parameters = [], []
+        for term in plan['terms']:
+            if term in ('pra', 'por', 'favor'):
+                continue
+            variants = ALIASES.get(term, (term,))
+            roots = list(dict.fromkeys('cadastr' if v.startswith('cadastr') else
+                                      v[:-1] if v.endswith('s') and len(v)>4 else v for v in variants))
+            clauses.append('(' + ' OR '.join('lower(title) ILIKE %s' for _ in roots) + ')')
+            parameters.extend('%' + root.replace('%', '\\%').replace('_', '\\_') + '%' for root in roots)
+        if clauses:
+            rows += conn.execute("SELECT *,0.0 AS lexical_rank FROM ticket_knowledge_nodes WHERE " +
+                "source_type IN ('OFFICIAL_KB','MANUAL') AND " + ' AND '.join(clauses) +
+                ' ORDER BY id DESC LIMIT 100', parameters).fetchall()
     expression="(COALESCE(title,'') || ' ' || COALESCE(content_for_embedding,''))"
     # Dedicated signature lane avoids generic product/synchronizer titles
     # filling the candidate budget before the actual error is considered.

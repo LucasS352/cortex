@@ -405,7 +405,7 @@ def generate_note(ticket, settings, api):
     if not meta.get('used'):
         raise RetryJob('Gemini indisponível; nenhuma nota de contingência publicada')
     reference = sources[:1] if sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
-    tutorials = [s for s in sources[:1] if s.get('applicable') and s.get('videos')]
+    tutorials = [s for s in sources[:5] if s.get('applicable') and s.get('videos')]
     similar = [{'ticket': case.get('external_id'), 'title': case.get('subject'),
                 'status': case.get('status') or case.get('base_status'),
                 'active': bool(case.get('is_active')),
@@ -425,7 +425,7 @@ def generate_note(ticket, settings, api):
             'sources': [{'ticket': s.get('source_external_id') if s.get('source_type') in
                          ('VALIDATED_TICKET', 'PROBABLE_TICKET') else None,
                          'title': s.get('title'), 'url': s.get('source_url') or (s.get('metadata') or {}).get('source_url'),
-                         'provenance': s.get('provenance')} for s in (reference or tutorials)],
+                         'provenance': s.get('provenance')} for s in reference + [s for s in tutorials if s not in reference]],
             'videos': [video for source in tutorials for video in source['videos']],
             'similar_tickets': similar, 'evidence_scope': evidence_scope,
             'mode': meta.get('mode'), 'attachments': attachment_notices + media_notices, 'images': images,

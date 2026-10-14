@@ -1,0 +1,547 @@
+{
+  "scope": "Local real corpus; read-only retrieval and note rendering. Optional model generation only when needed. No production delivery.",
+  "generated_answers_enabled": true,
+  "scenarios": 22,
+  "retrieval_cases": 17,
+  "hit_at_5": 1.0,
+  "mrr_at_5": 0.9705882352941176,
+  "results": [
+    {
+      "category": "produto",
+      "question": "como faço pra criar um produto?",
+      "expected_articles": [
+        207361,
+        343261
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como fazer cadastro de produto no ERP Master?",
+        "Cadastro de Produtos (p1)",
+        "3. Cadastrando produtos no ERP"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 2,
+      "source_ids": [
+        207361,
+        null,
+        343261,
+        573425,
+        443131
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como fazer cadastro de produto no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 4666
+    },
+    {
+      "category": "produto",
+      "question": "como cadastrar produto no Master?",
+      "expected_articles": [
+        207361,
+        343261
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como fazer cadastro de produto no ERP Master?",
+        "Como adicionar imagem, via URL, no cadastro de produto do ERP Master?",
+        "Cadastro de Produtos (p1)"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 4,
+      "source_ids": [
+        207361,
+        199953,
+        null,
+        207368,
+        199959
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como fazer cadastro de produto no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 4049
+    },
+    {
+      "category": "clientes",
+      "question": "como cadastrar um cliente?",
+      "expected_articles": [
+        207377
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como cadastrar clientes no ERP Master?",
+        "Navegação para Cadastro de Clientes",
+        "Vincular Ativo e Configurações no Cadastro de Cliente"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 1,
+      "source_ids": [
+        207377,
+        null,
+        null,
+        null,
+        526472
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como cadastrar clientes no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 4269
+    },
+    {
+      "category": "clientes",
+      "question": "quero criar um cliente",
+      "expected_articles": [
+        207377
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como cadastrar clientes no ERP Master?",
+        "Navegação para Cadastro de Clientes",
+        "Vincular Ativo e Configurações no Cadastro de Cliente"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 1,
+      "source_ids": [
+        207377,
+        null,
+        null,
+        null,
+        526472
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como cadastrar clientes no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 4645
+    },
+    {
+      "category": "fornecedores",
+      "question": "como cadastrar fornecedor?",
+      "expected_articles": [
+        207374
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como cadastrar fornecedor no ERP Master?",
+        "DEV - MEL - Alternativa Sistemas - Master - Cadastro de cliente e fornecedor - Atualizar IE das notas não transmitidas",
+        "Cadastro de produtos/ Fornecedores"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 1,
+      "source_ids": [
+        207374,
+        526472,
+        54982,
+        18302,
+        11311
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como cadastrar fornecedor no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 1258
+    },
+    {
+      "category": "estoque",
+      "question": "como cadastrar unidade de estoque?",
+      "expected_articles": [
+        207370
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como cadastrar unidade de estoque no ERP Master?",
+        "DEV - Cadastro de Integração Localização/ Unidade de Estoque",
+        "SUP - DUV - CADASTRO DE UNIDADE E LOCALIZAÇÃO DE ESTOQUE"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 1,
+      "source_ids": [
+        207370,
+        427761,
+        106848,
+        91369,
+        357161
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como cadastrar unidade de estoque no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 1799
+    },
+    {
+      "category": "grades",
+      "question": "como cadastrar produtos e grades?",
+      "expected_articles": [
+        207376
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como cadastrar variação e sub-variação (Grade X e Y) de produto no ERP Master?",
+        "Cadastro de Produtos com Grade (Pai e Filhos) via Planilha",
+        "Cadastro de produto com grade"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 1,
+      "source_ids": [
+        207376,
+        50846,
+        76166,
+        75878,
+        115955
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como cadastrar variação e sub-variação (Grade X e Y) de produto no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 4511
+    },
+    {
+      "category": "kits",
+      "question": "como cadastrar kits de produtos?",
+      "expected_articles": [
+        207363,
+        199959
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como fazer cadastro de kits de produtos no ERP Master? Forma alternativa.",
+        "Como cadastrar kits de produtos no ERP Master?",
+        "SUP - Cadastro de Produto - Configurar Kits"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 2,
+      "source_ids": [
+        199959,
+        207363,
+        309967,
+        73295,
+        72702
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como fazer cadastro de kits de produtos no ERP Master? Forma alternativa.”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 4112
+    },
+    {
+      "category": "imagens",
+      "question": "como cadastrar fotos de produtos?",
+      "expected_articles": [
+        207362
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como cadastrar fotos de produtos no ERP Master?",
+        "Url de Foto Cadastro de Produtos.",
+        "Como fazer cadastro de produto no ERP Master?"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 2,
+      "source_ids": [
+        207362,
+        41152,
+        207361,
+        82068,
+        559992
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como cadastrar fotos de produtos no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 4515
+    },
+    {
+      "category": "importacao",
+      "question": "como importar cadastros de produtos?",
+      "expected_articles": [
+        207368
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como importar cadastros de produtos no ERP Master?",
+        "Como fazer cadastro de kits de produtos no ERP Master? Forma alternativa.",
+        "Como cadastrar kits de produtos no ERP Master?"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 5,
+      "source_ids": [
+        207368,
+        199959,
+        207363,
+        199953,
+        207366
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como importar cadastros de produtos no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 2057
+    },
+    {
+      "category": "exportacao",
+      "question": "como exportar cadastros de produtos?",
+      "expected_articles": [
+        207366
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como exportar cadastros de produtos no ERP Master?",
+        "Como importar cadastros de produtos no ERP Master?",
+        "Como fazer cadastro de kits de produtos no ERP Master? Forma alternativa."
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 5,
+      "source_ids": [
+        207366,
+        207368,
+        199959,
+        207363,
+        199953
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como exportar cadastros de produtos no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 3736
+    },
+    {
+      "category": "financeiro",
+      "question": "como gerar boleto no fluxo de vendas?",
+      "expected_articles": [
+        198734
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como gerar boleto no fluxo de vendas do ERP Master?",
+        "Fluxo de venda - Boleto gerado no master",
+        "Gerar Nota Fiscal de Devolução de Venda"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 1,
+      "source_ids": [
+        198734,
+        84187,
+        310157,
+        63953,
+        532013
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como gerar boleto no fluxo de vendas do ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 4619
+    },
+    {
+      "category": "financeiro",
+      "question": "como cadastrar contas a pagar avulsa?",
+      "expected_articles": [
+        211377
+      ],
+      "rank": 2,
+      "first_titles": [
+        "Como fazer o cadastro de uma conta a pagar avulsa no ERP Master?",
+        "Como fazer o cadastro de contas a pagar avulsa no ERP Master?",
+        "Como realizar o cadastro do seu plano de contas no ERP Master"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 2,
+      "source_ids": [
+        200332,
+        211377,
+        444717,
+        310486,
+        405019
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como fazer o cadastro de uma conta a pagar avulsa no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 3142
+    },
+    {
+      "category": "financeiro",
+      "question": "como cadastrar plano de contas?",
+      "expected_articles": [
+        444717
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como realizar o cadastro do seu plano de contas no ERP Master",
+        "Como fazer o cadastro de uma conta a pagar avulsa no ERP Master?",
+        "Como fazer o cadastro de contas a pagar avulsa no ERP Master?"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 3,
+      "source_ids": [
+        444717,
+        200332,
+        211377,
+        61464,
+        92863
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como realizar o cadastro do seu plano de contas no ERP Master”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 2726
+    },
+    {
+      "category": "estoque",
+      "question": "como lançar inventário?",
+      "expected_articles": [
+        211368
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como lançar inventário no ERP Master?",
+        "lançamento de estoque por inventário feito dia 27/01",
+        "CHAMADO - INVENTÁRIO"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 1,
+      "source_ids": [
+        211368,
+        28830,
+        55197,
+        16589,
+        61252
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como lançar inventário no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 541
+    },
+    {
+      "category": "estoque",
+      "question": "como fazer transferência de estoque?",
+      "expected_articles": [
+        212797
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como fazer transferência de estoque no ERP Master?",
+        "DEV - Aplicar Localização de Estoque Padrão para os itens da Transferência de Entrada",
+        "ERR SAFETECH ESTOQUE TRANSFERENCIA LOCK CONFLICT"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 1,
+      "source_ids": [
+        212797,
+        209271,
+        20917,
+        85169,
+        5242
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como fazer transferência de estoque no ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 2165
+    },
+    {
+      "category": "pdv",
+      "question": "como cancelar uma venda de balcão no pdv?",
+      "expected_articles": [
+        212182
+      ],
+      "rank": 1,
+      "first_titles": [
+        "Como cancelar uma venda de balcão no pdv do ERP Master?",
+        "Como abrir e/ou fechar caixa de vendas balcão no ERP Master?",
+        "Parâmetro cancelar venda de Origem Site"
+      ],
+      "first_applicable": true,
+      "reasons": [],
+      "mode": "video",
+      "images_rendered": 0,
+      "videos_rendered": 2,
+      "source_ids": [
+        212182,
+        211379,
+        310515,
+        123751,
+        69602
+      ],
+      "reply_preview": "Olá! Localizei na nossa base o tutorial “Como cancelar uma venda de balcão no pdv do ERP Master?”. O link está abaixo para você acompanhar a demonstração. Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.",
+      "milliseconds": 3615
+    },
+    {
+      "category": "integracao",
+      "question": "Forma de pagamento Shopee PayLater não configurada",
+      "expected_articles": [],
+      "rank": null,
+      "first_titles": [],
+      "first_applicable": null,
+      "reasons": null,
+      "mode": "reviewed",
+      "images_rendered": 2,
+      "videos_rendered": 0,
+      "source_ids": [],
+      "reply_preview": "A mensagem indica que a forma de pagamento recebida do integrador ainda não está relacionada no Master. Faça o de/para assim:\n\n1. Acesse Cadastros → Formas de Pagamento e escolha no Master a forma que deve representar o pagamento recebido. Confirme se é crédito, débito, carteira ou outra modalidade; o nome ou a bandeira, isoladamente, não define a escolha correta.\n2. Com essa forma de pagamento selecionada, pressione Ctrl+R para abrir Relação - Site.\n3. Confira o Site/Meu Site correspondente ao integrador do pedido. Se a relação estiver ausente, clique em Adicionar e preencha Código de fora com o código ou nome externo informado pelo integrador. No exemplo “Shopee PayLater”, relacione exatamente o identificador recebido, após confirmar qual forma do Master deve representá-lo. Não use o UUID do erro como código de pagamento.\n4. Confirme e salve a relação. Depois, reprocesse o pedido no sincronizador e confira se integrou sem a mensagem.\n\nSe o código da forma de pagamento não aparecer na mensagem, envie o detalhe desse erro no sincronizador para identificarmos o valor correto antes de cadastrar a relação.",
+      "milliseconds": 23
+    },
+    {
+      "category": "integracao",
+      "question": "meu pedido não caiu no master",
+      "expected_articles": [],
+      "rank": null,
+      "first_titles": [],
+      "first_applicable": null,
+      "reasons": null,
+      "mode": "triage",
+      "images_rendered": 3,
+      "videos_rendered": 0,
+      "source_ids": [],
+      "reply_preview": "Olá! Vamos localizar o retorno da integração para identificar por que o pedido não chegou ao Master.\n\n1. No painel Sincronizador do Master, confira os indicadores dos serviços e clique em Ocorrências, no canto inferior esquerdo.\n2. Na tela Ocorrências de integrações, filtre a coluna Integração pelo integrador do pedido.\n3. Selecione o período correspondente ao pedido, informe o número da venda ou pedido no campo de busca e clique em Procurar.\n4. Copie o texto completo da coluna Ocorrência com Ctrl+C e cole aqui, ou envie um print legível. Com esse retorno podemos indicar o ajuste e como validar a integração.\n\nSe não aparecer nenhuma ocorrência, informe o integrador, o número do pedido e o período pesquisado. Se o serviço correspondente estiver vermelho, informe também esse detalhe. As imagens são exemplos: use os dados do seu pedido.",
+      "milliseconds": 32
+    },
+    {
+      "category": "fiscal",
+      "question": "IE do destinatário inválida",
+      "expected_articles": [],
+      "rank": null,
+      "first_titles": [],
+      "first_applicable": null,
+      "reasons": null,
+      "mode": "reviewed",
+      "images_rendered": 3,
+      "videos_rendered": 0,
+      "source_ids": [],
+      "reply_preview": "Olá!\n\nA mensagem “Inscrição Estadual inválida” indica que devemos conferir a IE informada nos dados de entrega da nota fiscal.\n\n1. Abra a nota fiscal no Master, acesse a aba Dados de Entrega e anote o CNPJ, a UF e o número preenchido no campo RG/IE do destinatário.\n2. Acesse https://dfe-portal.svrs.rs.gov.br/Nfe/Ccc, selecione a mesma UF da nota, mantenha o ambiente Produção, informe o CNPJ e clique em Pesquisar por CNPJ.\n3. No resultado, confirme se a Situação IE está como Habilitado e compare a UF e a Inscrição Estadual (IE) com os dados do Master. Não utilize uma IE pertencente a outra UF.\n4. Se houver divergência, corrija a IE no cadastro do cliente ou fornecedor para evitar novos erros e atualize também o campo RG/IE nos Dados de Entrega da nota atual. Recarregue os dados do destinatário na nota quando essa opção estiver disponível.\n5. Salve a alteração, confira novamente CNPJ, UF e RG/IE e tente transmitir a NF-e.\n\nSe a IE não estiver habilitada no CCC, se o CNPJ não possuir IE nessa UF ou se os dados continuarem divergentes, não informe “ISENTO” nem remova a IE por conta própria. Confirme a situação cadastral e o endereço com o destinatário antes de uma nova emissão. Os dados apresentados nas imagens são apenas exemplos.",
+      "milliseconds": 33
+    },
+    {
+      "category": "fiscal",
+      "question": "Duplicidade de NF-e com diferença na Chave de Acesso",
+      "expected_articles": [],
+      "rank": null,
+      "first_titles": [],
+      "first_applicable": null,
+      "reasons": null,
+      "mode": "reviewed",
+      "images_rendered": 1,
+      "videos_rendered": 0,
+      "source_ids": [],
+      "reply_preview": "Olá!\n\nA rejeição 539, “Duplicidade de NF-e com diferença na Chave de Acesso”, indica que a SEFAZ já encontrou outra NF-e para o mesmo emitente, modelo, série e número, mas a chave enviada agora está diferente.\n\n1. Abra a nota fiscal no Master e anote os campos Série e Número. Os valores mostrados na imagem abaixo são apenas exemplos; utilize os dados da nota que apresentou a rejeição.\n2. Copie a chave de 44 dígitos apresentada na mensagem e consulte a situação da NF-e no Portal Nacional: https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=\n3. Para verificar se a numeração foi inutilizada, acesse a consulta oficial:\nhttps://www.nfe.fazenda.gov.br/portal/consulta.aspx?tipoConsulta=inutilizacao&tipoConteudo=nDmpH/MjKrg=\nInforme o CNPJ do emitente, o ano, o modelo, a série e a numeração correspondente. Essa tela consulta a inutilização da sequência; ela não substitui a consulta da NF-e pela chave.\n4. Compare a série e o número do Master com a última NF-e válida dessa mesma série e confirme se outro sistema emissor utilizou a mesma sequência.\n5. Se a NF-e encontrada pertencer à mesma operação, não gere outra numeração. Recupere o XML autorizado e solicite a importação ou vinculação da nota ao movimento correto no Master.\n6. Se a numeração já tiver sido usada por outra operação e esta for uma nova nota, ajuste a sequência somente após confirmar com a contabilidade qual foi o último número válido da série. Salve e tente transmitir novamente.\n\nNão exclua a nota, altere a série ou avance a numeração por tentativa. Se a consulta apresentar situação cancelada, denegada ou inutilizada, encaminhe os resultados ao suporte antes de fazer alterações.",
+      "milliseconds": 10
+    },
+    {
+      "category": "negativo",
+      "question": "ORA-99999 SFT_OBJETO_NAO_DOCUMENTADO",
+      "expected_articles": [],
+      "rank": null,
+      "first_titles": [],
+      "first_applicable": null,
+      "reasons": null,
+      "mode": "no_evidence",
+      "images_rendered": 0,
+      "videos_rendered": 0,
+      "source_ids": [],
+      "reply_preview": null,
+      "milliseconds": 26
+    }
+  ]
+}

@@ -205,15 +205,16 @@ def company_case_source(case):
 
 def evidence_for_company(conn, tenant, company_id: str, query: str,
                          exclude_ticket_id=None, limit: int = 8):
-    """Search company history first and use the general corpus only as fallback."""
+    """Retrieve documentation as well as customer history; keep provenance distinct."""
     cases = company_similar_cases(conn, tenant, company_id, query, limit, exclude_ticket_id) if company_id else []
     reviewed = mapped_replies.match(query)
     if reviewed:
         return [reviewed], cases, "reviewed_procedure"
     local_source = next((source for case in cases if (source := company_case_source(case))), None)
+    documents = knowledge_access.search(conn, query, top_k=5)
     if local_source:
-        return [local_source], cases, "company_history"
-    return knowledge_access.search(conn, query, top_k=5), cases, "general_knowledge"
+        return [local_source] + documents, cases, "company_history_with_documents"
+    return documents, cases, "general_knowledge"
 
 
 def company_cases(conn, tenant, company_id: str, query: str = "", limit: int = 8):

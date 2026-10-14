@@ -6,6 +6,14 @@ from movidesk_note_worker import render_note
 
 
 class TutorialEvidenceTests(unittest.TestCase):
+    def test_import_and_export_are_different_procedures(self):
+        source = {'title': 'Como exportar cadastros de produtos no ERP Master?'}
+        self.assertFalse(knowledge.applicability(source, 'como importar cadastros de produtos?')['applicable'])
+
+    def test_specific_grade_request_rejects_basic_registration(self):
+        source = {'title': 'Como fazer cadastro de produto no ERP Master?'}
+        self.assertFalse(knowledge.applicability(source, 'como cadastrar produtos e grades?')['applicable'])
+
     def test_creation_ranks_basic_tutorial_before_related_operations(self):
         titles = ['Como importar cadastros de produtos no ERP Master?',
                   'Como fazer cadastro de kits de produtos no ERP Master?',

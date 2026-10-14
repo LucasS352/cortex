@@ -13,17 +13,18 @@ from technician_workbench import (safe_text, build_reply, company_case_source, c
 
 
 class WorkbenchUnitTests(unittest.TestCase):
-    def test_company_resolved_evidence_prevents_general_search(self):
+    def test_company_resolved_evidence_keeps_document_search(self):
         case = {'external_id': 131549, 'subject': 'Erro ao emitir etiqueta',
                 'status': 'Resolvido', 'base_status': 'Resolved', 'quality_tier': 'SILVER',
                 'hard_block_reason': None, 'problem_statement': 'Nenhuma venda selecionada',
                 'technical_narrative': 'Gerado pelo Site estava marcado.',
                 'solution_statement': 'O campo Gerado pelo Site foi alterado para Não e a etiqueta foi emitida.'}
         with patch('technician_workbench.company_similar_cases', return_value=[case]), \
-             patch('technician_workbench.knowledge_access.search') as general:
+             patch('technician_workbench.knowledge_access.search', return_value=[{'id': 'doc', 'title': 'Manual'}]) as general:
             sources, cases, scope = evidence_for_company(Mock(), 'tenant', '464', 'erro de etiqueta')
-        general.assert_not_called()
-        self.assertEqual(scope, 'company_history')
+        general.assert_called_once()
+        self.assertEqual(scope, 'company_history_with_documents')
+        self.assertEqual(sources[1]['id'], 'doc')
         self.assertEqual(sources[0]['source_external_id'], 131549)
         self.assertEqual(cases[0]['external_id'], 131549)
 
