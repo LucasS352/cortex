@@ -181,5 +181,10 @@ async def gate(request: Request, call_next):
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
+    # The admin console embeds /treinamento in a same-origin iframe. DENY also
+    # blocks that legitimate frame in production, where this middleware is
+    # enabled. SAMEORIGIN keeps cross-site framing blocked while allowing the
+    # authenticated Cortex shell to render its own training page.
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'self'"
     return response

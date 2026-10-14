@@ -63,6 +63,25 @@ class WebAuthTests(unittest.TestCase):
         self.assertEqual(self.client.get("/logout", follow_redirects=False).status_code, 303)
         self.assertEqual(self.client.get("/api/admin/settings").status_code, 401)
 
+    def test_authenticated_training_allows_only_same_origin_framing(self):
+        self.client.cookies.set(web_auth.COOKIE, web_auth._issue())
+        training = self.client.get("/treinamento")
+        self.assertEqual(training.status_code, 200)
+        self.assertEqual(training.headers["x-frame-options"], "SAMEORIGIN")
+        self.assertEqual(training.headers["content-security-policy"], "frame-ancestors 'self'")
+
+        # The login page must never be frameable, including by Cortex itself.
+        login = self.client.get("/login")
+        self.assertEqual(login.headers["x-frame-options"], "DENY")
+
+    def test_manifest_declares_authenticated_fetch(self):
+        self.client.cookies.set(web_auth.COOKIE, web_auth._issue())
+        admin = self.client.get("/admin")
+        self.assertEqual(admin.status_code, 200)
+        self.assertIn('rel="manifest" href="/tech-assets/cortex.webmanifest" crossorigin="use-credentials"',
+                      admin.text)
+        self.assertEqual(self.client.get("/tech-assets/cortex.webmanifest").status_code, 200)
+
     def test_wrong_origin_and_wrong_password(self):
         wrong_origin = self.client.post("/login", data={"username": "admin", "password": "StrongTestPassword123!"},
                                         headers={"origin": "https://evil.example"})
