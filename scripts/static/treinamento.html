@@ -75,6 +75,7 @@
       <button data-tab="reviews">Avaliações dos técnicos</button>
       <button data-tab="suggestions">Tickets sugeridos</button>
       <button data-tab="items">Base canônica</button>
+      <button data-tab="releases">Versões do Master</button>
       <button data-tab="deprecated">Inativos</button>
     </div>
     <div id="toolbar" style="margin-bottom:10px"></div>
@@ -98,7 +99,7 @@ if (window.top === window.self) {
   window.location.replace(target);
 }
 const API = '/api/treinamento';
-const state = { tab: 'queue', module: null, subtopic: null, taxonomy: [], images: [], q: '' };
+const state = { tab: 'queue', module: null, subtopic: null, taxonomy: [], images: [], releases: [], q: '' };
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const modLabel = (k) => (state.taxonomy.find(m => m.key === k) || {}).label || k;
@@ -149,7 +150,9 @@ function scoreBadge(s) {
 
 async function renderList() {
   const list = $('#list'); const m = state.module ? `module=${state.module}` : '';
-  $('#toolbar').innerHTML = (state.tab === 'items' || state.tab === 'deprecated')
+  $('#toolbar').innerHTML = state.tab === 'releases'
+    ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><span style="color:var(--muted)">Registre peculiaridades, regressões e correções por versão. O texto aprovado passa a orientar a IA imediatamente.</span><button class="primary" onclick="openRelease()">Novo aviso de versão</button></div>`
+    : (state.tab === 'items' || state.tab === 'deprecated')
     ? `<div style="display:flex;gap:8px"><input type="text" id="q" placeholder="Buscar por título, erro ou procedimento" value="${esc(state.q)}">
        ${state.tab === 'items' ? '' : ''}</div>` : '';
   const q = $('#q'); if (q) q.onkeydown = (e) => { if (e.key === 'Enter') { state.q = q.value; renderList(); } };
@@ -181,6 +184,18 @@ async function renderList() {
             ${r.signals.map(s => `<span class="pill ${s.weight > 0 ? 'ok' : 'bad'}">${s.weight > 0 ? '+' : ''}${s.weight} ${esc(s.label)}</span>`).join('')}</div></div>
           <button onclick="transform(${r.ticket_external_id}, false, this)">Analisar</button></div>`).join('')
         : '<div class="empty">Nenhum ticket resolvido elegível no momento.</div>';
+    } else if (state.tab === 'releases') {
+      const rows = await api('/versoes-master');
+      state.releases = rows;
+      const labels = {active:'Problema ativo',monitoring:'Em monitoramento',fixed:'Corrigido',inactive:'Inativo'};
+      list.innerHTML = rows.length ? rows.map(r => `<div class="row">
+        <div class="grow"><div class="title">Master ${esc(r.version_label)} · ${esc(r.title)}</div>
+        <div class="meta"><span class="pill ${r.status === 'active' ? 'bad' : r.status === 'fixed' ? 'ok' : 'warn'}">${labels[r.status]}</span>
+          ${(r.modules || []).map(m => `<span class="pill info">${esc(modLabel(m))}</span>`).join('')}
+          <span>${(r.evidence || []).length} evidência(s)</span><span>aprovado por ${esc(r.approved_by)} · ${fmt(r.updated_at)}</span></div>
+        <p>${esc(r.narrative)}</p>${r.workaround ? `<p><b>Orientação:</b> ${esc(r.workaround)}</p>` : ''}</div>
+        <button onclick="openReleaseById(${Number(r.id)})">Editar</button></div>`).join('')
+        : '<div class="empty">Nenhuma peculiaridade de versão cadastrada.</div>';
     } else {
       const params = new URLSearchParams({ status: state.tab === 'items' ? 'active' : 'deprecated' });
       if (state.module) params.set('module', state.module); if (state.subtopic) params.set('subtopic', state.subtopic);
@@ -199,6 +214,44 @@ async function renderList() {
         : '<div class="empty">Nenhum procedimento neste filtro.</div>';
     }
   } catch (e) { list.innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
+function releaseEvidenceText(items) {
+  return (items || []).map(e => `${e.kind}:${e.value}${e.label ? ' | ' + e.label : ''}`).join('\n');
+}
+function openReleaseById(id) { openRelease(state.releases.find(r => Number(r.id) === Number(id)) || {}); }
+function openRelease(r = {}) {
+  const dlg = $('#dlg'); const selected = new Set(r.modules || []);
+  dlg.innerHTML = `<div class="dlg-head"><h2>${r.id ? 'Editar' : 'Novo'} aviso de versão do Master</h2><button id="closeRelease">Fechar</button></div>
+    <div class="dlg-body" style="grid-template-columns:1fr 1fr"><div>
+      <div class="grid2"><div><label>Versão do Master</label><input type="text" id="relVersion" placeholder="Ex.: 16/08/2026" value="${esc(r.version_label)}"></div>
+      <div><label>Situação</label><select id="relStatus"><option value="active">Problema ativo</option><option value="monitoring">Em monitoramento</option><option value="fixed">Corrigido</option><option value="inactive">Inativo</option></select></div></div>
+      <label>Título curto</label><input type="text" id="relTitle" placeholder="Ex.: Falha ao importar pedidos da Shopee" value="${esc(r.title)}">
+      <label>Explique em linguagem natural o que acontece</label><textarea id="relNarrative" class="tall" placeholder="Na versão 16/08/2026, ao fazer..., o Master apresenta...">${esc(r.narrative)}</textarea>
+      <label>Impacto para o cliente</label><textarea id="relImpact" placeholder="Quem é afetado e o que deixa de funcionar">${esc(r.impact)}</textarea>
+      <label>Solução temporária ou definitiva</label><textarea id="relWorkaround" class="tall" placeholder="1. Confirme a versão...&#10;2. Acesse...&#10;3. Valide...">${esc(r.workaround)}</textarea>
+    </div><div>
+      <div class="panel"><h3>Módulos afetados</h3>${state.taxonomy.filter(m => m.key !== 'unclassified').map(m => `<label class="check"><input type="checkbox" name="relModule" value="${esc(m.key)}" ${selected.has(m.key) ? 'checked' : ''}> ${esc(m.label)}</label>`).join('')}</div>
+      <label>Mensagens de erro (uma por linha)</label><textarea id="relErrors">${esc((r.error_messages || []).join('\n'))}</textarea>
+      <label>Evidências (uma por linha)</label><textarea id="relEvidence" class="tall" placeholder="ticket:131726 | Caso confirmado&#10;url:https://... | Documento oficial&#10;note:Validado em homologação">${esc(releaseEvidenceText(r.evidence))}</textarea>
+      <p style="color:var(--muted)">Use <b>ticket:</b>, <b>url:</b> ou <b>note:</b>. As evidências ficam vinculadas ao aviso e aparecem na auditoria.</p>
+      <div class="panel"><h3>Como a IA utilizará</h3><p>O aviso será pesquisável por versão, erro, módulo e descrição. A IA deverá confirmar a versão do cliente antes de aplicar a orientação.</p></div>
+    </div></div><div class="dlg-foot"><button class="primary" id="saveRelease">Salvar e disponibilizar para a IA</button></div>`;
+  $('#relStatus').value = r.status || 'active'; $('#closeRelease').onclick = () => dlg.close();
+  $('#saveRelease').onclick = async () => {
+    const evidence = $('#relEvidence').value.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+      const match = line.match(/^(ticket|url|note):([^|]+)(?:\|\s*(.*))?$/i);
+      return match ? {kind:match[1].toLowerCase(),value:match[2].trim(),label:(match[3] || '').trim()} : {kind:'note',value:line,label:''};
+    });
+    const body = {version_label:$('#relVersion').value.trim(),title:$('#relTitle').value.trim(),narrative:$('#relNarrative').value.trim(),
+      impact:$('#relImpact').value.trim() || null,workaround:$('#relWorkaround').value.trim() || null,status:$('#relStatus').value,
+      modules:[...document.querySelectorAll('input[name="relModule"]:checked')].map(x => x.value),
+      error_messages:$('#relErrors').value.split('\n').map(x => x.trim()).filter(Boolean),evidence};
+    $('#saveRelease').disabled = true;
+    try { await api('/versoes-master' + (r.id ? `/${r.id}` : ''), {method:r.id ? 'PUT' : 'POST',body}); dlg.close(); await refresh(); toast('Aviso de versão aprovado e disponibilizado para a IA.'); }
+    catch(e) { toast(e.message); $('#saveRelease').disabled = false; }
+  };
+  dlg.showModal();
 }
 
 async function transform(ticket, force = false, btn = null) {

@@ -402,6 +402,18 @@ def assessment(rows):
 def canonical_reference(conn, row):
     """Published human knowledge has its own original; it is not a raw KB article."""
     source_id = str(row.get('source_id') or '')
+    if source_id.startswith('master-release:'):
+        release_id = source_id.partition(':')[2]
+        current = conn.execute("""SELECT id,version_label,status,approved_by FROM cortex_kb.master_release_notes
+            WHERE id=%s AND status IN ('active','monitoring','fixed')""", (int(release_id),)).fetchone() if release_id.isdigit() else None
+        if not current:
+            row['answer_use'] = 'investigation_only'
+            row['quality_flags'].append('master_release_not_current')
+            return
+        row['provenance'] = f"Aviso da versão {current['version_label']} aprovado por {current['approved_by']}"
+        row['evidence_status'] = 'human_approved_procedure'
+        row['answer_use'] = 'procedure_reference'
+        return
     item_id = source_id.partition(':')[2]
     current = None
     if item_id.isdigit():
@@ -424,7 +436,7 @@ def approved_procedures(conn, query):
     """Dedicated lane: applicable current human knowledge precedes historical guesses."""
     plan = query_plan(query)
     rows = conn.execute("""SELECT *,0.0 AS lexical_rank FROM ticket_knowledge_nodes
-        WHERE source_id LIKE 'canon:%%' AND to_tsvector('portuguese',
+        WHERE (source_id LIKE 'canon:%%' OR source_id LIKE 'master-release:%%') AND to_tsvector('portuguese',
         coalesce(title,'') || ' ' || coalesce(problem,'') || ' ' || coalesce(solution,''))
         @@ websearch_to_tsquery('portuguese',%s) ORDER BY updated_at DESC LIMIT 60""", (plan['fts'],)).fetchall()
     approved = []

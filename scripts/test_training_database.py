@@ -45,6 +45,18 @@ class TrainingDatabaseTests(unittest.TestCase):
                 kt.deprecate(item['id'],'curador','Retirado após teste')
                 current=conn.execute('SELECT count(*) AS n FROM ticket_knowledge_nodes WHERE source_id=%s',(f"canon:{item['id']}",)).fetchone()
                 self.assertEqual(current['n'],0)
+                release=kt.save_master_release({'version_label':'16/08/2026','title':'Falha conhecida de teste',
+                    'narrative':'Nesta versão o pedido de teste não é importado.','impact':'Pedido fica pendente.',
+                    'workaround':'1. Confirme a versão 16/08/2026.\n2. Reprocesse o pedido.',
+                    'status':'active','modules':['qa_training'],'error_messages':['Pedido não importado'],
+                    'evidence':[{'kind':'ticket','value':str(ticket['external_id']),'label':'Caso confirmado'}]},'curador')
+                release_node=dict(conn.execute('SELECT * FROM ticket_knowledge_nodes WHERE source_id=%s',
+                                               (f"master-release:{release['id']}",)).fetchone())
+                self.assertEqual(release_node['version_reference'],'16/08/2026')
+                release_node['quality_flags']=[]
+                ka.canonical_reference(conn,release_node)
+                self.assertEqual(release_node['answer_use'],'procedure_reference')
+                self.assertTrue(ka.approved_procedures(conn,'pedido não importado versão 16/08/2026'))
         finally:
             conn.rollback()
             conn.close()

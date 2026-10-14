@@ -794,6 +794,125 @@ def save_module(key, label, description, actor):
     return taxonomy_options()
 
 
+# ───────────────────────────── versões do Master ─────────────────────────────
+
+RELEASE_STATUSES = {'active', 'monitoring', 'fixed', 'inactive'}
+
+
+def _validate_release(data):
+    result = dict(data)
+    for key in ('version_label', 'title', 'narrative'):
+        result[key] = sanitize(result.get(key)).strip()
+        if len(result[key]) < 3:
+            raise ValueError(f'Preencha {key.replace("_", " ")} com pelo menos 3 caracteres.')
+    if len(result['version_label']) > 40 or len(result['title']) > 200 or len(result['narrative']) > 8000:
+        raise ValueError('O aviso de versão excede o tamanho permitido.')
+    result['impact'] = sanitize(result.get('impact')).strip()[:4000] or None
+    result['workaround'] = sanitize(result.get('workaround')).strip()[:8000] or None
+    result['status'] = result.get('status') or 'active'
+    if result['status'] not in RELEASE_STATUSES:
+        raise ValueError('Situação da versão inválida.')
+    valid_modules = {m['key'] for m in taxonomy_options()}
+    result['modules'] = list(dict.fromkeys(m for m in result.get('modules') or [] if m in valid_modules))[:20]
+    result['error_messages'] = [sanitize(v).strip()[:500] for v in result.get('error_messages') or [] if str(v).strip()][:20]
+    evidence = []
+    for item in result.get('evidence') or []:
+        kind = str(item.get('kind') or 'note')
+        raw_value = str(item.get('value') or '').strip()
+        value = raw_value[:1000] if kind in {'ticket', 'url'} else sanitize(raw_value).strip()[:1000]
+        label = sanitize(item.get('label')).strip()[:200]
+        if kind not in {'ticket', 'url', 'note'} or not value:
+            continue
+        if kind == 'ticket' and not value.isdigit():
+            raise ValueError('Evidência do tipo ticket deve conter somente o número do chamado.')
+        if kind == 'url' and not re.fullmatch(r'https?://[^\s]+', value):
+            raise ValueError('Informe uma URL http ou https válida na evidência.')
+        evidence.append({'kind': kind, 'value': value, 'label': label})
+    result['evidence'] = evidence[:30]
+    return result
+
+
+def _publish_release(conn, row, vector=None):
+    active = row['status'] in {'active', 'monitoring', 'fixed'}
+    source_id = f"master-release:{row['id']}"
+    if not active:
+        conn.execute('DELETE FROM ticket_knowledge_nodes WHERE source_id=%s', (source_id,))
+        return
+    status_text = {'active': 'problema conhecido ativo', 'monitoring': 'em monitoramento',
+                   'fixed': 'corrigido; confirmar se o cliente ainda usa esta versão'}[row['status']]
+    evidence = row['evidence'] or []
+    tickets = [e['value'] for e in evidence if e.get('kind') == 'ticket' and str(e.get('value')).isdigit()]
+    links = [e for e in evidence if e.get('kind') == 'url']
+    procedure = row['workaround'] or (
+        f"1. Confirme se o cliente utiliza a versão {row['version_label']} do Master.\n"
+        "2. Compare o comportamento e a mensagem apresentada com este aviso.\n"
+        "3. Se coincidirem, encaminhe o caso ao suporte com a evidência e informe que existe uma ocorrência conhecida."
+    )
+    text = '\n'.join(filter(None, (
+        f"AVISO OFICIAL DE VERSÃO DO MASTER {row['version_label']}: {row['title']}",
+        f"Situação: {status_text}.", f"Comportamento conhecido: {row['narrative']}",
+        f"Impacto: {row['impact']}" if row['impact'] else '',
+        f"Mensagens: {'; '.join(row['error_messages'])}" if row['error_messages'] else '',
+        f"Orientação:\n{procedure}",
+    )))
+    values = dict(source_type='OFFICIAL_KB', source_id=source_id,
+        source_external_id=int(tickets[0]) if tickets else None, title=f"Master {row['version_label']} — {row['title']}",
+        content_for_embedding=text, problem=row['narrative'], diagnosis=f"Comportamento conhecido na versão {row['version_label']} ({status_text}).",
+        solution=procedure, result=row['impact'], modules=[taxonomy.MODULE_NAMES.get(m, m) for m in row['modules']],
+        detected_error_codes=row['error_messages'], version_reference=row['version_label'], tier='KB', confidence='HIGH',
+        validation_score=100, final_score=100, source_authority=100,
+        validation_evidence=[f"ticket:{v}" for v in tickets][:50],
+        metadata=Jsonb({'knowledge_kind': 'master_release', 'release_note_id': row['id'],
+                        'status': row['status'], 'approved_by': row['approved_by'],
+                        'evidence': evidence, 'source_url': links[0]['value'] if links else None}),
+        embedding=('[' + ','.join(map(str, vector)) + ']') if vector else None,
+        embedding_generated=bool(vector), embedding_model=GEMINI_EMBEDDING_MODEL.split('/')[-1][:50])
+    existing = conn.execute('SELECT id FROM ticket_knowledge_nodes WHERE source_id=%s', (source_id,)).fetchone()
+    cols = list(values)
+    if existing:
+        sets = ','.join(f'{c}=%s' + ('::vector' if c == 'embedding' else '') for c in cols)
+        conn.execute(f'UPDATE ticket_knowledge_nodes SET {sets},updated_at=now() WHERE id=%s', [*values.values(), existing['id']])
+    else:
+        marks = ','.join('%s::vector' if c == 'embedding' else '%s' for c in cols)
+        conn.execute(f'INSERT INTO ticket_knowledge_nodes ({",".join(cols)}) VALUES ({marks})', list(values.values()))
+
+
+def save_master_release(data, actor, release_id=None):
+    content = _validate_release(data)
+    vector = _embed('\n'.join(filter(None, (content['version_label'], content['title'], content['narrative'],
+                                             content.get('impact'), content.get('workaround'),
+                                             ' '.join(content['error_messages'])))))
+    ensure_schema()
+    with connect() as conn:
+        before = None
+        if release_id:
+            before = conn.execute('SELECT * FROM cortex_kb.master_release_notes WHERE id=%s FOR UPDATE', (release_id,)).fetchone()
+            if not before:
+                raise LookupError('Aviso de versão não encontrado.')
+            row = conn.execute('''UPDATE cortex_kb.master_release_notes SET version_label=%s,title=%s,narrative=%s,
+                impact=%s,workaround=%s,status=%s,modules=%s,error_messages=%s,evidence=%s,approved_by=%s,updated_at=now()
+                WHERE id=%s RETURNING *''', (content['version_label'], content['title'], content['narrative'], content['impact'],
+                content['workaround'], content['status'], content['modules'], content['error_messages'], Jsonb(content['evidence']),
+                actor, release_id)).fetchone()
+        else:
+            row = conn.execute('''INSERT INTO cortex_kb.master_release_notes
+                (version_label,title,narrative,impact,workaround,status,modules,error_messages,evidence,approved_by)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *''',
+                (content['version_label'], content['title'], content['narrative'], content['impact'], content['workaround'],
+                 content['status'], content['modules'], content['error_messages'], Jsonb(content['evidence']), actor)).fetchone()
+        _publish_release(conn, row, vector)
+        audit(conn, 'master_release', row['id'], 'updated' if release_id else 'created', actor,
+              'Conhecimento de versão aprovado pelo técnico', before=dict(before) if before else None, after=dict(row))
+        return dict(row)
+
+
+def list_master_releases(status=None):
+    ensure_schema()
+    with connect() as conn:
+        return conn.execute('''SELECT * FROM cortex_kb.master_release_notes
+            WHERE (%s::text IS NULL OR status=%s) ORDER BY updated_at DESC,id DESC''', (status, status)).fetchall()
+
+
 def select_answer(actions, action_id):
     selected = next((a for a in actions if str(a.get('id')) == str(action_id)), None)
     if not selected or 'CORTEX-AI-NOTE:' not in str(selected.get('description') or ''):

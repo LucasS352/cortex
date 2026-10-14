@@ -98,4 +98,34 @@ class TrainingWorkflowTests(unittest.TestCase):
             result=client.post('/api/treinamento/tickets/131726/avaliar',json={'action_id':'1','module_key':'fiscal','rating':0})
             self.assertEqual(result.status_code,422); review.assert_not_called()
 
+    def test_master_release_requires_valid_evidence_and_is_sanitized(self):
+        data = {'version_label':'16/08/2026','title':'Falha na importação','narrative':'O pedido não entra no Master.',
+                'status':'active','modules':['integrations'],'error_messages':['Erro de integração'],
+                'evidence':[{'kind':'ticket','value':'131726','label':'Confirmado'}]}
+        with patch.object(kt, 'taxonomy_options', return_value=[{'key':'integrations'}]):
+            clean = kt._validate_release(data)
+            self.assertEqual(clean['evidence'][0]['value'],'131726')
+            data['evidence'][0]['value'] = 'ticket inválido'
+            with self.assertRaisesRegex(ValueError, 'número'):
+                kt._validate_release(data)
+
+    def test_master_release_is_a_current_human_approved_source(self):
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = {
+            'id': 7, 'version_label': '16/08/2026', 'status': 'active', 'approved_by': 'Lucas'}
+        row = {'source_id':'master-release:7','metadata':{'knowledge_kind':'master_release'},'quality_flags':[]}
+        ka.canonical_reference(db, row)
+        self.assertEqual(row['answer_use'],'procedure_reference')
+        self.assertIn('16/08/2026', row['provenance'])
+
+    def test_master_release_api_delegates_human_actor(self):
+        app=FastAPI(); app.include_router(router)
+        payload={'version_label':'16/08/2026','title':'Falha conhecida','narrative':'Falha ao importar pedido.',
+                 'status':'active','modules':['integrations'],'error_messages':[],'evidence':[]}
+        with TestClient(app) as client, patch.object(kt,'save_master_release',return_value={'id':9}) as save:
+            result=client.post('/api/treinamento/versoes-master',json=payload)
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.json()['id'],9)
+        save.assert_called_once()
+
 if __name__ == '__main__': unittest.main()

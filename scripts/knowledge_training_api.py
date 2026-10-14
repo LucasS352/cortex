@@ -90,6 +90,24 @@ class ConflictAction(BaseModel):
     dismiss: bool = False
 
 
+class ReleaseEvidence(BaseModel):
+    kind: Literal['ticket', 'url', 'note'] = 'note'
+    value: str = Field(min_length=1, max_length=1000)
+    label: str = Field(default='', max_length=200)
+
+
+class MasterRelease(BaseModel):
+    version_label: str = Field(min_length=3, max_length=40)
+    title: str = Field(min_length=3, max_length=200)
+    narrative: str = Field(min_length=3, max_length=8000)
+    impact: str | None = Field(default=None, max_length=4000)
+    workaround: str | None = Field(default=None, max_length=8000)
+    status: Literal['active', 'monitoring', 'fixed', 'inactive'] = 'active'
+    modules: list[str] = Field(default_factory=list, max_length=20)
+    error_messages: list[str] = Field(default_factory=list, max_length=20)
+    evidence: list[ReleaseEvidence] = Field(default_factory=list, max_length=30)
+
+
 def _content(model: Content | None):
     if model is None:
         return {}
@@ -211,3 +229,20 @@ def answer_reviews():
 @router.get('/imagens')
 def procedure_images():
     return kt.procedure_images()
+
+
+@router.get('/versoes-master')
+def master_releases(status: str | None = None):
+    if status and status not in kt.RELEASE_STATUSES:
+        raise HTTPException(422, 'Situação inválida.')
+    return _guard(kt.list_master_releases, status)
+
+
+@router.post('/versoes-master')
+def create_master_release(body: MasterRelease, request: Request):
+    return _guard(kt.save_master_release, body.model_dump(), actor(request))
+
+
+@router.put('/versoes-master/{release_id}')
+def update_master_release(release_id: int, body: MasterRelease, request: Request):
+    return _guard(kt.save_master_release, body.model_dump(), actor(request), release_id)

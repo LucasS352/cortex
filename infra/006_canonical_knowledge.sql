@@ -144,3 +144,27 @@ CREATE TABLE IF NOT EXISTS cortex_kb.answer_reviews (
 ALTER TABLE cortex_kb.candidates ADD COLUMN IF NOT EXISTS source_action_id text;
 
 ALTER TABLE cortex_kb.versions ADD COLUMN IF NOT EXISTS images jsonb NOT NULL DEFAULT '[]'::jsonb;
+
+-- Peculiaridades, regressões e avisos próprios de uma versão do ERP Master.
+-- O texto é escrito e aprovado por humanos e publicado no mesmo índice do RAG.
+CREATE TABLE IF NOT EXISTS cortex_kb.master_release_notes (
+    id              bigserial PRIMARY KEY,
+    version_label   text NOT NULL,
+    title           text NOT NULL,
+    narrative       text NOT NULL,
+    impact          text,
+    workaround      text,
+    status          text NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active','monitoring','fixed','inactive')),
+    modules         text[] NOT NULL DEFAULT '{}',
+    error_messages  text[] NOT NULL DEFAULT '{}',
+    evidence        jsonb NOT NULL DEFAULT '[]'::jsonb,
+    approved_by     text NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_master_release_notes_version
+    ON cortex_kb.master_release_notes (version_label, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_master_release_notes_fts ON cortex_kb.master_release_notes USING gin (
+    to_tsvector('portuguese', version_label || ' ' || title || ' ' || narrative || ' ' ||
+                coalesce(impact,'') || ' ' || coalesce(workaround,'')));
