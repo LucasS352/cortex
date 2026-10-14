@@ -133,6 +133,23 @@ def applicability(row, query, context=None):
             if any(re.search(r'\b'+term+r'\b', normalize(query)) for term in variants):
                 if not any(re.search(r'\b'+term+r'\b', purpose) for term in variants):
                     reasons.append('requested_operation_not_matched')
+    if row.get('evidence_status') == 'human_approved_procedure':
+        from datetime import date
+        scope = (row.get('metadata') or {}).get('applicability') or {}
+        context_text = normalize(query if context is None else context)
+        for field in ('master_version', 'tax_regime', 'ufs', 'integrations'):
+            values = scope.get(field)
+            if not values: continue
+            values = values if isinstance(values, list) else [values]
+            if not any(re.search(r'(?<!\w)' + re.escape(normalize(v)) + r'(?!\w)', context_text) for v in values):
+                reasons.append('canonical_scope_requires_confirmation:' + field)
+        try:
+            if scope.get('valid_from') and date.today() < date.fromisoformat(scope['valid_from']):
+                reasons.append('canonical_not_yet_valid')
+            if scope.get('valid_until') and date.today() > date.fromisoformat(scope['valid_until']):
+                reasons.append('canonical_expired')
+        except (ValueError, TypeError):
+            reasons.append('canonical_invalid_validity')
     if conflict: reasons.append('integration_context_mismatch')
     # A shared noun is insufficient when the customer's stated failure differs.
     # E.g. "IE inválida" must not inherit a procedure for "contribuinte isento".
@@ -342,6 +359,9 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
         kb={r['external_id']:r for r in conn.execute('SELECT external_id,content_text,content_html FROM raw_kb_articles WHERE tenant_id=%s AND external_id=ANY(%s)',(tenants[0]['id'],kb_ids)).fetchall()}
         for row in ranked:
             if row.get('source_type')!='OFFICIAL_KB': continue
+            if str(row.get('source_id') or '').startswith('canon:'):
+                canonical_reference(conn, row)
+                continue
             aid=(row.get('metadata') or {}).get('external_id');article=kb.get(aid)
             row['source_url']=f'https://helpdesk.alternativasistemas.com.br/kb/article/{aid}' if article else None
             if not article:
@@ -377,3 +397,41 @@ def assessment(rows):
     return dict(status='references_require_validation' if usable else 'investigation_only',
                 message='Fontes encontradas não confirmam a causa no cliente. Conferir procedimento, versão e resultado.' if usable else 'Os registros não descrevem correção suficiente para orientar um procedimento.',
                 can_support_procedure=bool(usable),quality_gaps=dict(Counter(f for r in rows for f in r.get('quality_flags',[]))))
+
+
+def canonical_reference(conn, row):
+    """Published human knowledge has its own original; it is not a raw KB article."""
+    source_id = str(row.get('source_id') or '')
+    item_id = source_id.partition(':')[2]
+    current = None
+    if item_id.isdigit():
+        current = conn.execute("""SELECT i.id,v.version_no,v.approved_by,v.applicability
+            FROM cortex_kb.items i JOIN cortex_kb.versions v ON v.id=i.current_version_id
+            WHERE i.id=%s AND i.status='active' AND v.status='published'""", (int(item_id),)).fetchone()
+    metadata = row.get('metadata') or {}
+    if not current or current['version_no'] != metadata.get('version_no'):
+        row['answer_use'] = 'investigation_only'
+        row['quality_flags'].append('canonical_version_not_current')
+        return
+    row['provenance'] = f"Procedimento aprovado por {current['approved_by']} · versão {current['version_no']}"
+    row['images'] = metadata.get('images') or []
+    row['evidence_status'] = 'human_approved_procedure'
+    # This remains subject to the same error/topic applicability gate as all sources.
+    row['answer_use'] = 'procedure_reference'
+
+
+def approved_procedures(conn, query):
+    """Dedicated lane: applicable current human knowledge precedes historical guesses."""
+    plan = query_plan(query)
+    rows = conn.execute("""SELECT *,0.0 AS lexical_rank FROM ticket_knowledge_nodes
+        WHERE source_id LIKE 'canon:%%' AND to_tsvector('portuguese',
+        coalesce(title,'') || ' ' || coalesce(problem,'') || ' ' || coalesce(solution,''))
+        @@ websearch_to_tsquery('portuguese',%s) ORDER BY updated_at DESC LIMIT 60""", (plan['fts'],)).fetchall()
+    approved = []
+    for row in rank_rows(rows,plan,top_k=10):
+        row.pop('embedding',None)
+        canonical_reference(conn,row)
+        row.update(applicability(row,query))
+        if row.get('applicable') and row.get('answer_use') == 'procedure_reference':
+            approved.append(row)
+    return approved[:3]

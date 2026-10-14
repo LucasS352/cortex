@@ -154,6 +154,7 @@ PROMPT = """Você é o curador técnico da Alternativa Sistemas (ERP Master).
 Transforme o atendimento abaixo em um PROCEDIMENTO TÉCNICO REUTILIZÁVEL.
 
 Regras obrigatórias:
+- Uma resposta do Cortex é uma proposta, não comprova que o cliente resolveu. Não trate o texto gerado pela IA como confirmação de sucesso.
 - Use SOMENTE o que está no atendimento. Se algo não estiver explícito, use null ou lista vazia.
 - Não invente versões, menus, telas ou causas. Não inclua nomes, empresas, CNPJ, e-mails ou telefones.
 - "procedure" deve ser passo a passo numerado, genérico para qualquer cliente.
@@ -363,21 +364,32 @@ def load_ticket(conn, external_id):
 
 # ───────────────────────────── 4. fila de curadoria ─────────────────────────────
 
-def create_candidate(external_id, actor, force=False):
+def create_candidate(external_id, actor, force=False, action_id=None, module_key=None):
     """Analista clicou em 'Transformar em Conhecimento' (ou aceitou uma sugestão)."""
     ensure_schema()
     with connect() as conn:
         open_ = conn.execute("SELECT id FROM cortex_kb.candidates WHERE ticket_external_id=%s AND status IN ('pending','conflict')",
                              (external_id,)).fetchone()
         if open_:
-            return get_candidate(open_['id'])
+            existing = get_candidate(open_['id'])
+            if action_id and existing.get('source_action_id') != str(action_id):
+                raise RuntimeError('Já existe revisão aberta de outra resposta deste ticket. Conclua ou rejeite antes de selecionar outra.')
+            return existing
         ticket, actions = load_ticket(conn, external_id)
+        if action_id:
+            selected = select_answer(actions, action_id)
+            from movidesk_note_worker import plain
+            ticket = {**ticket, 'solution_statement': plain(selected['description'])}
+            # Bound context to the selected answer; later topics cannot rewrite it.
+            position = next(i for i, a in enumerate(actions) if str(a.get('id')) == str(action_id))
+            actions = [a for a in actions[:position + 1] if 'CORTEX-AI-NOTE:' not in str(a.get('description') or '')]
+            actions.append({**selected, 'description': ticket['solution_statement']})
         score, signals, eligible = usefulness(ticket, actions)
         if not eligible and not force:
             raise PermissionError(json.dumps({'score': score, 'signals': signals}, ensure_ascii=False))
     # Chamada ao modelo fora da transação: não segura conexão nem locks.
     extraction, text, extractor = extract(ticket, actions)
-    module = extraction['module_hint']
+    module = module_key or extraction['module_hint']
     sub = taxonomy.subtopic(module, extraction['title'], [extraction['symptom'] or ''])
     checks = quality_checks(extraction, text)
     with connect() as conn:
@@ -385,10 +397,13 @@ def create_candidate(external_id, actor, force=False):
         status = 'conflict' if any(r['relation'] == 'conflict' for r in related) else 'pending'
         row = conn.execute('''INSERT INTO cortex_kb.candidates
             (ticket_external_id,status,usefulness_score,usefulness_signals,extraction,quality_checks,
-             suggested_module,suggested_subtopic,similar_items,extractor,created_by)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id''',
+             suggested_module,suggested_subtopic,similar_items,extractor,created_by,source_action_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (ticket_external_id) WHERE status IN ('pending','conflict') DO NOTHING RETURNING id''',
             (external_id, status, score, Jsonb(signals), Jsonb(extraction), Jsonb(checks), module, sub,
-             Jsonb(related), extractor, actor)).fetchone()
+             Jsonb(related), extractor, actor, str(action_id) if action_id else None)).fetchone()
+        if not row:
+            raise RuntimeError('Outra revisão foi aberta para este ticket. Recarregue a fila.')
         for r in related:
             if r['relation'] == 'conflict':
                 conn.execute('INSERT INTO cortex_kb.conflicts(item_id,candidate_id,reason) VALUES (%s,%s,%s)',
@@ -400,9 +415,10 @@ def create_candidate(external_id, actor, force=False):
 def get_candidate(candidate_id):
     with connect() as conn:
         row = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s', (candidate_id,)).fetchone()
+        reviews = conn.execute('SELECT rating,comment,actor,updated_at FROM cortex_kb.answer_reviews WHERE candidate_id=%s ORDER BY updated_at DESC', (candidate_id,)).fetchall()
     if not row:
         raise LookupError('Sugestão não encontrada.')
-    return dict(row)
+    return {**dict(row), 'answer_reviews': reviews}
 
 
 def list_candidates(status=('pending', 'conflict'), module=None, limit=100):
@@ -455,13 +471,27 @@ def _validate_content(c):
     for key in ('title', 'symptom', 'root_cause', 'procedure'):
         if len((c.get(key) or '').strip()) < 5:
             raise ValueError(f'Preencha "{key}" antes de publicar — conhecimento oficial precisa de causa e procedimento.')
-    if c['module_key'] not in taxonomy.MODULE_NAMES:
+    if c['module_key'] == 'unclassified':
+        raise ValueError('Selecione o módulo antes de publicar.')
+    if c['module_key'] not in taxonomy.MODULE_NAMES and c['module_key'] not in {m['key'] for m in taxonomy_options()}:
         raise ValueError('Módulo inválido.')
     if c['subtopic_key'] not in dict(taxonomy.subtopic_options(c['module_key'])):
         raise ValueError('Subtópico inválido para o módulo.')
     for key in ('title', 'symptom', 'root_cause', 'procedure', 'prerequisites', 'expected_result'):
         if c.get(key):
             c[key] = sanitize(c[key]).strip()
+    from datetime import date
+    app = c.get('applicability') or {}
+    for key in ('valid_from', 'valid_until'):
+        if app.get(key): date.fromisoformat(app[key])
+    if app.get('valid_from') and app.get('valid_until') and app['valid_from'] > app['valid_until']:
+        raise ValueError('A validade final deve ser posterior à inicial.')
+    allowed = {image['file'] for image in procedure_images()}
+    steps = {int(n) for n in re.findall(r'^\s*(\d+)\.\s', c['procedure'], re.M)}
+    for image in c.get('images') or []:
+        if image.get('file') not in allowed or image.get('after_step') not in steps:
+            raise ValueError('Vincule cada imagem revisada a um passo numerado existente (1. …).')
+        image['caption'] = sanitize(str(image.get('caption') or 'Tela de referência'))[:300]
     return c
 
 
@@ -486,7 +516,7 @@ def document_text(item, version):
     scope = '; '.join(f'{k}: {", ".join(v) if isinstance(v, list) else v}' for k, v in app.items() if v)
     return '\n'.join(p for p in (
         f"PROCEDIMENTO OFICIAL ALTERNATIVA: {item['title']}",
-        f"Módulo: {taxonomy.MODULE_NAMES.get(item['module_key'])}",
+        f"Módulo: {taxonomy.MODULE_NAMES.get(item['module_key'], item['module_key'])}",
         f"Sintoma: {version['symptom']}",
         f"Mensagens de erro: {'; '.join(version['error_messages'])}" if version['error_messages'] else '',
         f"Causa: {version['root_cause']}",
@@ -510,12 +540,13 @@ def _publish(conn, item_id, embedding_cache=None):
         source_type='OFFICIAL_KB', source_id=f'canon:{item_id}', source_external_id=int(refs[0]) if refs else None,
         title=item['title'], content_for_embedding=text, problem=version['symptom'], diagnosis=version['root_cause'],
         solution=version['procedure'], result=version['expected_result'],
-        modules=[taxonomy.MODULE_NAMES[item['module_key']]], detected_error_codes=version['error_messages'],
+        modules=[taxonomy.MODULE_NAMES.get(item['module_key'], item['module_key'])], detected_error_codes=version['error_messages'],
         version_reference=(app.get('master_version') or None), tier='KB', confidence='HIGH',
         validation_score=100, final_score=100, source_authority=100,
         validation_evidence=[f'ticket:{r}' for r in refs][:50],
         metadata=Jsonb({'canonical_item_id': item_id, 'version_no': version['version_no'],
-                        'applicability': app, 'approved_by': version['approved_by'], 'subtopic': item['subtopic_key']}),
+                        'applicability': app, 'approved_by': version['approved_by'], 'subtopic': item['subtopic_key'],
+                        'images': version.get('images') or [], 'prerequisites': version.get('prerequisites')}),
         embedding=('[' + ','.join(map(str, vector)) + ']') if vector else None,
         embedding_generated=bool(vector), embedding_model=GEMINI_EMBEDDING_MODEL.split('/')[-1][:50])
     existing = conn.execute("SELECT id FROM ticket_knowledge_nodes WHERE source_id=%s", (f'canon:{item_id}',)).fetchone()
@@ -538,11 +569,11 @@ def _new_version(conn, item_id, content, actor, reason):
     conn.execute("UPDATE cortex_kb.versions SET status='superseded' WHERE item_id=%s AND status='published'", (item_id,))
     version = conn.execute('''INSERT INTO cortex_kb.versions
         (item_id,version_no,symptom,error_messages,root_cause,procedure,prerequisites,expected_result,
-         applicability,keywords,status,change_reason,approved_by)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'published',%s,%s) RETURNING *''',
+         applicability,keywords,status,change_reason,approved_by,images)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'published',%s,%s,%s) RETURNING *''',
         (item_id, previous + 1, content['symptom'], content.get('error_messages') or [], content['root_cause'],
          content['procedure'], content.get('prerequisites'), content.get('expected_result'),
-         Jsonb(content.get('applicability') or {}), content.get('keywords') or [], reason, actor)).fetchone()
+         Jsonb(content.get('applicability') or {}), content.get('keywords') or [], reason, actor, Jsonb(content.get('images') or []))).fetchone()
     conn.execute('''UPDATE cortex_kb.items SET current_version_id=%s, title=%s, module_key=%s, subtopic_key=%s,
         status='active', updated_at=now() WHERE id=%s''',
         (version['id'], content['title'], content['module_key'], content['subtopic_key'], item_id))
@@ -678,7 +709,8 @@ def overview():
             (SELECT count(*) FROM cortex_kb.conflicts WHERE status='open') AS conflicts,
             (SELECT count(*) FROM cortex_kb.versions WHERE status='published' AND NOT embedding_ok) AS without_vector''').fetchone()
     tree = []
-    for key, label, description in taxonomy.MODULES:
+    for mod in taxonomy_options():
+        key, label, description = mod['key'], mod['label'], mod['description']
         subs = {s: 0 for s, _ in taxonomy.subtopic_options(key)}
         for r in items:
             if r['module_key'] == key:
@@ -729,3 +761,92 @@ def resolve_conflict(conflict_id, actor, note, dismiss=False):
         if not row:
             raise RuntimeError('Conflito já tratado.')
         audit(conn, 'item', row['item_id'], 'conflict_' + ('dismissed' if dismiss else 'resolved'), actor, note)
+
+
+def taxonomy_options():
+    ensure_schema()
+    with connect() as conn:
+        overrides = {r['key']: dict(r) for r in conn.execute('SELECT * FROM cortex_kb.taxonomy ORDER BY label')}
+    result = []
+    for key, label, description in taxonomy.MODULES:
+        row = overrides.pop(key, {})
+        result.append({'key': key, 'label': row.get('label', label), 'description': row.get('description', description),
+                       'subtopics': taxonomy.subtopic_options(key)})
+    result.extend({'key': k, 'label': r['label'], 'description': r['description'],
+                   'subtopics': [('general', 'Geral / outros')]} for k, r in overrides.items())
+    return result
+
+
+def save_module(key, label, description, actor):
+    if not re.fullmatch(r'[a-z][a-z0-9_]{1,49}', key) or key == 'unclassified':
+        raise ValueError('Use uma chave de 2 a 50 letras minúsculas, números ou _. A classificar é reservado.')
+    label = label.strip()
+    if not 2 <= len(label) <= 80:
+        raise ValueError('Nome do módulo deve ter de 2 a 80 caracteres.')
+    ensure_schema()
+    with connect() as conn:
+        before = conn.execute('SELECT * FROM cortex_kb.taxonomy WHERE key=%s', (key,)).fetchone()
+        conn.execute("""INSERT INTO cortex_kb.taxonomy(key,label,description,updated_by) VALUES (%s,%s,%s,%s)
+            ON CONFLICT(key) DO UPDATE SET label=excluded.label, description=excluded.description,
+            updated_by=excluded.updated_by, updated_at=now()""", (key,label,description[:500],actor))
+        audit(conn, 'taxonomy', 0, 'module_saved', actor, before=before,
+              after={'key': key, 'label': label, 'description': description})
+    return taxonomy_options()
+
+
+def select_answer(actions, action_id):
+    selected = next((a for a in actions if str(a.get('id')) == str(action_id)), None)
+    if not selected or 'CORTEX-AI-NOTE:' not in str(selected.get('description') or ''):
+        raise ValueError('Selecione uma resposta do Cortex existente no ticket sincronizado.')
+    return selected
+
+
+def ticket_answers(ticket_id):
+    ensure_schema()
+    with connect() as conn:
+        ticket, actions = load_ticket(conn, ticket_id)
+    from movidesk_note_worker import plain
+    return {'ticket': ticket_id, 'subject': ticket.get('subject'), 'answers': [
+        {'action_id': str(a['id']), 'text': plain(a.get('description') or ''), 'created_at': a.get('createdDate')}
+        for a in actions if a.get('id') is not None and 'CORTEX-AI-NOTE:' in str(a.get('description') or '')]}
+
+
+def review_answer(ticket_id, action_id, rating, module_key, comment, actor):
+    if rating not in (-1, 1):
+        raise ValueError('Avaliação inválida.')
+    if module_key == 'unclassified' or module_key not in {m['key'] for m in taxonomy_options()}:
+        raise ValueError('Classifique o módulo da resposta.')
+    with connect() as conn:
+        _, actions = load_ticket(conn, ticket_id)
+        selected = select_answer(actions, action_id)
+    candidate = create_candidate(ticket_id, actor, True, action_id, module_key) if rating == 1 else None
+    with connect() as conn:
+        row = conn.execute("""INSERT INTO cortex_kb.answer_reviews
+            (ticket_external_id,action_id,answer_text,rating,module_key,comment,actor,candidate_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(ticket_external_id,action_id,actor)
+            DO UPDATE SET rating=excluded.rating,module_key=excluded.module_key,comment=excluded.comment,
+            candidate_id=COALESCE(excluded.candidate_id,answer_reviews.candidate_id),updated_at=now() RETURNING id""",
+            (ticket_id,str(action_id),sanitize(selected['description']),rating,module_key,sanitize(comment),actor,
+             candidate['id'] if candidate else None)).fetchone()
+        audit(conn,'answer_review',row['id'],'rated',actor,sanitize(comment),
+              after={'rating':rating,'ticket':ticket_id,'action':str(action_id),'module':module_key})
+    return {'id':row['id'],'candidate_id':candidate['id'] if candidate else None}
+
+
+def answer_reviews(limit=100):
+    ensure_schema()
+    with connect() as conn:
+        return conn.execute("""SELECT id,ticket_external_id,action_id,rating,module_key,comment,actor,
+            candidate_id,created_at,updated_at FROM cortex_kb.answer_reviews
+            ORDER BY updated_at DESC LIMIT %s""",(limit,)).fetchall()
+
+
+def procedure_images():
+    labels = {'state-registration-delivery':'NF-e — campo RG/IE', 'state-registration-ccc-query':'CCC — consulta por CNPJ',
+        'state-registration-ccc-result':'CCC — resultado da inscrição estadual',
+        'product-relation':'Produto — Relação Site', 'payment-selection':'Forma de pagamento — seleção',
+        'payment-relation':'Forma de pagamento — Relação Site', 'duplicate-nfe-series-number':'NF-e — série e número',
+        'ocorrencias-1':'Ocorrências — tela 1','ocorrencias-2':'Ocorrências — tela 2','ocorrencias-3':'Ocorrências — tela 3'}
+    root = Path(__file__).parent / 'static' / 'reply-media'
+    return [{'file': p.name, 'label': labels.get(p.stem,p.stem), 'url':'/procedure-images/'+p.name}
+            for p in sorted(root.glob('*.png'))]

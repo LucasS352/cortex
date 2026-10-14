@@ -13,7 +13,8 @@ from technician_workbench import (safe_text, build_reply, company_case_source, c
 
 
 class WorkbenchUnitTests(unittest.TestCase):
-    def test_company_resolved_evidence_keeps_document_search(self):
+    @patch('technician_workbench.knowledge_access.approved_procedures', return_value=[])
+    def test_company_resolved_evidence_keeps_document_search(self, approved):
         case = {'external_id': 131549, 'subject': 'Erro ao emitir etiqueta',
                 'status': 'Resolvido', 'base_status': 'Resolved', 'quality_tier': 'SILVER',
                 'hard_block_reason': None, 'problem_statement': 'Nenhuma venda selecionada',
@@ -28,7 +29,8 @@ class WorkbenchUnitTests(unittest.TestCase):
         self.assertEqual(sources[0]['source_external_id'], 131549)
         self.assertEqual(cases[0]['external_id'], 131549)
 
-    def test_active_company_case_is_recurrence_only_and_general_search_runs(self):
+    @patch('technician_workbench.knowledge_access.approved_procedures', return_value=[])
+    def test_active_company_case_is_recurrence_only_and_general_search_runs(self, approved):
         case = {'external_id': 140000, 'subject': 'Erro ao emitir etiqueta',
                 'status': 'Em atendimento', 'base_status': 'InAttendance', 'quality_tier': 'GOLD',
                 'hard_block_reason': None, 'problem_statement': 'Nenhuma venda selecionada',

@@ -385,7 +385,12 @@ def generate_note(ticket, settings, api):
         elif not reviewed:
             import knowledge_access
             sources = knowledge_access.search(conn, query, top_k=5)
-        if reviewed:
+        import knowledge_access
+        approved = knowledge_access.approved_procedures(conn, query)
+        if approved:
+            sources = approved
+            evidence_scope = 'human_approved_procedure'
+        elif reviewed:
             # A reviewed exact-error recipe wins over semantic retrieval, while
             # company cases are still retained for the internal audit trail.
             sources = [reviewed]
@@ -524,6 +529,11 @@ def render_note(result, marker):
             lines.append(image_block(item))
     for notice in result.get('attachments', []):
         lines.append('<p>' + html.escape(notice) + '</p>')
+    origin = mapped_replies.safe_url(os.getenv('CORTEX_PUBLIC_URL', '').rstrip('/'))
+    if origin and str(result.get('feedback_ticket') or '').isdigit():
+        from urllib.parse import urlencode
+        review_url = origin + '/treinamento?' + urlencode({'ticket': result['feedback_ticket'], 'marker': marker})
+        lines.append('<p><a href="' + html.escape(review_url, quote=True) + '">Avaliar esta resposta e encaminhar à curadoria</a> (uso interno)</p>')
     lines.append('<p><small>Confira a orientação antes de responder ao cliente. ' + marker + '</small></p>')
     return ''.join(lines)
 
@@ -603,6 +613,7 @@ def process(event, settings, api, generator=generate_note):
         result = generator(ticket, settings, api)
         if not isinstance(result.get('reply'), str) or not result['reply'].strip():
             raise RetryJob('Modelo não gerou texto completo')
+        result['feedback_ticket'] = ticket['id']
         content = render_note(result, marker)
         with _connect() as db:
             db.execute('INSERT OR IGNORE INTO internal_note_outbox VALUES (?,?,?,?,?,?,?,?)',

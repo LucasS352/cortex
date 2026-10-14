@@ -127,3 +127,20 @@ CREATE TABLE IF NOT EXISTS cortex_kb.audit (
     at          timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_kb_audit_entity ON cortex_kb.audit (entity, entity_id, at DESC);
+
+-- Human feedback is scoped to one exact answer, never a whole conversation.
+CREATE TABLE IF NOT EXISTS cortex_kb.taxonomy (
+    key text PRIMARY KEY, label text NOT NULL, description text NOT NULL DEFAULT '',
+    updated_by text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS cortex_kb.answer_reviews (
+    id bigserial PRIMARY KEY, ticket_external_id integer NOT NULL, action_id text NOT NULL,
+    answer_text text NOT NULL, rating smallint NOT NULL CHECK (rating IN (-1,1)),
+    module_key text NOT NULL, comment text NOT NULL DEFAULT '', actor text NOT NULL,
+    candidate_id bigint REFERENCES cortex_kb.candidates(id),
+    created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE(ticket_external_id,action_id,actor)
+);
+ALTER TABLE cortex_kb.candidates ADD COLUMN IF NOT EXISTS source_action_id text;
+
+ALTER TABLE cortex_kb.versions ADD COLUMN IF NOT EXISTS images jsonb NOT NULL DEFAULT '[]'::jsonb;

@@ -207,6 +207,9 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
                          exclude_ticket_id=None, limit: int = 8):
     """Retrieve documentation as well as customer history; keep provenance distinct."""
     cases = company_similar_cases(conn, tenant, company_id, query, limit, exclude_ticket_id) if company_id else []
+    approved = knowledge_access.approved_procedures(conn, query)
+    if approved:
+        return approved, cases, 'human_approved_procedure'
     reviewed = mapped_replies.match(query)
     if reviewed:
         return [reviewed], cases, "reviewed_procedure"
@@ -477,6 +480,17 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
                 '”. O link está abaixo para você acompanhar a demonstração. '
                 'Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.'), {
                     'used': True, 'mode': 'video_reference', 'model': None}
+    if grounded and primary.get('evidence_status') == 'human_approved_procedure':
+        # Preserve human-approved step numbers so reviewed screenshots stay aligned.
+        parts = ['Olá!', primary.get('problem') or primary.get('title') or '']
+        prerequisites = (primary.get('metadata') or {}).get('prerequisites')
+        if prerequisites:
+            parts.append('Antes de começar: ' + prerequisites)
+        if primary.get('solution'):
+            parts.append(primary['solution'])
+        if primary.get('result'):
+            parts.append('Resultado esperado: ' + primary['result'])
+        return '\n\n'.join(parts), {'used': True, 'mode': 'human_approved_procedure', 'model': None}
     # The first hit remains the only possible procedural reference. Weaker hits
     # may help formulate a question, but must never silently replace it.
     source_text = "\n".join(f"{label}: {str(primary.get(field) or '')[:3500]}" for label, field in

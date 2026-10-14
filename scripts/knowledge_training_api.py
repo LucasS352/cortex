@@ -37,7 +37,14 @@ class Applicability(BaseModel):
     valid_until: str | None = Field(default=None, max_length=10)
 
 
+class ProcedureImage(BaseModel):
+    file: str = Field(min_length=1, max_length=100)
+    caption: str = Field(min_length=3, max_length=300)
+    after_step: int = Field(ge=1, le=100)
+
+
 class Content(BaseModel):
+    images: list[ProcedureImage] = Field(default_factory=list, max_length=10)
     title: str = Field(min_length=5, max_length=200)
     module_key: str
     subtopic_key: str = 'general'
@@ -165,4 +172,42 @@ def conflict(conflict_id: int, body: ConflictAction, request: Request):
 
 @router.get('/taxonomia')
 def taxonomy():
-    return [{'key': k, 'label': l, 'subtopics': kt.taxonomy.subtopic_options(k)} for k, l, _ in kt.taxonomy.MODULES]
+    return _guard(kt.taxonomy_options)
+
+
+class ModuleEdit(BaseModel):
+    key: str = Field(min_length=2, max_length=50)
+    label: str = Field(min_length=2, max_length=80)
+    description: str = Field(default='', max_length=500)
+
+
+class AnswerReview(BaseModel):
+    action_id: str = Field(min_length=1, max_length=80)
+    rating: Literal[-1, 1]
+    module_key: str = Field(min_length=2, max_length=50)
+    comment: str = Field(default='', max_length=1000)
+
+
+@router.post('/taxonomia')
+def save_module(body: ModuleEdit, request: Request):
+    return _guard(kt.save_module, body.key, body.label, body.description, actor(request))
+
+
+@router.get('/tickets/{ticket_id}/respostas')
+def ticket_answers(ticket_id: int):
+    return _guard(kt.ticket_answers, ticket_id)
+
+
+@router.post('/tickets/{ticket_id}/avaliar')
+def review_answer(ticket_id: int, body: AnswerReview, request: Request):
+    return _guard(kt.review_answer, ticket_id, body.action_id, body.rating, body.module_key, body.comment, actor(request))
+
+
+@router.get('/avaliacoes')
+def answer_reviews():
+    return _guard(kt.answer_reviews)
+
+
+@router.get('/imagens')
+def procedure_images():
+    return kt.procedure_images()
