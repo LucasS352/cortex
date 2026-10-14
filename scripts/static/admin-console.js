@@ -16,6 +16,7 @@ const views = {
   flow:['Vazão e backlog','Acompanhe entradas, resoluções e a evolução do estoque de chamados.'],
   tickets:['Chamados abertos','Investigue a fila por empresa, responsável, equipe, status e tempo desde a abertura.'],
   knowledge:['Base de conhecimento','Explore os módulos e revise os procedimentos utilizados pelo agente.'],
+  training:['Treinamento da IA','Curadoria contínua, extração de chamados e gestão de conhecimento canônico.'],
   workbench:['Assistente do técnico','Atenda com IA e consulte as particularidades dos clientes no mesmo lugar.'],
   performance:['Desempenho do agente','Acompanhe gerações, tempo de processamento e avaliações da equipe.'],
   audit:['Histórico de alterações','Consulte alterações de configuração e avaliações registradas neste ambiente.'],
