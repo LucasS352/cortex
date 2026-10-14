@@ -129,6 +129,14 @@ def dashboard(rows, filters, page=1, limit=20):
     selected = select(rows, filters)
     if filters.get("order") == "priority":
         selected.sort(key=insights.priority_key)
+    elif filters.get("order") == "age_asc":
+        selected.sort(key=lambda r: (r["age_days"] is None,
+                                     r["age_days"] if r["age_days"] is not None else 0,
+                                     r["external_id"]))
+    elif filters.get("order") == "age_desc":
+        selected.sort(key=lambda r: (r["age_days"] is None,
+                                     -(r["age_days"] if r["age_days"] is not None else 0),
+                                     r["external_id"]))
     elif filters.get("order") == "oldest":
         selected.sort(key=lambda r: (r["created_date"] is None, r["created_date"], r["external_id"]))
     else:

@@ -75,6 +75,7 @@ body{font-size:14px}.brand-mark{background:#249eb7;box-shadow:none;border-radius
 #view-tickets .ticket-breakdown-row:nth-child(even){background:#f5f9fc}
 #view-tickets .ticket-table{border-top:3px solid #315f84}
 #view-tickets .ticket-table th{background:#e9f0f5;border-color:#d2deea;color:#3c5870;font-size:10px}
+.column-sort{appearance:none;border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;letter-spacing:inherit;padding:0;cursor:pointer;white-space:nowrap}.column-sort:hover,.column-sort:focus-visible{color:#1267d6;text-decoration:underline;text-underline-offset:3px}.column-sort span{display:inline-block;margin-left:3px;font-size:11px}
 #view-tickets .ticket-table td{border-bottom-color:#dae4ec;color:#334b61}
 #view-tickets .ticket-table tbody tr:nth-child(even){background:#f7fafc}
 #view-tickets .ticket-table tbody tr:hover{background:#eaf4f8}

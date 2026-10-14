@@ -646,7 +646,8 @@ def tickets(request: Request, q: str = Query("", max_length=200), topic: str = Q
             status: str = Query("", max_length=80),
             queue: str = Query("", pattern="^(|support|development|customer|other)$"),
             age: str = Query("", pattern=r"^(|0-7|8-30|31-90|91\+|30\+|unknown)$"),
-            high: bool = False, order: str = Query("recent", pattern="^(recent|oldest|priority)$"),
+            high: bool = False, order: str = Query(
+                "recent", pattern="^(recent|oldest|priority|age_asc|age_desc)$"),
             company: str = Query("", max_length=100), owner: str = Query("", max_length=100),
             team: str = Query("", max_length=200), organization: str = Query("", max_length=500),
             department: str = Query("", max_length=200),

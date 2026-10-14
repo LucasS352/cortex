@@ -104,6 +104,16 @@ def _latest_run() -> dict | None:
         """).fetchone()
 
 
+def _orphaned_run(run: dict | None, process_running: bool,
+                  now: datetime | None = None) -> bool:
+    """Recognize a DB run left behind after the app/container stopped."""
+    if not run or run.get('status') != 'running' or process_running:
+        return False
+    now = now or datetime.now(timezone.utc)
+    started = run.get('started_at')
+    return bool(started and started < now - timedelta(hours=2))
+
+
 def status() -> dict:
     with _lock:
         process = _process
@@ -112,6 +122,14 @@ def status() -> dict:
         error = _last_error
         log_path = _log_path
     run = _latest_run()
+    if _orphaned_run(run, running):
+        # Keep the last completed snapshot available, but stop presenting an
+        # abandoned process as if Movidesk had been answering for many hours.
+        run = dict(run)
+        run['status'] = 'failed'
+        run['completed_at'] = datetime.now(timezone.utc)
+        error = ('A atualização foi interrompida antes de concluir. A base mantém '
+                 'a última carga válida; inicie uma nova atualização se necessário.')
     progress = None
     if run and run['status'] in ('running', 'failed'):
         if log_path is None or not log_path.is_file():

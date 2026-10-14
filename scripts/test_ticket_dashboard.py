@@ -80,6 +80,23 @@ class TicketDashboardTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in filtered["items"]], [2])
         self.assertEqual(filtered["companies"][0]["id"], dashboard.AMBIGUOUS_COMPANY)
 
+    def test_age_column_toggles_youngest_and_oldest_with_unknown_last(self):
+        rows = [
+            {"external_id": 1, "age_days": 10, "created_date": None},
+            {"external_id": 2, "age_days": 3, "created_date": None},
+            {"external_id": 3, "age_days": None, "created_date": None},
+        ]
+        base = {"subject": "", "company_id": "1", "company_name": "Empresa",
+                "company_issue": None, "associated_companies": [], "owner_id": "1",
+                "owner_name": "Técnico", "team": "Suporte", "urgency": "Normal",
+                "status": "Novo", "topic": "Outros", "problem_statement": "",
+                "is_urgent": False, "queue": "support", "responsibility": "Suporte"}
+        prepared = [{**base, **row} for row in rows]
+        asc = dashboard.dashboard(prepared, {"order": "age_asc"})["items"]
+        desc = dashboard.dashboard(prepared, {"order": "age_desc"})["items"]
+        self.assertEqual([item["id"] for item in asc], [2, 1, 3])
+        self.assertEqual([item["id"] for item in desc], [1, 2, 3])
+
 
 if __name__ == "__main__":
     unittest.main()

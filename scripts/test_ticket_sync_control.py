@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -28,6 +29,14 @@ class TicketSyncScheduleTests(unittest.TestCase):
         self.assertEqual(state['time'], '00:00')
         self.assertEqual(state['version'], control.SCHEDULE_VERSION)
         self.assertEqual(chosen['time'], '02:30')
+
+    def test_old_running_row_without_process_is_reported_as_orphaned(self):
+        now = datetime(2026, 10, 14, 12, tzinfo=timezone.utc)
+        run = {'status': 'running', 'started_at': now - timedelta(hours=3)}
+        self.assertTrue(control._orphaned_run(run, False, now))
+        self.assertFalse(control._orphaned_run(run, True, now))
+        self.assertFalse(control._orphaned_run(
+            {'status': 'running', 'started_at': now - timedelta(minutes=30)}, False, now))
 
 
 if __name__ == '__main__':
