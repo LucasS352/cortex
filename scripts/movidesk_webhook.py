@@ -15,10 +15,14 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
+from pydantic import ValidationError
+import psycopg
 
-from config import MOVIDESK_WEBHOOK_SECRET
+from config import MASTER_CONFIG_WEBHOOK_SECRET, MOVIDESK_WEBHOOK_SECRET
+from master_config import MasterConfigRequest, normalize
+from master_telemetry import connection as master_connection, save_report
 
 
 WEBHOOK_DB = Path(__file__).parent / 'output' / 'movidesk_webhooks.sqlite3'
@@ -96,7 +100,20 @@ def enqueue_payload(payload: dict) -> bool:
 
 @app.get('/health')
 def health():
-    return {'ready': bool(MOVIDESK_WEBHOOK_SECRET and len(MOVIDESK_WEBHOOK_SECRET) >= 32)}
+    return {'ready': bool(MOVIDESK_WEBHOOK_SECRET and len(MOVIDESK_WEBHOOK_SECRET) >= 32
+                          and MASTER_CONFIG_WEBHOOK_SECRET and len(MASTER_CONFIG_WEBHOOK_SECRET) >= 32)}
+
+
+async def _json_body(request: Request):
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_BODY_BYTES:
+            raise HTTPException(413, 'Payload too large')
+    try:
+        return json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        raise HTTPException(400, 'Invalid JSON')
 
 
 @app.post('/webhooks/movidesk/tickets/{secret}', response_class=PlainTextResponse)
@@ -123,3 +140,27 @@ async def receive_ticket(secret: str, request: Request):
         # A failed insert must trigger Movidesk's retry, never a false success.
         return PlainTextResponse('Storage unavailable', status_code=503)
     return PlainTextResponse('Ok', status_code=200)
+
+
+@app.post('/webhooks/master/config/{secret}')
+async def receive_master_config(secret: str, request: Request):
+    """Receive one sanitized, idempotent Master installation observation."""
+    if (not MASTER_CONFIG_WEBHOOK_SECRET or len(MASTER_CONFIG_WEBHOOK_SECRET) < 32
+            or not secrets.compare_digest(secret, MASTER_CONFIG_WEBHOOK_SECRET)):
+        return JSONResponse({'detail': 'Not found'}, status_code=404)
+    try:
+        payload = await _json_body(request)
+        report = normalize(MasterConfigRequest.model_validate(payload))
+    except HTTPException as exc:
+        return JSONResponse({'detail': exc.detail}, status_code=exc.status_code)
+    except ValidationError:
+        # Pydantic errors can echo the rejected INI. Never return or log it.
+        return JSONResponse({'detail': 'Payload inválido. Confira o contrato do webhook.'}, status_code=422)
+    try:
+        with master_connection() as db:
+            result = save_report(db, report)
+    except HTTPException as exc:
+        return JSONResponse({'detail': exc.detail}, status_code=exc.status_code)
+    except (psycopg.Error, ValueError):
+        return JSONResponse({'detail': 'Inventário indisponível. Reenvie o mesmo event_id.'}, status_code=503)
+    return JSONResponse(result, status_code=200)

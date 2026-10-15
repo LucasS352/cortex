@@ -16,7 +16,8 @@ def prepare(root, from_local=False):
                     'CORTEX_ADMIN_USERNAME', 'CORTEX_ADMIN_PASSWORD_HASH'):
             if current.get(key):
                 set_key(target, key, current[key], quote_mode='always')
-    for key in ('POSTGRES_PASSWORD', 'CORTEX_SESSION_SECRET', 'MOVIDESK_WEBHOOK_SECRET'):
+    for key in ('POSTGRES_PASSWORD', 'CORTEX_SESSION_SECRET', 'MOVIDESK_WEBHOOK_SECRET',
+                'MASTER_CONFIG_WEBHOOK_SECRET'):
         set_key(target, key, secrets.token_urlsafe(48), quote_mode='always')
     return target
 

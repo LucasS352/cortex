@@ -11,7 +11,7 @@ Esta Stack exige o login da Alternativa para telas, APIs e arquivos da aplicaç�
 1. Publicar as alterações em `main` no repositório `LucasS352/cortex` e aguardar o workflow **Build Cortex image** terminar. Ele testa autenticação, Compose e webhook, depois publica `ghcr.io/lucass352/cortex:latest` e uma tag por commit. Atualizar só o YAML não atualiza o código dentro da imagem.
 2. Para acesso pelo IP informado, usar `CORTEX_PUBLIC_URL=http://179.236.68.24` e liberar a porta 80. O Caddy recebe essa mesma URL; não é necessário preencher `CORTEX_DOMAIN` nem `CORTEX_ALLOWED_HOSTS`. Para HTTPS com domínio, usar `https://seu-dominio`, apontar o DNS e liberar 80/443. HTTP exige login, mas não criptografa o tráfego; o cookie usa `Secure` quando a URL é HTTPS. Se já houver um proxy na máquina, adaptar a Stack para encaminhar o painel ao serviço `app:8001` e somente `/webhooks/movidesk/tickets/*` ao serviço `webhook:8003`. Uma porta externa diferente exige ajustar também o mapeamento do Caddy.
 3. No servidor, verificar se o Portainer usa **Docker Standalone**. No Git Registry/Registries, configurar acesso à imagem GHCR privada se o pacote não for público. O token deve ter permissão de leitura de pacotes. Mantenha também o repositório privado.
-4. Gerar a senha do administrador fora do chat e guardar os três valores impressos por `python scripts/create_admin_hash.py`. O script pede a senha sem ecoá-la e gera o hash da senha, a chave da sessão e o segredo do webhook.
+4. Gerar a senha do administrador fora do chat e guardar os valores impressos por `python scripts/create_admin_hash.py`. O script pede a senha sem ecoá-la e gera o hash, a chave da sessão e segredos independentes para os webhooks Movidesk e Master.
 
 Não adicione arquivos ignorados nem use `git add -f` para `.env`, `output` ou `Instrucoes_master`.
 
@@ -26,6 +26,7 @@ Em **Stacks → cortex → Edit stack settings**, mantenha o repositório e `ref
 | `CORTEX_ADMIN_PASSWORD_HASH` | Hash gerado por `python scripts/create_admin_hash.py` |
 | `CORTEX_SESSION_SECRET` | Chave aleatória gerada pelo mesmo script |
 | `MOVIDESK_WEBHOOK_SECRET` | Segredo atual se já configurado; caso contrário, um novo segredo gerado |
+| `MASTER_CONFIG_WEBHOOK_SECRET` | Segredo exclusivo gerado para o envio diário do `config.ini` |
 | `POSTGRES_PASSWORD` | Na Stack existente, omitir ou usar `cortex_secret`; o volume foi criado pelo fallback anterior |
 | `CORTEX_IMAGE` | `ghcr.io/lucass352/cortex:<commit corrigido>` ou `:latest` com re-pull |
 
@@ -33,7 +34,7 @@ Preserve também as chaves Movidesk/Gemini e configurações do piloto existente
 
 Cole o hash no campo de valor do Portainer com os `$` originais, sem aspas extras. Em arquivo `.env.server`, use aspas simples para preservar os `$`. O Compose bloqueia a implantação se faltarem credenciais, em vez de abrir o painel sem login. `CORTEX_AUTH_REQUIRED=false` no Portainer não desativa a proteção desta Stack.
 
-Se o acesso já tiver sido preparado localmente, copie as quatro variáveis de `.env.server.access` para a Stack: usuário, hash da senha, chave de sessão e URL pública. Esse arquivo é privado e ignorado pelo Git; publicar o código não transfere as credenciais. Adicione também as variáveis Movidesk/Gemini do `.env.server`, cada uma em seu próprio campo no Portainer. Não copie comentários, aspas externas nem os textos `&#x20;`. A senha é configurada como hash scrypt, com mínimo de 8 caracteres.
+Se o acesso já tiver sido preparado localmente, copie as quatro variáveis de `.env.server.access` para a Stack: usuário, hash da senha, chave de sessão e URL pública. Esse arquivo é privado e ignorado pelo Git; publicar o código não transfere as credenciais. Adicione também as variáveis Movidesk/Gemini e `MASTER_CONFIG_WEBHOOK_SECRET` do `.env.server`, cada uma em seu próprio campo no Portainer. Não copie comentários, aspas externas nem os textos `&#x20;`. A senha é configurada como hash scrypt, com mínimo de 8 caracteres.
 
 Para gerar um único arquivo pronto para a opção **Load variables from .env file** do Portainer, execute `python scripts/prepare_portainer_env.py` e importe `.env.server.portainer`. O arquivo combina as configurações locais com o hash do login e corrige `POSTGRES_PASSWORD` para o volume existente. Os valores são gravados sem aspas porque o Portainer preserva aspas como parte do valor importado. Ele é ignorado pelo Git e não deve ser commitado.
 
@@ -54,7 +55,7 @@ Em **Stacks > Add stack > Git repository**:
 
 O arquivo da Stack usa `image`, sem `build`. [O Portainer informa que build em Compose pode falhar em ambientes Docker remotos](https://docs.portainer.io/faqs/known-issues/docker-compose-files-including-build-steps-fail); por isso a imagem é criada no GitHub Actions e publicada no GHCR.
 
-Após o deploy, acesse `<CORTEX_PUBLIC_URL>/admin`. O Movidesk recebe a URL `<CORTEX_PUBLIC_URL>/webhooks/movidesk/tickets/<MOVIDESK_WEBHOOK_SECRET>`. Valide o login e o transporte escolhido antes de configurar o gatilho. O endpoint recebe e armazena eventos; o `note-worker` faz o processamento e o PATCH interno conforme o teto `CORTEX_AUTONOTE_MODE` e as empresas autorizadas no painel.
+Após o deploy, acesse `<CORTEX_PUBLIC_URL>/admin`. O Movidesk recebe a URL `<CORTEX_PUBLIC_URL>/webhooks/movidesk/tickets/<MOVIDESK_WEBHOOK_SECRET>` e o Master recebe `<CORTEX_PUBLIC_URL>/webhooks/master/config/<MASTER_CONFIG_WEBHOOK_SECRET>`. Valide o login e o transporte escolhido antes de configurar os disparos. O endpoint Master sanitiza o INI antes da persistência e deduplica as retentativas por `event_id`.
 
 ## Dados e mídia
 

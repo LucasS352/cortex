@@ -15,9 +15,12 @@ tela_conferencia exige_digital impressora_barra tam_pag_orc servidor_master orc_
 nf_serie nf_layout orc_impepson nf_serie_nfe ecf_baud ecf_sensorpapel rec_modogr
 impressora_guilhotina leitorcodbarras terminal_sat impressora_pgto_modelo
 impressora_pgto_porta exibir_etiqueta_venda gaveta tef_porta
-descricao banco servidor empresasinc dll atualizador sincronizar direct""".split())
+descricao banco servidor empresasinc dll atualizador sincronizar direct muir_codigo usu_codigo
+master_exe_path master_exe_path_responsavel master_exe_path_motivo master_exe_path_link_ticket
+caminhorede caminholocal somentenovo variacao subvariacao""".split())
 SECRET_KEY = re.compile(r"senha|password|passwd|pwd|secret|token|credential|api.?key|private.?key", re.I)
 CONNECTION_SECTION = re.compile(r"conexao_\d+", re.I)
+COMPANY_PATH = re.compile(r"(?i)(?:^|[\\/])asr[\\/]([^\\/]+)(?:[\\/]|$)")
 
 
 def canonical(value):
@@ -35,6 +38,29 @@ def safe_value(value):
     return value.strip()[:2048]
 
 
+def parameter_state(value):
+    normalized = canonical(value)
+    if not normalized:
+        return 'unset'
+    if normalized in {'s', 'sim', 'true', '1', 'on', 'ativo', 'ativado'}:
+        return 'enabled'
+    if normalized in {'n', 'nao', 'não', 'false', '0', 'off', 'inativo', 'desativado'}:
+        return 'disabled'
+    return 'configured'
+
+
+def company_from_paths(sections):
+    """Use an ASR installation path as a useful label, never as durable identity."""
+    preferred = ('caminholocal', 'caminhorede', 'master_exe_path')
+    for key in preferred:
+        for section in sections:
+            value = section['values'].get(key, '')
+            match = COMPANY_PATH.search(value)
+            if match:
+                return match.group(1).strip(), key
+    return None, None
+
+
 def parse_ini(text: str):
     """Preserve duplicate sections; ConfigParser(strict=False) loses environments."""
     sections = []
@@ -49,8 +75,8 @@ def parse_ini(text: str):
         header = re.fullmatch(r"\[([A-Za-z0-9_ -]{1,64})\]", line)
         if header:
             name = canonical(header[1])
-            allowed = name in ('geral', 'individual', 'safetech') or bool(CONNECTION_SECTION.fullmatch(name))
-            section = {'section': name, 'occurrence': len(sections) + 1, 'values': {}} if allowed else None
+            allowed = bool(re.fullmatch(r'[a-z0-9_ -]{1,64}', name))
+            section = {'section': name, 'occurrence': len(sections) + 1, 'values': {}, 'parameters': {}} if allowed else None
             if allowed:
                 if name in seen_names:
                     duplicate_sections += 1
@@ -69,9 +95,17 @@ def parse_ini(text: str):
         key, value = line.split('=', 1)
         key = canonical(key)
         if SECRET_KEY.search(key) or key == 'usuario':
+            if section is not None:
+                section['parameters'][key] = 'redacted'
             redacted += 1
             continue
-        if section is None or key not in SAFE_KEYS:
+        if section is None:
+            ignored += 1
+            continue
+        section['parameters'][key] = parameter_state(value)
+        if key not in SAFE_KEYS:
+            # Keep the inventory/state of unknown parameters without retaining a
+            # value that may contain a customer secret.
             ignored += 1
             continue
         if key in section['values']:
@@ -146,6 +180,17 @@ def normalize(req: MasterConfigRequest, received_at=None):
     observed = datetime.strptime(req.datahora, '%d/%m/%Y %H:%M:%S').replace(tzinfo=tz)
     sections, stats = parse_ini(req.config)
     connections = [s for s in sections if CONNECTION_SECTION.fullmatch(s['section'])]
+    path_company, path_company_source = company_from_paths(sections)
+    integration_summary = [{
+        'section': section['section'],
+        'occurrence': section['occurrence'],
+        'descricao': section['values'].get('descricao'),
+        'empresasinc': section['values'].get('empresasinc'),
+        'muir_codigo': section['values'].get('muir_codigo'),
+        'sincronizar': section['values'].get('sincronizar'),
+        'enabled': section['parameters'].get('atualizador') == 'enabled',
+        'configured_parameters': sum(state != 'unset' for state in section['parameters'].values()),
+    } for section in connections]
     active = [s['occurrence'] for s in connections if canonical(s['values'].get('servidor')) == canonical(req.servidor)
               and canonical(s['values'].get('banco')) == canonical(req.banco)]
     version = re.fullmatch(r'\s*(.*?)\s+-\s+(\d{2}/\d{2}/\d{4}\s+\d{2}:\d{2}:\d{2})\s*', req.versao)
@@ -177,7 +222,8 @@ def normalize(req: MasterConfigRequest, received_at=None):
     installation_key = 'id:' + req.instalacao_id if req.instalacao_id else 'provisional:' + digest([canonical(req.empresa), canonical(req.servidor), canonical(req.banco)])
     company_key = 'id:' + req.codigo_empresa if req.codigo_empresa else 'provisional:' + digest(installation_key)
     payload = {
-        'empresa': req.empresa, 'usuario': req.usuario, 'codigo_empresa': req.codigo_empresa,
+        'empresa': req.empresa, 'empresa_caminho': path_company, 'empresa_caminho_origem': path_company_source,
+        'usuario': req.usuario, 'codigo_empresa': req.codigo_empresa,
         'instalacao_id': req.instalacao_id, 'identity_status': 'reported_identifiers' if req.codigo_empresa and req.instalacao_id else 'provisional',
         'version': version[1].strip() if version else req.versao,
         'version_reported': req.versao, 'build_local': build,
@@ -185,7 +231,9 @@ def normalize(req: MasterConfigRequest, received_at=None):
         'server': req.servidor, 'database': req.banco,
         'observed_at': observed.isoformat(), 'timezone_offset': req.timezone_offset,
         'config_sections': sections, 'config_hash': digest(sections), 'sanitization': stats,
-        'connection_count': len(connections), 'active_connection_occurrences': active,
+        'connection_count': len(connections), 'integration_summary': integration_summary,
+        'parameter_count': sum(len(section['parameters']) for section in sections),
+        'active_connection_occurrences': active,
         'warnings': warnings,
     }
     # Only sanitized data enters hashes, storage, logs or model-facing context.

@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="/tech-assets/cortex-polish.css?v=20261006-10">
   <link rel="stylesheet" href="/tech-assets/agent-center.css?v=20261013-manual-pull">
   <link rel="stylesheet" href="/tech-assets/technician-workbench.css?v=5">
+  <link rel="stylesheet" href="/tech-assets/client-inventory.css?v=20261014-1">
 </head>
 <body class="overview-page">
 <div class="app-shell">
@@ -33,6 +34,7 @@
       <button class="nav-item" data-view="audit" aria-label="Histórico de alterações"><span class="nav-icon">≡</span><span class="nav-text"><span class="nav-full">Histórico de alterações</span><span class="nav-mobile">Histórico</span></span></button>
       <button class="nav-item" data-view="agent" aria-label="Agente e políticas"><span class="nav-icon">✳</span><span class="nav-text"><span class="nav-full">Agente e políticas</span><span class="nav-mobile">Agente</span></span></button>
       <button class="nav-item" data-view="workbench" aria-label="Assistente do técnico"><span class="nav-icon">✦</span><span class="nav-text"><span class="nav-full">Assistente do técnico</span><span class="nav-mobile">Assistente</span></span></button>
+      <button class="nav-item" data-view="clients" aria-label="Clientes"><span class="nav-icon">◎</span><span class="nav-text"><span class="nav-full">Clientes</span><span class="nav-mobile">Clientes</span></span></button>
     </nav>
     <div class="sidebar-bottom"><div class="online-dot"></div><span>Conectado ao banco local</span><button id="refresh" title="Recarregar painel">↻</button></div>
   </aside>
@@ -700,6 +702,20 @@
   <section id="company-view" class="layout" hidden><aside class="card side"><h2>Selecionar empresa</h2><label>Empresa Movidesk<input id="profile-company-search" type="search" placeholder="Busque nome ou ID" autocomplete="off"></label><div id="profile-company-options" class="options" role="listbox"></div><p id="profile-selected-company" class="selected">Selecione uma empresa do cadastro.</p><p class="hint">O vínculo usa o ID da organização. Nomes parecidos não são mesclados automaticamente.</p></aside><section class="card work"><div class="work-head"><div><span class="eyebrow">CONHECIMENTO DO CLIENTE</span><h2 id="profile-title">Contexto da empresa</h2><p>Registre particularidades verificadas e associe apenas ambientes confirmados.</p></div></div><div id="profile-content" hidden><h3>Particularidades</h3><p>Uma informação por linha. Marque como confirmada apenas após conferir com o cliente, técnico ou chamado.</p><div id="facts-list"></div><div class="actions"><button id="add-fact">Adicionar informação</button><button id="save-profile" class="primary">Salvar contexto</button></div><hr><h3>Histórico recente da empresa</h3><p>Chamados resolvidos ajudam a investigar, mas cada correção precisa ser validada no caso atual.</p><div id="company-history"></div><hr><h3>Ambientes Master vinculados</h3><p>O inventário do Master pode citar várias bases no mesmo INI. Vincule somente a instalação ativa cuja empresa você confirmou.</p><div id="linked-environments"></div><label>Buscar ambiente coletado<input id="environment-search" type="search" placeholder="Nome informado pelo Master"></label><div id="environment-options" class="options"></div></div></section></section>
       </section>
 
+      <section class="view" id="view-clients">
+        <div class="client-toolbar panel">
+          <label class="client-search"><span>⌕</span><input id="client-inventory-search" type="search" placeholder="Buscar cliente, servidor, banco ou integração"></label>
+          <label class="client-check"><input id="client-inventory-beta" type="checkbox"> Somente BETA</label>
+          <button class="button button-primary" id="client-inventory-refresh" type="button">↻ Atualizar inventário</button>
+        </div>
+        <div id="client-inventory-status" class="snapshot-banner" role="status">Carregando clientes recebidos pelo webhook…</div>
+        <div id="client-inventory-kpis" class="client-kpis"></div>
+        <div id="client-inventory-list" class="client-list"></div>
+        <button class="button button-quiet client-more" id="client-inventory-more" type="button" hidden>Carregar mais clientes</button>
+        <p class="client-method">O nome sugerido pelo caminho (por exemplo, <code>D:\asr\cikala\…</code>) é apenas um rótulo operacional. A identidade definitiva continua sendo o código de empresa e o identificador da instalação enviados pelo webhook. Senhas e usuários de banco nunca são exibidos.</p>
+        <dialog id="client-inventory-dialog" class="client-dialog"><div class="client-dialog-head"><div><span class="eyebrow">CONFIGURAÇÃO SANITIZADA</span><h2 id="client-dialog-title">Detalhes do cliente</h2></div><button class="button button-quiet" id="client-dialog-close" type="button">Fechar</button></div><div id="client-dialog-body"></div></dialog>
+      </section>
+
       <section class="view" id="view-performance">
         <div class="performance-toolbar"><div class="section-tabs"><button class="tab-button active" data-perf="summary">Indicadores</button><button class="tab-button" data-perf="reviews">Revisão de respostas <span id="review-count">0</span></button><button class="tab-button" data-perf="test">Testar resposta</button></div><label>Período <select id="performance-days"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option></select></label></div>
         <div id="performance-summary">
@@ -717,6 +733,7 @@
 </div>
   <script src="/tech-assets/admin-console.js?v=20261014-training-deeplink" defer></script>
   <script src="/tech-assets/technician-workbench.js?v=5" defer></script>
+  <script src="/tech-assets/client-inventory.js?v=20261014-1" defer></script>
   <script src="/tech-assets/agent-center.js?v=20261006-enterprise" defer></script>
 </body></html>
 

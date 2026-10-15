@@ -33,6 +33,7 @@ def main() -> None:
         "POSTGRES_PASSWORD": "cortex_secret",
         "MOVIDESK_TOKEN": server.get("MOVIDESK_TOKEN") or "",
         "MOVIDESK_WEBHOOK_SECRET": server.get("MOVIDESK_WEBHOOK_SECRET") or "",
+        "MASTER_CONFIG_WEBHOOK_SECRET": server.get("MASTER_CONFIG_WEBHOOK_SECRET") or "",
         "GEMINI_API_KEY": server.get("GEMINI_API_KEY") or "",
         "GEMINI_MODEL": server.get("GEMINI_MODEL") or "gemini-2.5-flash",
         "CORTEX_AUTONOTE_MODE": server.get("CORTEX_AUTONOTE_MODE") or "dry_run",
@@ -44,7 +45,8 @@ def main() -> None:
         "CORTEX_MOVIDESK_INTERVAL_SECONDS": server.get("CORTEX_MOVIDESK_INTERVAL_SECONDS") or "7",
         "CORTEX_RUNTIME_PILOT_CONTROL": "true",
     }
-    required = ("CORTEX_ADMIN_PASSWORD_HASH", "CORTEX_SESSION_SECRET", "MOVIDESK_WEBHOOK_SECRET")
+    required = ("CORTEX_ADMIN_PASSWORD_HASH", "CORTEX_SESSION_SECRET", "MOVIDESK_WEBHOOK_SECRET",
+                "MASTER_CONFIG_WEBHOOK_SECRET")
     missing = [key for key in required if not values[key]]
     if missing:
         raise SystemExit("Variáveis privadas ausentes: " + ", ".join(missing))

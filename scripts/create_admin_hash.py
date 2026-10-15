@@ -17,3 +17,4 @@ if __name__ == "__main__":
     print("CORTEX_ADMIN_PASSWORD_HASH=" + password_hash)
     print("CORTEX_SESSION_SECRET=" + secrets.token_urlsafe(48))
     print("MOVIDESK_WEBHOOK_SECRET=" + secrets.token_urlsafe(48))
+    print("MASTER_CONFIG_WEBHOOK_SECRET=" + secrets.token_urlsafe(48))

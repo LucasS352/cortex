@@ -4,7 +4,7 @@ Implementado em 10/09/2026. O Master envia uma observação diária de cada inst
 
 ## Contrato para o desenvolvedor Delphi
 
-`POST /api/v1/master/telemetry/config`, JSON UTF-8. O mesmo objeto também pode vir dentro de `{"status":"ok","info":{...}}`.
+O Master deve enviar em produção para `POST /webhooks/master/config/{MASTER_CONFIG_WEBHOOK_SECRET}`, JSON UTF-8. O segredo é exclusivo deste webhook e diferente do Movidesk. A rota interna autenticada `POST /api/v1/master/telemetry/config` permanece disponível para administração. O mesmo objeto também pode vir dentro de `{"status":"ok","info":{...}}`.
 
 ```json
 {
@@ -38,7 +38,7 @@ Limites: INI com até 262.144 caracteres e corpo JSON até 2 MiB. Escapes JSON c
 1. Executar em tarefa secundária uma vez por instalação/dia, com pequeno atraso aleatório para distribuir a carga. Não executar uma vez por tela nem por login de cada operador.
 2. Capturar o ambiente realmente ativo e os metadados correspondentes. Preencher `ticket` somente para o executável BETA; voltar a vazio quando retornar à versão estável.
 3. Remover senhas, logins de banco, tokens e segredos no emissor. O receptor repete a filtragem e não grava o INI bruto.
-4. Gerar `event_id` uma única vez e enviar por HTTPS ao coletor autenticado da organização. Não distribuir a chave administrativa global do DeskCortex dentro do executável.
+4. Gerar `event_id` uma única vez e enviar por HTTPS ao coletor autenticado da organização. O segredo presente na URL identifica o coletor e deve ficar protegido no Master; ele não é a senha administrativa do Cortex. Se houver suspeita de vazamento, rotacionar `MASTER_CONFIG_WEBHOOK_SECRET`.
 5. Marcar a observação como entregue somente após `stored` ou `duplicate`. Em falha transitória, repetir a mesma observação com backoff; `422` exige corrigir o formato e `409` exige conferir identidade/evento. Evitar reenviar continuamente um payload inválido.
 6. Após atualização, troca de BETA ou mudança importante, um envio adicional no mesmo dia é permitido. Usar nova observação com horário mais recente e novo `event_id`.
 
@@ -53,7 +53,20 @@ Esse agendamento pertence ao Master/coletor do desenvolvedor. Nenhuma automaçã
 - `GET /api/v1/master/environments?beta_only=false&limit=50&offset=0`: inventário paginado, com sinalização de última coleta há mais de 36 horas.
 - `GET /api/v1/master/environments/{id}/history?limit=20&offset=0`: envios e campos alterados.
 - `GET /api/v1/master/environments/{id}/snapshots/{snapshot_id}`: configuração de diagnóstico sanitizada daquele envio.
-- Interface local: `/ambientes`, também acessível pelo link **Ambientes Master** no simulador.
+- Interface principal: `/admin`, item **Clientes** no menu. A tela reúne clientes, integrações, estado dos parâmetros e configuração sanitizada. A interface técnica anterior continua disponível em `/ambientes`.
+
+### Inventário apresentado em Clientes
+
+O receptor sugere o nome operacional pelo primeiro diretório depois de `asr` em `caminholocal`, `caminhorede` ou `master_exe_path`. Por exemplo, `D:\asr\cikala\Usuarios\...\master.exe` sugere `cikala`. Esse texto não substitui `codigo_empresa`: é somente um rótulo para localizar o cliente enquanto o vínculo definitivo não foi confirmado.
+
+Cada `[conexao_N]` aparece como uma integração separada, preservando descrição, `EmpresaSinc`, `MUIR_CODIGO`, itens de `SINCRONIZAR` e customização de executável quando informados. Todos os nomes de parâmetros são inventariados, inclusive chaves ainda desconhecidas pelo Cortex. Para chaves desconhecidas, somente o estado é mantido; o valor não é armazenado. A leitura do estado usa:
+
+- `S`, `Sim`, `True`, `1`, `On`: ativo;
+- `N`, `Não`, `False`, `0`, `Off`: inativo;
+- vazio: não configurado;
+- qualquer outro conteúdo: configurado.
+
+Valores operacionais conhecidos ficam disponíveis no detalhe. Senhas, usuários de banco, tokens e valores com formato de credencial continuam removidos antes da persistência.
 
 ## Regras que evitam diagnósticos errados
 
@@ -75,6 +88,8 @@ O hash e a persistência usam somente dados sanitizados. Não há coluna de INI 
 A implementação está no serviço FastAPI existente (`scripts/simulator_app.py`), por meio de `master_config.py` e `master_telemetry.py`. Não há outro parser concorrente no NestJS.
 
 O simulador continua restrito à máquina local e ao único tenant da organização. Antes de receber diretamente pela internet, é necessário um coletor autenticado com identidade de instalação/empresa vinculada no servidor, HTTPS e limites de requisição. Identificadores enviados no JSON não autorizam acesso. Não expor o simulador por proxy como atalho para essa etapa.
+
+O proxy publica somente `/webhooks/master/config/*` no processo receptor isolado. O receptor limita o corpo a 2 MiB, compara o segredo em tempo constante, não devolve erros que contenham o INI e grava diretamente o relatório sanitizado no PostgreSQL. Retentativas devem reutilizar o mesmo `event_id`; `stored` e `duplicate` significam entrega concluída.
 
 ## Testes
 

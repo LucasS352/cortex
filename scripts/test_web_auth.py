@@ -20,6 +20,7 @@ class WebAuthTests(unittest.TestCase):
             "CORTEX_ADMIN_PASSWORD_HASH": hash_password("StrongTestPassword123!"),
             "CORTEX_SESSION_SECRET": "a" * 48,
             "MOVIDESK_WEBHOOK_SECRET": "b" * 48,
+            "MASTER_CONFIG_WEBHOOK_SECRET": "m" * 48,
             "CORTEX_PUBLIC_URL": "https://localhost",
         })
         self.env.start()
@@ -166,7 +167,7 @@ class WebAuthTests(unittest.TestCase):
         self.assertEqual(self.client.post("/login", data={}, headers={"origin": "https://localhost"}).status_code, 429)
 
     def test_missing_credentials_fail_closed(self):
-        for key in ("CORTEX_ADMIN_USERNAME", "CORTEX_ADMIN_PASSWORD_HASH", "CORTEX_SESSION_SECRET", "MOVIDESK_WEBHOOK_SECRET"):
+        for key in ("CORTEX_ADMIN_USERNAME", "CORTEX_ADMIN_PASSWORD_HASH", "CORTEX_SESSION_SECRET", "MOVIDESK_WEBHOOK_SECRET", "MASTER_CONFIG_WEBHOOK_SECRET"):
             with self.subTest(key=key), patch.dict(os.environ, {key: ""}):
                 with self.assertRaises(RuntimeError):
                     web_auth.validate_configuration()

@@ -47,6 +47,8 @@ def validate_configuration() -> None:
         raise RuntimeError("CORTEX_SESSION_SECRET precisa de pelo menos 32 caracteres")
     if len(os.getenv("MOVIDESK_WEBHOOK_SECRET", "")) < 32:
         raise RuntimeError("MOVIDESK_WEBHOOK_SECRET precisa de pelo menos 32 caracteres")
+    if len(os.getenv("MASTER_CONFIG_WEBHOOK_SECRET", "")) < 32:
+        raise RuntimeError("MASTER_CONFIG_WEBHOOK_SECRET precisa de pelo menos 32 caracteres")
     try:
         public_origin()
     except ValueError as exc:

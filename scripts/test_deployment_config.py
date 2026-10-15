@@ -18,6 +18,7 @@ class DeploymentConfigTests(unittest.TestCase):
         password_hash = hash_password("DisposableTestPassword!")
         env = {**os.environ, "POSTGRES_PASSWORD": "test-db-only", "CORTEX_ADMIN_PASSWORD_HASH": password_hash,
                "CORTEX_SESSION_SECRET": "s" * 48, "MOVIDESK_WEBHOOK_SECRET": "w" * 48,
+               "MASTER_CONFIG_WEBHOOK_SECRET": "m" * 48,
                "CORTEX_PUBLIC_URL": "http://192.0.2.10", "CORTEX_DOMAIN": "must-not-be-interpolated",
                "CORTEX_AUTH_REQUIRED": "false"}
         for filename in FILES:
@@ -41,6 +42,7 @@ class DeploymentConfigTests(unittest.TestCase):
     def test_missing_login_credentials_reject_deployment(self):
         env = {**os.environ, "POSTGRES_PASSWORD": "test-db-only", "CORTEX_ADMIN_PASSWORD_HASH": "",
                "CORTEX_SESSION_SECRET": "s" * 48, "MOVIDESK_WEBHOOK_SECRET": "w" * 48,
+               "MASTER_CONFIG_WEBHOOK_SECRET": "m" * 48,
                "CORTEX_PUBLIC_URL": "http://192.0.2.10"}
         result = subprocess.run(["docker", "compose", "--env-file", os.devnull, "-f", FILES[0], "config", "--quiet"],
                                 cwd=ROOT, env=env, capture_output=True, text=True)
@@ -53,6 +55,7 @@ class DeploymentConfigTests(unittest.TestCase):
         env.update({"CORTEX_ADMIN_PASSWORD_HASH": hash_password("DisposableTestPassword!"),
                     "CORTEX_ADMIN_USERNAME": "alternativa", "CORTEX_SESSION_SECRET": "s" * 48,
                     "MOVIDESK_WEBHOOK_SECRET": "w" * 48,
+                    "MASTER_CONFIG_WEBHOOK_SECRET": "m" * 48,
                     "CORTEX_PUBLIC_URL": "http://179.236.68.24"})
         result = subprocess.run(["docker", "compose", "--env-file", os.devnull, "-f", FILES[0],
                                  "config", "--format", "json"], cwd=ROOT, env=env,

@@ -3,6 +3,9 @@
     handle /webhooks/movidesk/tickets/* {
         reverse_proxy webhook:8003
     }
+    handle /webhooks/master/config/* {
+        reverse_proxy webhook:8003
+    }
     handle {
         reverse_proxy app:8001
     }

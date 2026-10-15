@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from master_config import MasterConfigRequest, normalize, parse_ini, changed_fields
+from master_config import MasterConfigRequest, normalize, parse_ini, changed_fields, company_from_paths
 from master_telemetry import connection, save_report
 
 NOW = datetime(2026, 9, 11, tzinfo=timezone.utc)
@@ -64,6 +64,25 @@ class ConfigTests(unittest.TestCase):
             self.assertNotIn(secret, result)
         sections, _ = parse_ini('[conexao_1]\nservidor=firebird://user:password@host/db')
         self.assertEqual(sections[0]['values']['servidor'], '[REMOVIDO]')
+
+    def test_all_parameter_names_and_states_are_mapped_without_unknown_values(self):
+        sections, stats = parse_ini('[individual]\nEXIGE_DIGITAL=S\nGAVETA=N\nCAMPO_NOVO=segredo-desconhecido\nVAZIO=')
+        self.assertEqual(sections[0]['parameters'], {
+            'exige_digital': 'enabled', 'gaveta': 'disabled',
+            'campo_novo': 'configured', 'vazio': 'unset'})
+        self.assertNotIn('campo_novo', sections[0]['values'])
+        self.assertNotIn('segredo-desconhecido', json.dumps(sections))
+        self.assertEqual(stats['ignored_fields'], 2)
+
+    def test_company_label_is_extracted_from_asr_master_path(self):
+        sections, _ = parse_ini('[MASTER]\ncaminholocal=D:\\asr\\cikala\\Usuarios\\sync\\master.exe')
+        self.assertEqual(company_from_paths(sections), ('cikala', 'caminholocal'))
+
+    def test_connection_inventory_exposes_only_safe_operational_fields(self):
+        result = report(config=INI+'\nmaster_exe_path=D:\\asr\\cikala\\Usuarios\\sync\\master.exe')['payload']
+        self.assertEqual(len(result['integration_summary']), 2)
+        self.assertGreater(result['parameter_count'], 0)
+        self.assertNotIn('senha', json.dumps(result['integration_summary']))
 
     def test_compilation_timestamp_is_not_collection_timestamp(self):
         result = report()['payload']

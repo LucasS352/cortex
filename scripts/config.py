@@ -24,6 +24,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 MOVIDESK_TOKEN: str = os.getenv("MOVIDESK_TOKEN", "")
 MOVIDESK_BASE_URL: str = os.getenv("MOVIDESK_BASE_URL", "https://api.movidesk.com/public/v1")
 MOVIDESK_WEBHOOK_SECRET: str = os.getenv("MOVIDESK_WEBHOOK_SECRET", "")
+MASTER_CONFIG_WEBHOOK_SECRET: str = os.getenv("MASTER_CONFIG_WEBHOOK_SECRET", "")
 
 # ---------------------------------------------------------------------------
 # Credenciais PostgreSQL

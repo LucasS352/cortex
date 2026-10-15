@@ -1,10 +1,10 @@
-# Receptor de webhooks Movidesk
+# Receptor isolado de webhooks
 
 ## Estado atual
 
 **Atualização 14/10/2026:** o receptor continua somente recebendo e enfileirando, para responder rapidamente ao Movidesk. O serviço separado `movidesk_note_worker.py` consome a fila, consulta o chamado completo e atualiza apenas esse ticket nas tabelas operacionais antes de qualquer análise. Essa sincronização incremental continua mesmo quando a geração automática de notas está pausada. A carga completa fica agendada para 00:00 no horário de Brasília e atua como reconciliação diária. O worker também pode publicar uma sugestão como ação interna. Configuração, deduplicação, ensaio e limites estão em [Piloto de notas internas](../docs/PILOTO_NOTAS_INTERNAS.md).
 
-O serviço `movidesk_webhook:app` escuta somente em `127.0.0.1:8003` e recebe `POST /webhooks/movidesk/tickets/{secret}`. O segredo de URL é gerado e mantido em `.env` como `MOVIDESK_WEBHOOK_SECRET`. O serviço valida o segredo, limita o corpo a 2 MiB, exige JSON com `Id` numérico, deduplica pacotes iguais em `scripts/output/movidesk_webhooks.sqlite3` e responde `Ok` rapidamente. Não consulta a API, não gera resposta de IA e não escreve no Movidesk.
+O serviço `movidesk_webhook:app` escuta somente na rede interna Docker, porta 8003. Ele recebe `POST /webhooks/movidesk/tickets/{secret}` e `POST /webhooks/master/config/{secret}` com segredos independentes. Ambos limitam o corpo a 2 MiB. O primeiro enfileira eventos do Movidesk; o segundo sanitiza e persiste o inventário do Master no PostgreSQL, deduplicando retentativas por `event_id`.
 
 O painel local mostra contagem e os últimos IDs em **Agente e políticas → Recebimento Movidesk**. O receptor pode ser iniciado com:
 
@@ -15,7 +15,7 @@ python -m uvicorn movidesk_webhook:app --host 127.0.0.1 --port 8003 --no-access-
 
 ## Para cadastrar no Movidesk
 
-É necessária uma **URL HTTPS pública e fixa** que encaminhe exclusivamente ao serviço na porta 8003, por exemplo `https://DOMINIO/webhooks/movidesk/tickets/SEGREDO`. `http://127.0.0.1:8003` não é acessível pelos servidores do Movidesk. O domínio, a publicação e o teste externo ainda dependem da infraestrutura escolhida. Não publique a porta 8001 do painel administrativo junto com o receptor. Redija os logs do proxy para não gravar o segredo contido no caminho.
+É necessária uma **URL HTTPS pública e fixa** que encaminhe exclusivamente ao serviço na porta 8003, por exemplo `https://DOMINIO/webhooks/movidesk/tickets/SEGREDO` e `https://DOMINIO/webhooks/master/config/OUTRO_SEGREDO`. `http://127.0.0.1:8003` não é acessível externamente. Não publique a porta 8001 do painel administrativo junto com o receptor. Redija os logs do proxy para não gravar os segredos contidos nos caminhos.
 
 No Movidesk, a configuração é em **Configurações → Automação → Gatilhos**; o perfil precisa permitir criar gatilhos. Configure o tipo Ticket, as condições e a ação de webhook com a URL. Comece pelo ticket e conta de teste. A página **Configurações → Automação → Webhook — log de execução** mostra tentativas e erros.
 

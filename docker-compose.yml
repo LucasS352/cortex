@@ -30,6 +30,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
       MOVIDESK_TOKEN: ${MOVIDESK_TOKEN:-}
       MOVIDESK_WEBHOOK_SECRET: ${MOVIDESK_WEBHOOK_SECRET:?Gere um segredo para o webhook}
+      MASTER_CONFIG_WEBHOOK_SECRET: ${MASTER_CONFIG_WEBHOOK_SECRET:?Gere um segredo exclusivo para o config.ini}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       CORTEX_AUTONOTE_MODE: ${CORTEX_AUTONOTE_MODE:-disabled}
@@ -68,6 +69,9 @@ services:
     environment: *app_env
     volumes:
       - cortex_output:/app/scripts/output
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   note-worker:
@@ -94,6 +98,9 @@ services:
         {$$CORTEX_DOMAIN} {
             encode zstd gzip
             handle /webhooks/movidesk/tickets/* {
+                reverse_proxy webhook:8003
+            }
+            handle /webhooks/master/config/* {
                 reverse_proxy webhook:8003
             }
             handle {

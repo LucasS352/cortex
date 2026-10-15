@@ -82,7 +82,7 @@ def environments(beta_only: bool = False, limit: int = Query(50, ge=1, le=100), 
     try:
         with connection() as conn:
             tenant = ensure_single_tenant(conn)
-            rows = conn.execute('''SELECT e.id, e.last_received_at, e.latest_observed_at,
+            rows = conn.execute('''SELECT e.id, e.latest_snapshot_id, e.last_received_at, e.latest_observed_at,
                 s.sanitized_payload - 'config_sections' AS environment,
                 e.latest_observed_at IS NULL OR e.latest_observed_at < now() - interval '36 hours' AS stale
                 FROM master_environments e LEFT JOIN master_environment_snapshots s ON s.id=e.latest_snapshot_id
