@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS cortex_kb.versions (
     error_messages  text[] NOT NULL DEFAULT '{}',
     root_cause      text NOT NULL,
     procedure       text NOT NULL,
+    customer_answer text,
     prerequisites   text,
     expected_result text,
     -- {master_version_min, master_version_max, ufs[], integrations[], tax_regime, valid_from, valid_until}
@@ -137,13 +138,24 @@ CREATE TABLE IF NOT EXISTS cortex_kb.answer_reviews (
     id bigserial PRIMARY KEY, ticket_external_id integer NOT NULL, action_id text NOT NULL,
     answer_text text NOT NULL, rating smallint NOT NULL CHECK (rating IN (-1,1)),
     module_key text NOT NULL, comment text NOT NULL DEFAULT '', actor text NOT NULL,
+    example_ticket_external_id integer,
     candidate_id bigint REFERENCES cortex_kb.candidates(id),
     created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE(ticket_external_id,action_id,actor)
 );
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS example_ticket_external_id integer;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS proposed_title text;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS proposed_answer text;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS proposed_procedure text;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS proposed_images jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS question_action_id text;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS source_answer_action_id text;
 ALTER TABLE cortex_kb.candidates ADD COLUMN IF NOT EXISTS source_action_id text;
+ALTER TABLE cortex_kb.candidates ADD COLUMN IF NOT EXISTS source_question_action_id text;
+ALTER TABLE cortex_kb.candidates ADD COLUMN IF NOT EXISTS source_answer_action_id text;
 
 ALTER TABLE cortex_kb.versions ADD COLUMN IF NOT EXISTS images jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE cortex_kb.versions ADD COLUMN IF NOT EXISTS customer_answer text;
 
 -- Peculiaridades, regressões e avisos próprios de uma versão do ERP Master.
 -- O texto é escrito e aprovado por humanos e publicado no mesmo índice do RAG.

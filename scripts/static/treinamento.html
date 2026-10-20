@@ -46,7 +46,7 @@
   .dlg-body { display:grid; grid-template-columns:1.5fr 1fr; gap:18px; padding:18px 20px; max-height:72vh; overflow:auto; }
   .dlg-foot { padding:12px 20px; border-top:1px solid var(--line); display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
   label { display:block; font-size:12px; font-weight:600; color:var(--muted); margin:10px 0 4px; }
-  input[type=text], textarea, select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  input[type=text], input[type=number], input[type=file], textarea, select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
   textarea { min-height:70px; resize:vertical; } textarea.tall { min-height:160px; }
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
   .panel { background:#f9fafb; border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-bottom:12px; }
@@ -175,7 +175,7 @@ async function renderList() {
     } else if (state.tab === 'reviews') {
       const reviews = await api('/avaliacoes');
       const rows = reviews.filter(r => !state.module || r.module_key === state.module);
-      list.innerHTML = rows.map(r => `<div class="row"><div class="grow"><div class="title">${r.rating > 0 ? 'Boa resposta' : 'Precisa melhorar'} · #${r.ticket_external_id} · ação ${esc(r.action_id)}</div><div class="meta">${esc(modLabel(r.module_key))} · ${esc(r.actor)} · ${fmt(r.updated_at)}</div><p>${esc(r.comment)}</p></div>${r.candidate_id ? `<button onclick="openCandidate(${r.candidate_id})">Ver revisão</button>` : ''}</div>`).join('') || '<div class="empty">Nenhuma avaliação neste filtro.</div>';
+      list.innerHTML = rows.map(r => `<div class="row"><div class="grow"><div class="title">${r.rating > 0 ? 'Boa resposta' : 'Precisa melhorar'} · #${r.ticket_external_id} · ação ${esc(r.action_id)}</div><div class="meta">${esc(modLabel(r.module_key))} · ${esc(r.actor)} · ${fmt(r.updated_at)}${r.example_ticket_external_id ? ` · exemplo #${r.example_ticket_external_id}` : ''}</div><p>${esc(r.comment)}</p></div>${r.candidate_id ? `<button onclick="openCandidate(${r.candidate_id})">Ver revisão</button>` : ''}</div>`).join('') || '<div class="empty">Nenhuma avaliação neste filtro.</div>';
     } else if (state.tab === 'suggestions') {
       const rows = await api(`/sugestoes?${m}`);
       list.innerHTML = rows.length ? rows.map(r => `<div class="row">${scoreBadge(r.score)}
@@ -277,6 +277,8 @@ function subOptions(mod, sel) { return ((state.taxonomy.find(m => m.key === mod)
 
 function contentForm(c) {
   const a = c.applicability || {};
+  const ownUploads = new Set((c.images || []).map(x => x.file));
+  const availableImages = state.images.filter(image => !/^[0-9a-f]{32}\.png$/.test(image.file) || ownUploads.has(image.file));
   return `
     <label>Título do procedimento</label><input type="text" id="f_title" value="${esc(c.title)}">
     <div class="grid2"><div><label>Módulo</label><select id="f_module">${moduleOptions(c.module_key)}</select></div>
@@ -284,6 +286,7 @@ function contentForm(c) {
     <label>Sintoma (como o cliente percebe)</label><textarea id="f_symptom">${esc(c.symptom)}</textarea>
     <label>Mensagens de erro (uma por linha)</label><textarea id="f_errors">${esc((c.error_messages || []).join('\n'))}</textarea>
     <label>Causa raiz</label><textarea id="f_cause">${esc(c.root_cause)}</textarea>
+    <label>Resposta pronta ao cliente</label><textarea id="f_answer" class="tall" placeholder="Texto que poderá ser enviado ao cliente após a aprovação">${esc(c.customer_answer)}</textarea>
     <label>Procedimento (passo a passo)</label><textarea id="f_proc" class="tall">${esc(c.procedure)}</textarea>
     <div class="grid2"><div><label>Pré-requisitos</label><textarea id="f_pre">${esc(c.prerequisites)}</textarea></div>
       <div><label>Resultado esperado</label><textarea id="f_exp">${esc(c.expected_result)}</textarea></div></div>
@@ -295,7 +298,7 @@ function contentForm(c) {
         <div><label>Válido a partir de</label><input type="text" id="a_from" placeholder="AAAA-MM-DD" value="${esc(a.valid_from)}"></div>
         <div><label>Válido até</label><input type="text" id="a_until" placeholder="AAAA-MM-DD" value="${esc(a.valid_until)}"></div></div></div>
     <div class="panel"><h3>Imagens revisadas por passo</h3><p>Marque apenas telas que correspondam a este procedimento. Informe o número do passo; a imagem aparecerá logo abaixo dele.</p>
-    ${state.images.map((image,i) => { const chosen = (c.images || []).find(x => x.file === image.file); return `<div class="grid2" style="margin-bottom:12px"><div><label><input type="checkbox" id="img_use_${i}" ${chosen ? 'checked' : ''}> ${esc(image.label)}</label><img src="${esc(image.url)}" alt="${esc(image.label)}" style="max-width:220px;max-height:100px"></div><div><label>Após o passo</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || 1}"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"></div></div>`; }).join('')}</div>
+    ${availableImages.map((image,i) => { const chosen = (c.images || []).find(x => x.file === image.file); return `<div class="grid2" style="margin-bottom:12px"><div><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''}> ${esc(chosen?.caption || image.label)}</label><img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}" style="max-width:220px;max-height:100px"></div><div><label>Após o passo</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || 1}"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"></div></div>`; }).join('')}</div>
     <label>Palavras-chave de busca (vírgula)</label><input type="text" id="f_kw" value="${esc((c.keywords || []).join(', '))}">`;
 }
 function bindForm() { $('#f_module').onchange = (e) => $('#f_sub').innerHTML = subOptions(e.target.value, 'general'); }
@@ -303,8 +306,8 @@ function readForm() {
   const list = (id, sep = ',') => $(id).value.split(sep).map(s => s.trim()).filter(Boolean);
   return { title: $('#f_title').value.trim(), module_key: $('#f_module').value, subtopic_key: $('#f_sub').value,
     symptom: $('#f_symptom').value.trim(), error_messages: list('#f_errors', '\n'), root_cause: $('#f_cause').value.trim(),
-    procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
-    images: state.images.map((image,i) => $('#img_use_'+i).checked ? {file:image.file,after_step:Number($('#img_step_'+i).value),caption:$('#img_caption_'+i).value} : null).filter(Boolean),
+    customer_answer: $('#f_answer').value.trim() || null, procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
+    images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => { const i = Number(input.id.split('_').pop()); return input.checked ? {file:input.dataset.file,after_step:Number($('#img_step_'+i).value),caption:$('#img_caption_'+i).value} : null; }).filter(Boolean),
     keywords: list('#f_kw'),
     applicability: { master_version: $('#a_ver').value.trim() || null, tax_regime: $('#a_reg').value.trim() || null,
       ufs: list('#a_ufs').map(u => u.toUpperCase()), integrations: list('#a_int'),
@@ -317,12 +320,12 @@ async function openCandidate(id) {
   const related = c.similar_items || [];
   const dlg = $('#dlg');
   dlg.innerHTML = `
-    <div class="dlg-head"><h2>Sugestão de conhecimento · Ticket #${c.ticket_external_id}${c.source_action_id ? ' · Resposta ' + esc(c.source_action_id) : ''}</h2>
+    <div class="dlg-head"><h2>Sugestão de conhecimento · Ticket #${c.ticket_external_id}${c.source_question_action_id ? ' · pergunta ' + esc(c.source_question_action_id) : ''}${c.source_answer_action_id ? ' → resposta ' + esc(c.source_answer_action_id) : c.source_question_action_id ? ' → resposta redigida pelo técnico' : c.source_action_id ? ' · resposta ' + esc(c.source_action_id) : ''}</h2>
       ${c.status === 'conflict' ? '<span class="pill bad">Conflito</span>' : '<span class="pill warn">Aguardando revisão</span>'}
       <span class="pill">Confiança ${esc(x.confidence)}</span><button onclick="dlg.close()">✕</button></div>
     <div class="dlg-body"><div>${contentForm(content)}</div>
       <div>
-        <div class="panel"><h3>Avaliações da resposta</h3>${(c.answer_reviews || []).map(r => `<p><b>${r.rating > 0 ? "Boa resposta" : "Precisa melhorar"}</b> · ${esc(r.actor)} · ${fmt(r.updated_at)}<br>${esc(r.comment)}</p>`).join('') || 'Sem avaliação de resposta específica.'}</div>
+        <div class="panel"><h3>Envio do técnico</h3>${(c.answer_reviews || []).map(r => `<p><b>${r.candidate_id ? "Proposta técnica para curadoria" : r.rating > 0 ? "Resposta confirmada" : "Correção registrada"}</b> · ticket #${r.ticket_external_id} · resposta Cortex ${esc(r.action_id)}${r.question_action_id ? ` · pergunta ${esc(r.question_action_id)}${r.source_answer_action_id ? ` → resposta técnica ${esc(r.source_answer_action_id)}` : ' → conteúdo redigido no formulário'}` : ''} · ${esc(r.actor)} · ${fmt(r.updated_at)}${r.comment ? `<br>${esc(r.comment)}` : ''}</p>`).join('') || 'Sem envio técnico associado.'}</div>
         <div class="panel"><h3>Verificação de qualidade</h3>${c.quality_checks.map(q => `<div class="check">${q.ok ? '✅' : '⚠️'} ${esc(q.label)}</div>`).join('')}</div>
         <div class="panel"><h3>Evidências citadas do ticket</h3>
           ${Object.entries(x.evidence || {}).filter(([, v]) => v).map(([k, v]) => `<label>${({root_cause_quote:'Causa',procedure_quote:'Procedimento',confirmation_quote:'Confirmação'})[k]}</label><pre>“${esc(v)}”</pre>`).join('') || '<span class="pill warn">O extrator não citou trechos — revise com atenção.</span>'}</div>
@@ -367,7 +370,10 @@ async function openItem(id) {
         ${it.conflicts.filter(c => c.status === 'open').map(c => `<div class="panel" style="border-color:#fecdca"><h3>Conflito aberto</h3>${esc(c.reason)}
           <div style="margin-top:6px;display:flex;gap:6px"><button onclick="conflict(${c.id},false,${id})">Resolvido</button><button onclick="conflict(${c.id},true,${id})">Descartar</button></div></div>`).join('')}
         <div class="panel"><h3>Evidências (${it.sources.length})</h3>${it.sources.map(s => `<div>${s.source_type === 'ticket' ? `<a target="_blank" rel="noopener" href="https://helpdesk.alternativasistemas.com.br/Ticket/Edit/${esc(s.external_ref)}">Ticket #${esc(s.external_ref)}</a>` : esc(s.source_type + ' ' + s.external_ref)} <small>${fmt(s.created_at)}</small></div>`).join('') || '—'}</div>
-        <div class="panel"><h3>Versões</h3>${it.versions.map(x => `<div class="check"><b>v${x.version_no}</b> <span class="pill">${x.status}</span> ${esc(x.approved_by)} · ${fmt(x.approved_at)}<br><small>${esc(x.change_reason)}</small></div>`).join('')}</div>
+        <div class="panel"><h3>Versões</h3>${it.versions.map(x => `<div class="check"><b>v${x.version_no}</b> <span class="pill">${x.status}</span> <span class="pill ${x.embedding_ok ? 'ok' : 'warn'}">${x.embedding_ok ? 'vetor semântico pronto' : 'sem vetor — busca textual'}</span> ${esc(x.approved_by)} · ${fmt(x.approved_at)}<br><small>${esc(x.change_reason)}</small></div>`).join('')}</div>
+        <div class="panel"><h3>Testar se a IA encontra</h3><p><small>Faça a pergunta como o cliente faria. O teste usa a mesma busca da resposta real.</small></p>
+          <textarea id="retrievalQuery" placeholder="Ex.: Onde vejo os produtos comprados de cada fornecedor?"></textarea>
+          <button class="primary" id="retrievalBtn">Testar recuperação</button><div id="retrievalResult"></div></div>
         <div class="panel"><h3>Auditoria</h3>${it.audit.map(a => `<div class="check"><small>${fmt(a.at)} · ${esc(a.actor)} · ${esc(a.action)} ${a.reason ? '— ' + esc(a.reason) : ''}</small></div>`).join('') || '—'}</div>
         <div class="panel"><h3>Avaliação de uso</h3><button onclick="rate(${id},1)">👍 Ajudou</button> <button onclick="rate(${id},-1)">👎 Não ajudou</button></div>
       </div></div>
@@ -376,6 +382,20 @@ async function openItem(id) {
       <button class="danger" id="depBtn">Inativar (sai da IA na hora)</button>
       <button class="primary" id="revBtn">Salvar nova versão</button></div>` : ''}`;
   bindForm(); dlg.showModal();
+  $('#retrievalBtn').onclick = async () => {
+    const query = $('#retrievalQuery').value.trim();
+    if (query.length < 5) return toast('Escreva uma pergunta de teste.');
+    $('#retrievalBtn').disabled = true; $('#retrievalResult').innerHTML = '<p>Consultando a base…</p>';
+    try {
+      const result = await api(`/itens/${id}/testar?q=${encodeURIComponent(query)}`);
+      const status = result.found
+        ? `<p class="pill ok">Encontrado na posição ${result.rank}</p>`
+        : '<p class="pill bad">Este procedimento não apareceu entre os 10 primeiros</p>';
+      const vector = result.query_embedding_ok ? 'comparação semântica ativa' : 'sem vetor de consulta — resultado textual';
+      $('#retrievalResult').innerHTML = `${status}<p><small>${vector}</small></p>${result.results.map(r => `<div class="check"><b>${r.rank}. ${esc(r.title || r.source_id)}</b>${r.is_expected ? ' <span class="pill ok">este procedimento</span>' : ''}<br><small>pontuação ${(Number(r.score) * 100).toFixed(1)}% · ${esc(r.retrieval_method || '')}</small></div>`).join('') || '<p>Nenhum conhecimento oficial foi recuperado.</p>'}`;
+    } catch (e) { $('#retrievalResult').textContent = e.message; }
+    finally { $('#retrievalBtn').disabled = false; }
+  };
   const go = async (path, body, msg) => {
     const reason = $('#reason').value.trim(); if (reason.length < 5) return toast('Informe o motivo.');
     try { await api(path, { method: 'POST', body: { ...body, reason } }); dlg.close(); toast(msg); refresh(); } catch (e) { toast(e.message); }
@@ -398,26 +418,101 @@ async function reviewTicket(ticket, marker = '') {
     if (!data.answers.length) return toast('Nenhuma resposta Cortex no histórico sincronizado deste ticket. Atualize a sincronização e tente novamente.');
     if (marker && !data.answers.some(a => a.text.includes(marker))) return toast('Esta resposta ainda não está no histórico sincronizado. Sincronize o ticket antes de avaliar.');
     const selected = data.answers.find(a => marker && a.text.includes(marker)) || data.answers[data.answers.length - 1];
-    dlg.innerHTML = `<div class="dlg-head"><h2>Avaliar resposta · Ticket #${ticket}</h2><button id="closeReview">Fechar</button></div>
-      <div style="padding:20px;max-height:75vh;overflow:auto"><p>Avaliação positiva encaminha à revisão humana. Só a aprovação publica o procedimento.</p>
-      <label>Resposta específica</label><select id="answerSelect">${data.answers.map(a => `<option value="${esc(a.action_id)}" ${a === selected ? 'selected' : ''}>Ação ${esc(a.action_id)} · ${esc(a.created_at || '')}</option>`).join('')}</select>
-      <pre id="answerPreview" class="panel"></pre><label>Módulo obrigatório</label><select id="answerModule"><option value="">Selecione</option>${moduleOptions('').replace(/<option value="unclassified"[^>]*>.*?<\/option>/g,'')}</select>
-      <label>Comentário do técnico / correção necessária</label><textarea id="answerComment"></textarea>
-      <button id="goodAnswer" class="primary">Boa resposta — enviar para revisão</button> <button id="badAnswer">Precisa melhorar</button></div>`;
+    dlg.innerHTML = `<div class="dlg-head"><h2>Preparar conhecimento · Ticket #${ticket}</h2><button id="closeReview">Fechar</button></div>
+      <div style="padding:20px;max-height:75vh;overflow:auto"><p><b>Responsabilidade do técnico:</b> registrar abaixo a resolução correta e completa. O conteúdo será enviado para a fila e só entrará na IA depois da aprovação administrativa.</p>
+      <label>Resposta do Cortex que originou a revisão</label><select id="answerSelect">${data.answers.map(a => `<option value="${esc(a.action_id)}" ${a === selected ? 'selected' : ''}>Ação ${esc(a.action_id)} · ${esc(a.created_at || '')}</option>`).join('')}</select>
+      <pre id="answerPreview" class="panel"></pre>
+      <div class="panel" style="border:2px solid #2563eb"><h3>Conteúdo preparado pelo técnico</h3>
+        <label>Pergunta do cliente relacionada</label><select id="ticketQuestionSelect">${(data.questions || []).map(q => `<option value="${esc(q.action_id)}">Nota ${esc(q.action_id)} · ${esc(q.created_at || '')} · ${esc(q.text.slice(0,120))}</option>`).join('')}</select>
+        <label>Módulo obrigatório</label><select id="answerModule"><option value="">Selecione</option>${moduleOptions('').replace(/<option value="unclassified"[^>]*>.*?<\/option>/g,'')}</select>
+        <label>Título curto do conhecimento</label><input id="proposalTitle" type="text" value="${esc(data.subject || '')}" placeholder="Ex.: Consultar produtos por fornecedor">
+        <label>Resposta final para o cliente</label><textarea id="proposalAnswer" class="tall" placeholder="Ex.: Sim, o relatório está disponível no Master..."></textarea>
+        <label>Passo a passo da resolução <small>— um passo por linha, começando por 1.</small></label><textarea id="proposalProcedure" class="tall" placeholder="1. Acesse Relatórios > Vendas > Histórico.&#10;2. Abra Produtos por Fabricante/Fornecedor.&#10;3. Selecione a aba Fornecedor."></textarea>
+        <label>Prints (PNG, JPEG ou WebP; até 5 arquivos e 5 MB cada)</label><input id="proposalFiles" type="file" accept="image/png,image/jpeg,image/webp" multiple>
+        <div id="proposalImageList"></div>
+        <label>Observação para os administradores <small>— opcional</small></label><textarea id="answerComment" placeholder="Ex.: caminho validado na versão atual do Master"></textarea>
+        <details style="margin-top:12px"><summary>Copiar uma resposta já registrada em outro ticket (opcional)</summary>
+          <label>Ticket usado como evidência</label><div style="display:flex;gap:8px"><input id="exampleTicket" type="number" min="1" step="1" value="${ticket}"><button id="loadExampleAnswer" type="button">Carregar notas do ticket</button></div>
+          <div id="exampleAnswerBox" style="display:none"><label>Nota da pergunta do cliente</label><select id="exampleQuestionSelect"></select><label>Nota da resposta humana</label><select id="exampleAnswerSelect"></select><button id="useExampleAnswer" type="button" style="margin-top:6px">Usar este par na proposta</button></div>
+        </details>
+      </div>
+      <button id="submitProposal" class="primary" style="margin-top:12px">Enviar para a fila de curadoria</button></div>`;
     $('#answerPreview').textContent = selected.text;
-    $('#answerSelect').onchange = e => $('#answerPreview').textContent = data.answers.find(a => a.action_id === e.target.value).text;
-    $('#closeReview').onclick = () => dlg.close(); dlg.showModal();
-    const submit = async rating => {
-      if (!$('#answerModule').value) return toast('Selecione o módulo.');
-      $('#goodAnswer').disabled = $('#badAnswer').disabled = true;
-      try {
-        const result = await api(`/tickets/${ticket}/avaliar`, {method:'POST',body:{action_id:$('#answerSelect').value,rating,module_key:$('#answerModule').value,comment:$('#answerComment').value}});
-        dlg.close(); await refresh();
-        if (result.candidate_id) await openCandidate(result.candidate_id); else toast('Avaliação registrada para auditoria.');
-      } catch(e) { toast(e.message); }
-      finally { if ($('#goodAnswer')) $('#goodAnswer').disabled = $('#badAnswer').disabled = false; }
+    const selectTicketQuestion = answer => {
+      if (answer?.suggested_question_action_id && (data.questions || []).some(q => q.action_id === answer.suggested_question_action_id))
+        $('#ticketQuestionSelect').value = answer.suggested_question_action_id;
     };
-    $('#goodAnswer').onclick = () => submit(1); $('#badAnswer').onclick = () => submit(-1);
+    selectTicketQuestion(selected);
+    $('#answerSelect').onchange = e => { const answer = data.answers.find(a => a.action_id === e.target.value); $('#answerPreview').textContent = answer.text; selectTicketQuestion(answer); };
+    let proposalFiles = [];
+    $('#proposalFiles').onchange = e => {
+      proposalFiles = [...e.target.files].slice(0, 5);
+      if (e.target.files.length > 5) toast('Serão usados somente os 5 primeiros prints.');
+      $('#proposalImageList').innerHTML = proposalFiles.map((file,i) => `<div class="grid2" style="margin-top:10px"><div><img src="${URL.createObjectURL(file)}" alt="Prévia" style="max-width:220px;max-height:120px"><small>${esc(file.name)}</small></div><div><label>Após o passo</label><input id="proposalStep_${i}" type="number" min="1" max="100" value="${i+1}"><label>Legenda obrigatória</label><input id="proposalCaption_${i}" type="text" placeholder="O que este print demonstra"></div></div>`).join('');
+    };
+    let exampleQuestions = [], exampleAnswers = [];
+    $('#exampleTicket').oninput = () => {
+      exampleQuestions = []; exampleAnswers = []; $('#exampleAnswerBox').style.display = 'none';
+    };
+    const selectSuggestedQuestion = () => {
+      const answer = exampleAnswers[Number($('#exampleAnswerSelect').value)];
+      if (answer?.suggested_question_action_id && exampleQuestions.some(q => q.action_id === answer.suggested_question_action_id))
+        $('#exampleQuestionSelect').value = answer.suggested_question_action_id;
+    };
+    $('#loadExampleAnswer').onclick = async () => {
+      const exampleTicket = Number($('#exampleTicket').value);
+      if (!Number.isInteger(exampleTicket) || exampleTicket <= 0) return toast('Informe um ticket válido.');
+      $('#loadExampleAnswer').disabled = true;
+      try {
+        const source = await api(`/tickets/${exampleTicket}/respostas-tecnicas`);
+        exampleQuestions = source.questions || [];
+        exampleAnswers = source.answers || [];
+        if (!exampleQuestions.length || !exampleAnswers.length) return toast('Não encontrei um par de pergunta do cliente e resposta humana nesse ticket sincronizado.');
+        $('#proposalTitle').value ||= source.subject || '';
+        $('#exampleQuestionSelect').innerHTML = exampleQuestions.map(q => `<option value="${esc(q.action_id)}">Nota ${esc(q.action_id)} · ${esc(q.created_at || '')} · ${esc(q.text.slice(0,90))}</option>`).join('');
+        $('#exampleAnswerSelect').innerHTML = exampleAnswers.map((a,i) => `<option value="${i}">Ação ${esc(a.action_id)} · ${esc(a.created_at || '')} · ${esc(a.text.slice(0,90))}</option>`).join('');
+        $('#exampleAnswerBox').style.display = 'block';
+        $('#exampleAnswerSelect').value = String(exampleAnswers.length - 1);
+        selectSuggestedQuestion();
+        toast('Confira o par sugerido. Você pode trocar a pergunta ou a resposta antes de copiar.');
+      } catch(e) { toast(e.message); }
+      finally { $('#loadExampleAnswer').disabled = false; }
+    };
+    $('#exampleAnswerSelect').onchange = selectSuggestedQuestion;
+    $('#useExampleAnswer').onclick = () => {
+      const source = exampleAnswers[Number($('#exampleAnswerSelect').value)];
+      if (!source) return;
+      $('#proposalAnswer').value = source.text;
+      if (!$('#proposalProcedure').value.trim()) $('#proposalProcedure').value = '1. ' + source.text;
+      toast('Resposta copiada. Retire despedidas e trechos genéricos antes de enviar.');
+    };
+    $('#closeReview').onclick = () => dlg.close(); dlg.showModal();
+    const submit = async () => {
+      if (!$('#answerModule').value) return toast('Selecione o módulo.');
+      if (!(data.questions || []).length && !exampleQuestions.length) return toast('Nenhuma pergunta do cliente foi encontrada. Sincronize o ticket antes de enviar.');
+      const exampleTicket = Number($('#exampleTicket').value);
+      const title = $('#proposalTitle').value.trim(), answer = $('#proposalAnswer').value.trim(), procedure = $('#proposalProcedure').value.trim();
+      if (title.length < 5 || answer.length < 20) return toast('Preencha o título e a resposta final para o cliente.');
+      if (!/^\s*1\.\s/m.test(procedure)) return toast('Escreva o passo a passo numerado, começando por “1.”.');
+      $('#submitProposal').disabled = true;
+      try {
+        const proposedImages = await Promise.all(proposalFiles.map((file,i) => new Promise((resolve,reject) => {
+          const reader = new FileReader(); reader.onerror = () => reject(new Error('Não foi possível ler um dos prints.'));
+          reader.onload = () => resolve({data_url:reader.result,after_step:Number($(`#proposalStep_${i}`).value),caption:$(`#proposalCaption_${i}`).value.trim()});
+          reader.readAsDataURL(file);
+        })));
+        if (proposedImages.some(x => x.caption.length < 3)) throw new Error('Informe uma legenda para cada print.');
+        const pairedAnswer = exampleAnswers[Number($('#exampleAnswerSelect').value)];
+        const usingLoadedPair = !!pairedAnswer;
+        const evidenceTicket = usingLoadedPair ? exampleTicket : ticket;
+        const questionAction = usingLoadedPair ? $('#exampleQuestionSelect').value : $('#ticketQuestionSelect').value;
+        const result = await api(`/tickets/${ticket}/avaliar`, {method:'POST',body:{action_id:$('#answerSelect').value,rating:-1,module_key:$('#answerModule').value,comment:$('#answerComment').value,example_ticket_id:evidenceTicket,proposed_title:title,proposed_answer:answer,proposed_procedure:procedure,proposed_images:proposedImages,question_action_id:questionAction,source_answer_action_id:usingLoadedPair ? pairedAnswer.action_id : null}});
+        dlg.close(); await refresh();
+        toast('Proposta enviada para a fila de curadoria. Ela ainda não foi publicada na IA.');
+      } catch(e) { toast(e.message); }
+      finally { if ($('#submitProposal')) $('#submitProposal').disabled = false; }
+    };
+    $('#submitProposal').onclick = submit;
   } catch(e) { toast(e.message); }
 }
 $('#reviewAnswerBtn').onclick = () => { const ticket = Number($('#ticketInput').value); if (Number.isInteger(ticket) && ticket > 0) reviewTicket(ticket); else toast('Informe o número do ticket.'); };

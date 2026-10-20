@@ -344,6 +344,12 @@ function openRequestedView(){
   const trainingParams=new URLSearchParams();
   if(/^\d+$/.test(ticket))trainingParams.set('ticket',ticket);
   if(/^CORTEX-AI-NOTE:[a-f0-9]{64}$/i.test(marker))trainingParams.set('marker',marker);
+  // Links antigos já gravados no Movidesk também devem abrir o editor
+  // profissional em página inteira, sem a navegação administrativa ao redor.
+  if(trainingParams.has('ticket')){
+   window.location.replace('/treinamento/tecnico?'+trainingParams);
+   return;
+  }
   $('training-frame').src='/treinamento'+(trainingParams.size?'?'+trainingParams:'');
  }
  go(requested);

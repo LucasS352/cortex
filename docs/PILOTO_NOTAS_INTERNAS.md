@@ -38,7 +38,7 @@ O comando não sobrescreve arquivo existente. Reutiliza as chaves Movidesk/Gemin
 
 Preencher no arquivo, fora do chat:
 
-- `CORTEX_PUBLIC_URL`: URL de acesso, como `http://179.236.68.24` ou `https://cortex.exemplo.com.br`, sem caminho.
+- `CORTEX_PUBLIC_URL`: URL de acesso, atualmente `https://desk.cortexalter.tech`, sem caminho.
 - `CORTEX_ADMIN_PASSWORD_HASH`: gerar com `python scripts/create_admin_hash.py` se estiver vazio. Manter aspas simples em torno do hash para preservar `$`.
 - `MOVIDESK_BOT_PERSON_ID`: ID real de um agente autorizado a incluir ações internas; recomendado agente exclusivo do Cortex.
 - `MOVIDESK_TICKET_UI_BASE`: endereço da tela de edição de tickets usado nos links de chamados semelhantes.

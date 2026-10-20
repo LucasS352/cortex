@@ -243,11 +243,14 @@ def note_images(source):
         name = item.get('file', '')
         if not re.fullmatch(r'[a-z0-9-]+\.png', name):
             continue
-        path = Path(__file__).parent / 'static' / 'reply-media' / name
+        reviewed = Path(__file__).parent / 'static' / 'reply-media' / name
+        uploaded = Path(__file__).parent / 'output' / 'training_media' / name
+        path = reviewed if reviewed.is_file() else uploaded
         if not path.is_file():
             notices.append('Imagem mapeada indisponível: ' + name)
             continue
-        images.append({'url': origin + '/procedure-images/' + name if origin else '',
+        route = '/procedure-images/' if path == reviewed else '/training-media/'
+        images.append({'url': origin + route + name if origin else '',
                        'data_url': 'data:image/png;base64,' + base64.b64encode(path.read_bytes()).decode(),
                        'caption': item['caption'], 'after_step': item.get('after_step')})
     return images, notices

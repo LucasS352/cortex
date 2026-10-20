@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CORTEX — Editor de Resolução Técnica</title>
+<style>
+  :root { --navy:#101828; --ink:#182230; --muted:#667085; --line:#dfe3ea; --bg:#f3f5f8;
+          --card:#fff; --blue:#155eef; --blue-soft:#eff4ff; --green:#079455; --red:#d92d20; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; background:var(--bg); color:var(--ink); font:15px/1.5 "Segoe UI",system-ui,sans-serif; }
+  button,input,select,textarea { font:inherit; }
+  .topbar { height:72px; padding:0 32px; background:var(--navy); color:#fff; display:flex; align-items:center; gap:18px; }
+  .brand { width:40px; height:40px; border-radius:11px; background:linear-gradient(145deg,#12b5cb,#155eef); display:grid; place-items:center; font-weight:800; }
+  .topbar h1 { margin:0; font-size:19px; font-weight:650; } .topbar p { margin:1px 0 0; color:#98a2b3; font-size:13px; }
+  .ticket { margin-left:auto; border:1px solid #344054; border-radius:20px; padding:6px 13px; color:#d0d5dd; }
+  .shell { max-width:1500px; margin:0 auto; padding:28px 32px 110px; }
+  .intro { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; margin-bottom:20px; }
+  .intro h2 { font-size:25px; margin:0 0 5px; } .intro p { margin:0; color:var(--muted); }
+  .safe { background:#ecfdf3; color:#067647; padding:8px 12px; border-radius:8px; font-size:13px; white-space:nowrap; }
+  .workspace { display:grid; grid-template-columns:minmax(330px,.8fr) minmax(600px,1.55fr); gap:22px; align-items:start; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:0 1px 3px #1018280d; }
+  .card-head { padding:18px 20px; border-bottom:1px solid var(--line); }
+  .card-head h3 { margin:0; font-size:16px; } .card-head p { color:var(--muted); margin:3px 0 0; font-size:13px; }
+  .card-body { padding:20px; }
+  .context { position:sticky; top:18px; }
+  label { display:block; color:#344054; font-size:13px; font-weight:650; margin:17px 0 6px; }
+  label:first-child { margin-top:0; }
+  input,select,textarea { width:100%; border:1px solid #cfd4dc; border-radius:8px; padding:11px 12px; background:#fff; color:var(--ink); outline:none; }
+  input:focus,select:focus,textarea:focus { border-color:#84adff; box-shadow:0 0 0 3px #dbe7ff; }
+  textarea { resize:vertical; min-height:120px; } textarea.answer { min-height:180px; } textarea.steps { min-height:300px; line-height:1.65; }
+  .preview { white-space:pre-wrap; max-height:340px; overflow:auto; padding:14px; border:1px solid var(--line); border-radius:9px; background:#f8fafc; font-size:13px; color:#344054; }
+  .question-preview { margin-top:10px; padding:12px; border-left:3px solid var(--blue); background:var(--blue-soft); border-radius:0 8px 8px 0; white-space:pre-wrap; }
+  .section { padding:22px 24px; border-bottom:1px solid var(--line); }
+  .section:last-child { border-bottom:0; }
+  .section-title { display:flex; gap:12px; align-items:flex-start; margin-bottom:14px; }
+  .number { width:28px; height:28px; border-radius:50%; background:var(--blue-soft); color:var(--blue); display:grid; place-items:center; font-weight:750; flex:none; }
+  .section-title h3 { margin:1px 0 0; font-size:16px; } .section-title p { margin:2px 0 0; color:var(--muted); font-size:13px; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  .upload { border:1px dashed #98a2b3; border-radius:10px; padding:18px; text-align:center; background:#fafbfc; }
+  .upload input { border:0; padding:0; width:auto; max-width:100%; }
+  .images { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
+  .image-row { border:1px solid var(--line); border-radius:10px; padding:10px; display:grid; grid-template-columns:130px 1fr; gap:10px; }
+  .image-row img { width:130px; height:95px; object-fit:contain; background:#f2f4f7; border-radius:6px; }
+  .image-row label { margin:0 0 4px; }
+  .image-row input { padding:7px 8px; margin-bottom:7px; }
+  .footer { position:fixed; left:0; right:0; bottom:0; z-index:5; background:#fff; border-top:1px solid var(--line); box-shadow:0 -8px 25px #10182812; }
+  .footer-inner { max-width:1500px; min-height:82px; margin:auto; padding:14px 32px; display:flex; align-items:center; gap:18px; }
+  .footer-copy { flex:1; color:var(--muted); font-size:13px; }
+  .submit { border:0; border-radius:9px; background:var(--blue); color:#fff; padding:13px 24px; font-weight:700; cursor:pointer; min-width:250px; }
+  .submit:disabled { opacity:.55; cursor:wait; }
+  .error { color:var(--red); margin-top:10px; display:none; }
+  .success { display:none; max-width:760px; margin:70px auto; background:#fff; padding:42px; border-radius:16px; text-align:center; border:1px solid var(--line); }
+  .success .icon { width:58px; height:58px; margin:0 auto 14px; border-radius:50%; background:#dcfae6; color:var(--green); display:grid; place-items:center; font-size:28px; }
+  .loading { padding:80px 20px; text-align:center; color:var(--muted); }
+  @media(max-width:950px) { .workspace{grid-template-columns:1fr}.context{position:static}.two{grid-template-columns:1fr}.shell{padding:20px 16px 120px}.topbar{padding:0 16px}.ticket{display:none}.images{grid-template-columns:1fr}.footer-inner{padding:12px 16px}.footer-copy{display:none}.submit{width:100%} }
+</style>
+</head>
+<body>
+<header class="topbar"><div class="brand">C</div><div><h1>CORTEX · Editor de Resolução Técnica</h1><p>Documentação preparada pelo suporte e validada pela curadoria</p></div><div class="ticket" id="ticketBadge">Ticket</div></header>
+<div id="loading" class="loading">Carregando informações do chamado…</div>
+<main id="app" class="shell" hidden>
+  <div class="intro"><div><h2>Registrar resolução do atendimento</h2><p>Escreva o conteúdo completo que poderá orientar atendimentos futuros.</p></div><div class="safe">Não será publicado sem aprovação administrativa</div></div>
+  <div class="workspace">
+    <aside class="card context">
+      <div class="card-head"><h3>Contexto do chamado</h3><p>Confira a pergunta e a orientação que originou esta revisão.</p></div>
+      <div class="card-body">
+        <label for="questionSelect">Pergunta do cliente relacionada</label><select id="questionSelect"></select><div id="questionPreview" class="question-preview"></div>
+        <label for="answerSelect">Resposta do Cortex em análise</label><select id="answerSelect"></select><div id="answerPreview" class="preview"></div>
+      </div>
+    </aside>
+    <section class="card">
+      <div class="section"><div class="section-title"><div class="number">1</div><div><h3>Identificação</h3><p>Use um título objetivo e selecione somente a categoria geral.</p></div></div>
+        <div class="two"><div><label for="title">Título do conhecimento</label><input id="title" maxlength="200" placeholder="Ex.: Consultar produtos por fornecedor"></div><div><label for="module">Categoria geral</label><select id="module"><option value="">Selecione</option></select></div></div>
+      </div>
+      <div class="section"><div class="section-title"><div class="number">2</div><div><h3>Resposta final para o cliente</h3><p>Texto claro e direto, pronto para ser utilizado no atendimento.</p></div></div>
+        <textarea id="answer" class="answer" maxlength="10000" placeholder="Ex.: Sim, esse relatório está disponível no Master. Para acessá-lo..."></textarea>
+        <div class="hint">Evite despedidas, nomes de clientes e informações exclusivas deste chamado.</div>
+      </div>
+      <div class="section"><div class="section-title"><div class="number">3</div><div><h3>Passo a passo da resolução</h3><p>Registre uma ação por linha e numere os passos. Este é o conteúdo principal da curadoria.</p></div></div>
+        <textarea id="procedure" class="steps" maxlength="10000" placeholder="1. Acesse Relatórios > Vendas > Histórico.&#10;2. Abra Produtos por Fabricante/Fornecedor.&#10;3. Selecione a aba Fornecedor.&#10;4. Informe os filtros e clique em Procurar."></textarea>
+      </div>
+      <div class="section"><div class="section-title"><div class="number">4</div><div><h3>Imagens de apoio</h3><p>Opcional. Cada print precisa indicar depois de qual passo deve aparecer.</p></div></div>
+        <div class="upload"><input id="files" type="file" accept="image/png,image/jpeg,image/webp" multiple><div class="hint">Até 5 imagens, com no máximo 5 MB cada.</div></div><div id="images" class="images"></div>
+      </div>
+      <div class="section"><label for="comment">Observação para a curadoria <span class="hint">(opcional)</span></label><textarea id="comment" placeholder="Ex.: procedimento validado na versão atual do Master"></textarea><div id="error" class="error"></div></div>
+    </section>
+  </div>
+</main>
+<section id="success" class="success"><div class="icon">✓</div><h2>Resolução enviada para a curadoria</h2><p>O conteúdo ficou aguardando avaliação administrativa e ainda não está disponível para a IA.</p></section>
+<footer id="footer" class="footer" hidden><div class="footer-inner"><div class="footer-copy"><b>Antes de enviar:</b> confira pergunta, resposta, passos e imagens. A curadoria poderá corrigir, aprovar ou rejeitar o conteúdo.</div><button id="submit" class="submit">Enviar para a fila de curadoria</button></div></footer>
+<script>
+const API='/api/treinamento', qs=new URLSearchParams(location.search), ticket=Number(qs.get('ticket')), marker=qs.get('marker')||'';
+const $=s=>document.querySelector(s); const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let data, files=[];
+async function api(path,opts={}){const response=await fetch(API+path,{headers:{'Content-Type':'application/json'},...opts,body:opts.body?JSON.stringify(opts.body):undefined});const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(typeof body.detail==='string'?body.detail:(body.detail?.message||'Falha na operação.'));return body;}
+function fail(message){const box=$('#error');box.textContent=message;box.style.display='block';box.scrollIntoView({behavior:'smooth',block:'center'});}
+function selectQuestion(answer){if(answer?.suggested_question_action_id&&data.questions.some(q=>q.action_id===answer.suggested_question_action_id))$('#questionSelect').value=answer.suggested_question_action_id;showQuestion();}
+function showQuestion(){const q=data.questions.find(x=>x.action_id===$('#questionSelect').value);$('#questionPreview').textContent=q?.text||'Selecione a pergunta relacionada.';}
+function showAnswer(){const a=data.answers.find(x=>x.action_id===$('#answerSelect').value);$('#answerPreview').textContent=a?.text||'';selectQuestion(a);}
+function renderImages(){
+  $('#images').innerHTML=files.map((file,i)=>`<div class="image-row"><img src="${URL.createObjectURL(file)}" alt="Prévia do print"><div><label>Depois do passo</label><input id="step_${i}" type="number" min="1" max="100" value="${i+1}"><label>Legenda</label><input id="caption_${i}" maxlength="300" placeholder="O que a imagem demonstra"></div></div>`).join('');
+}
+async function init(){
+  if(!Number.isInteger(ticket)||ticket<=0)throw new Error('O link não contém um número de ticket válido.');
+  const [answers,taxonomy]=await Promise.all([api(`/tickets/${ticket}/respostas`),api('/taxonomia')]); data=answers;
+  if(!data.answers.length)throw new Error('A resposta do Cortex ainda não está sincronizada neste ticket.');
+  if(!data.questions.length)throw new Error('Nenhuma pergunta do cliente foi encontrada neste ticket. Atualize a sincronização e tente novamente.');
+  const selected=data.answers.find(a=>marker&&a.text.includes(marker))||data.answers[data.answers.length-1];
+  $('#ticketBadge').textContent=`Ticket #${ticket}`; $('#title').value=data.subject||'';
+  $('#module').innerHTML+=[...taxonomy].filter(m=>m.key!=='unclassified').map(m=>`<option value="${esc(m.key)}">${esc(m.label)}</option>`).join('');
+  $('#questionSelect').innerHTML=data.questions.map(q=>`<option value="${esc(q.action_id)}">Nota ${esc(q.action_id)} · ${esc(q.created_at||'')} · ${esc(q.text.slice(0,90))}</option>`).join('');
+  $('#answerSelect').innerHTML=data.answers.map(a=>`<option value="${esc(a.action_id)}" ${a===selected?'selected':''}>Ação ${esc(a.action_id)} · ${esc(a.created_at||'')}</option>`).join('');
+  $('#questionSelect').onchange=showQuestion; $('#answerSelect').onchange=showAnswer; showAnswer();
+  $('#files').onchange=e=>{files=[...e.target.files].slice(0,5);if(e.target.files.length>5)fail('Serão utilizadas somente as cinco primeiras imagens.');renderImages();};
+  $('#loading').hidden=true; $('#app').hidden=false; $('#footer').hidden=false;
+}
+async function submit(){
+  $('#error').style.display='none'; const title=$('#title').value.trim(),answer=$('#answer').value.trim(),procedure=$('#procedure').value.trim();
+  if(!$('#questionSelect').value)return fail('Selecione a pergunta do cliente relacionada.');
+  if(!$('#module').value)return fail('Selecione a categoria geral.');
+  if(title.length<5)return fail('Informe um título objetivo para o conhecimento.');
+  if(answer.length<20)return fail('Escreva a resposta final que será apresentada ao cliente.');
+  if(procedure.length<20||!/^\s*1\.\s/m.test(procedure))return fail('O passo a passo deve começar por “1.” e descrever a resolução completa.');
+  const images=await Promise.all(files.map((file,i)=>new Promise((resolve,reject)=>{const caption=$(`#caption_${i}`).value.trim(),after_step=Number($(`#step_${i}`).value);if(caption.length<3)return reject(new Error('Informe uma legenda para cada imagem.'));if(file.size>5*1024*1024)return reject(new Error('Cada imagem deve ter no máximo 5 MB.'));const reader=new FileReader();reader.onerror=()=>reject(new Error('Não foi possível ler uma das imagens.'));reader.onload=()=>resolve({data_url:reader.result,caption,after_step});reader.readAsDataURL(file);})));
+  $('#submit').disabled=true;
+  try{await api(`/tickets/${ticket}/avaliar`,{method:'POST',body:{action_id:$('#answerSelect').value,rating:-1,module_key:$('#module').value,comment:$('#comment').value.trim(),example_ticket_id:ticket,proposed_title:title,proposed_answer:answer,proposed_procedure:procedure,proposed_images:images,question_action_id:$('#questionSelect').value,source_answer_action_id:null}});$('#app').hidden=true;$('#footer').hidden=true;$('#success').style.display='block';window.scrollTo({top:0,behavior:'smooth'});}catch(e){fail(e.message);$('#submit').disabled=false;}
+}
+$('#submit').onclick=()=>submit().catch(e=>{fail(e.message);$('#submit').disabled=false;});
+init().catch(e=>{$('#loading').textContent=e.message;$('#loading').style.color='var(--red)';});
+</script>
+</body>
+</html>

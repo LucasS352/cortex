@@ -9,9 +9,10 @@ Esta Stack exige o login da Alternativa para telas, APIs e arquivos da aplicaç�
 ## Antes de subir
 
 1. Publicar as alterações em `main` no repositório `LucasS352/cortex` e aguardar o workflow **Build Cortex image** terminar. Ele testa autenticação, Compose e webhook, depois publica `ghcr.io/lucass352/cortex:latest` e uma tag por commit. Atualizar só o YAML não atualiza o código dentro da imagem.
-2. Para acesso pelo IP informado, usar `CORTEX_PUBLIC_URL=http://179.236.68.24` e liberar a porta 80. O Caddy recebe essa mesma URL; não é necessário preencher `CORTEX_DOMAIN` nem `CORTEX_ALLOWED_HOSTS`. Para HTTPS com domínio, usar `https://seu-dominio`, apontar o DNS e liberar 80/443. HTTP exige login, mas não criptografa o tráfego; o cookie usa `Secure` quando a URL é HTTPS. Se já houver um proxy na máquina, adaptar a Stack para encaminhar o painel ao serviço `app:8001` e somente `/webhooks/movidesk/tickets/*` ao serviço `webhook:8003`. Uma porta externa diferente exige ajustar também o mapeamento do Caddy.
+2. Para esta VPS, usar `CORTEX_PUBLIC_URL=https://desk.cortexalter.tech` e liberar as portas 80/443. O subdomínio aponta para a VPS e permite ao Caddy emitir e renovar o certificado automaticamente. O Caddy recebe essa mesma URL; não é necessário preencher `CORTEX_DOMAIN` nem `CORTEX_ALLOWED_HOSTS`. Não use o IP direto para login: HTTP não criptografa credenciais e impede o cookie `Secure`. Se já houver um proxy na máquina, adaptar a Stack para encaminhar o painel ao serviço `app:8001` e somente `/webhooks/movidesk/tickets/*` ao serviço `webhook:8003`. Uma porta externa diferente exige ajustar também o mapeamento do Caddy.
 3. No servidor, verificar se o Portainer usa **Docker Standalone**. No Git Registry/Registries, configurar acesso à imagem GHCR privada se o pacote não for público. O token deve ter permissão de leitura de pacotes. Mantenha também o repositório privado.
 4. Gerar a senha do administrador fora do chat e guardar os valores impressos por `python scripts/create_admin_hash.py`. O script pede a senha sem ecoá-la e gera o hash, a chave da sessão e segredos independentes para os webhooks Movidesk e Master.
+5. Informar em `POSTGRES_PASSWORD` a senha que já pertence ao volume PostgreSQL existente. O Compose não possui mais senha padrão e não publica a porta 5432 no host; o banco permanece acessível somente pelos serviços da Stack.
 
 Não adicione arquivos ignorados nem use `git add -f` para `.env`, `output` ou `Instrucoes_master`.
 
@@ -21,7 +22,7 @@ Em **Stacks → cortex → Edit stack settings**, mantenha o repositório e `ref
 
 | Variável | Valor |
 | --- | --- |
-| `CORTEX_PUBLIC_URL` | `http://179.236.68.24` |
+| `CORTEX_PUBLIC_URL` | `https://desk.cortexalter.tech` |
 | `CORTEX_ADMIN_USERNAME` | `alternativa` |
 | `CORTEX_ADMIN_PASSWORD_HASH` | Hash gerado por `python scripts/create_admin_hash.py` |
 | `CORTEX_SESSION_SECRET` | Chave aleatória gerada pelo mesmo script |
@@ -38,7 +39,7 @@ Se o acesso já tiver sido preparado localmente, copie as quatro variáveis de `
 
 Para gerar um único arquivo pronto para a opção **Load variables from .env file** do Portainer, execute `python scripts/prepare_portainer_env.py` e importe `.env.server.portainer`. O arquivo combina as configurações locais com o hash do login e corrige `POSTGRES_PASSWORD` para o volume existente. Os valores são gravados sem aspas porque o Portainer preserva aspas como parte do valor importado. Ele é ignorado pelo Git e não deve ser commitado.
 
-Depois que a imagem corrigida estiver publicada, use **Pull and redeploy**, solicitando nova busca da imagem se usar `latest`. Preserve os volumes e o nome da Stack. Abra `http://179.236.68.24/admin`: deve redirecionar ao login. Não use a porta 9443, que pertence ao Portainer.
+Depois que a imagem corrigida estiver publicada, use **Pull and redeploy**, solicitando nova busca da imagem se usar `latest`. Preserve os volumes e o nome da Stack. Abra `https://desk.cortexalter.tech/admin`: deve redirecionar ao login. Não use a porta 9443, que pertence ao Portainer.
 
 As duas falhas corrigidas eram: `/healthz` retornava 404 quando a autenticação estava desativada, e o Compose interpolava a variável do Caddy antes de iniciar o container. O YAML agora usa `{$$CORTEX_DOMAIN}`; dentro do Caddyfile o resultado correto é `{$CORTEX_DOMAIN}`.
 

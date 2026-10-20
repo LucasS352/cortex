@@ -51,6 +51,7 @@ class Content(BaseModel):
     symptom: str = Field(min_length=5, max_length=6000)
     error_messages: list[str] = Field(default_factory=list, max_length=15)
     root_cause: str = Field(min_length=5, max_length=6000)
+    customer_answer: str | None = Field(default=None, max_length=10000)
     procedure: str = Field(min_length=5, max_length=10000)
     prerequisites: str | None = Field(default=None, max_length=4000)
     expected_result: str | None = Field(default=None, max_length=4000)
@@ -166,6 +167,11 @@ def item(item_id: int):
     return _guard(kt.item_detail, item_id)
 
 
+@router.get('/itens/{item_id}/testar')
+def test_item(item_id: int, q: str = Query(min_length=5, max_length=500)):
+    return _guard(kt.test_item_retrieval, item_id, q)
+
+
 @router.post('/itens/{item_id}/revisar')
 def revise(item_id: int, body: Revision, request: Request):
     return _guard(kt.revise_item, item_id, _content(body.content), actor(request), body.reason)
@@ -204,6 +210,13 @@ class AnswerReview(BaseModel):
     rating: Literal[-1, 1]
     module_key: str = Field(min_length=2, max_length=50)
     comment: str = Field(default='', max_length=1000)
+    example_ticket_id: int | None = Field(default=None, gt=0)
+    proposed_title: str | None = Field(default=None, max_length=200)
+    proposed_answer: str | None = Field(default=None, max_length=10000)
+    proposed_procedure: str | None = Field(default=None, max_length=10000)
+    proposed_images: list[dict] = Field(default_factory=list, max_length=5)
+    question_action_id: str | None = Field(default=None, max_length=80)
+    source_answer_action_id: str | None = Field(default=None, max_length=80)
 
 
 @router.post('/taxonomia')
@@ -216,9 +229,17 @@ def ticket_answers(ticket_id: int):
     return _guard(kt.ticket_answers, ticket_id)
 
 
+@router.get('/tickets/{ticket_id}/respostas-tecnicas')
+def ticket_technician_answers(ticket_id: int):
+    return _guard(kt.ticket_technician_answers, ticket_id)
+
+
 @router.post('/tickets/{ticket_id}/avaliar')
 def review_answer(ticket_id: int, body: AnswerReview, request: Request):
-    return _guard(kt.review_answer, ticket_id, body.action_id, body.rating, body.module_key, body.comment, actor(request))
+    return _guard(kt.review_answer, ticket_id, body.action_id, body.rating, body.module_key, body.comment,
+                  actor(request), body.example_ticket_id, body.proposed_title, body.proposed_answer,
+                  body.proposed_procedure, body.proposed_images, body.question_action_id,
+                  body.source_answer_action_id)
 
 
 @router.get('/avaliacoes')

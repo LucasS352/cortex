@@ -34,9 +34,7 @@ class DeploymentConfigTests(unittest.TestCase):
                 command = services["caddy"]["entrypoint"][2].replace("$$", "$")
                 self.assertIn("{$CORTEX_DOMAIN} {", command)
                 self.assertNotIn("must-not-be-interpolated", command)
-                self.assertEqual(services["postgres"]["ports"][0]["target"], 5432)
-                self.assertEqual(services["postgres"]["ports"][0]["published"], "5432")
-                for private in ("app", "webhook", "note-worker"):
+                for private in ("postgres", "app", "webhook", "note-worker"):
                     self.assertFalse(services[private].get("ports"))
 
     def test_missing_login_credentials_reject_deployment(self):
@@ -49,22 +47,19 @@ class DeploymentConfigTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("CORTEX_ADMIN_PASSWORD_HASH", result.stderr)
 
-    def test_existing_portainer_stack_keeps_previous_database_password(self):
+    def test_missing_database_password_rejects_deployment(self):
         env = dict(os.environ)
         env.pop("POSTGRES_PASSWORD", None)
         env.update({"CORTEX_ADMIN_PASSWORD_HASH": hash_password("DisposableTestPassword!"),
                     "CORTEX_ADMIN_USERNAME": "alternativa", "CORTEX_SESSION_SECRET": "s" * 48,
                     "MOVIDESK_WEBHOOK_SECRET": "w" * 48,
                     "MASTER_CONFIG_WEBHOOK_SECRET": "m" * 48,
-                    "CORTEX_PUBLIC_URL": "http://179.236.68.24"})
+                    "CORTEX_PUBLIC_URL": "https://desk.cortexalter.tech"})
         result = subprocess.run(["docker", "compose", "--env-file", os.devnull, "-f", FILES[0],
-                                 "config", "--format", "json"], cwd=ROOT, env=env,
-                                capture_output=True, text=True, check=True)
-        services = json.loads(result.stdout)["services"]
-        app_env = services["app"]["environment"]
-        self.assertEqual(app_env["POSTGRES_PASSWORD"], "cortex_secret")
-        self.assertEqual(app_env["CORTEX_ADMIN_USERNAME"], "alternativa")
-        self.assertEqual(app_env["CORTEX_PUBLIC_URL"], "http://179.236.68.24")
+                                 "config", "--quiet"], cwd=ROOT, env=env,
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("POSTGRES_PASSWORD", result.stderr)
 
 
 if __name__ == "__main__":

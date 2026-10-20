@@ -143,7 +143,14 @@ app.mount("/tech-assets", StaticFiles(directory=str(Path(__file__).parent / "sta
 def get_training_page():
     return HTMLResponse((Path(__file__).parent / "static" / "treinamento.html").read_text(encoding="utf-8"))
 
+
+@app.get("/treinamento/tecnico", response_class=HTMLResponse, include_in_schema=False)
+def get_technician_training_page():
+    return HTMLResponse((Path(__file__).parent / "static" / "treinamento_tecnico.html").read_text(encoding="utf-8"))
+
 REVIEWED_REPLY_MEDIA = Path(__file__).parent / "static" / "reply-media"
+TRAINING_MEDIA_DIR = Path(__file__).parent / "output" / "training_media"
+TRAINING_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @app.get("/procedure-images/{name}", include_in_schema=False)
@@ -151,6 +158,16 @@ def reviewed_procedure_image(name: str):
     if not re.fullmatch(r"[a-z0-9-]+\.png", name):
         return JSONResponse({"error": "Imagem inválida"}, status_code=404)
     path = REVIEWED_REPLY_MEDIA / name
+    if not path.is_file():
+        return JSONResponse({"error": "Imagem não encontrada"}, status_code=404)
+    return FileResponse(path, media_type="image/png")
+
+
+@app.get("/training-media/{name}", include_in_schema=False)
+def training_proposal_image(name: str):
+    if not re.fullmatch(r"[0-9a-f]{32}\.png", name):
+        return JSONResponse({"error": "Imagem inválida"}, status_code=404)
+    path = TRAINING_MEDIA_DIR / name
     if not path.is_file():
         return JSONResponse({"error": "Imagem não encontrada"}, status_code=404)
     return FileResponse(path, media_type="image/png")

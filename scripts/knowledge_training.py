@@ -10,18 +10,23 @@ Regras de segurança (não negociáveis):
 from __future__ import annotations
 
 import json
+import base64
+import io
 import re
 import unicodedata
 import urllib.request
+import uuid
 from pathlib import Path
 from threading import RLock
 
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from PIL import Image, UnidentifiedImageError
 
 from config import POSTGRES_DSN, GEMINI_API_KEY, GEMINI_EMBEDDING_MODEL, GEMINI_EMBEDDING_DIMENSIONS, PROJECT_ROOT
 import knowledge_curation as taxonomy
+import knowledge_access
 
 MIGRATION = Path(PROJECT_ROOT) / 'infra' / '006_canonical_knowledge.sql'
 SUGGESTION_THRESHOLD = 55
@@ -364,7 +369,7 @@ def load_ticket(conn, external_id):
 
 # ───────────────────────────── 4. fila de curadoria ─────────────────────────────
 
-def create_candidate(external_id, actor, force=False, action_id=None, module_key=None):
+def create_candidate(external_id, actor, force=False, action_id=None, module_key=None, proposal=None):
     """Analista clicou em 'Transformar em Conhecimento' (ou aceitou uma sugestão)."""
     ensure_schema()
     with connect() as conn:
@@ -374,6 +379,20 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
             existing = get_candidate(open_['id'])
             if action_id and existing.get('source_action_id') != str(action_id):
                 raise RuntimeError('Já existe revisão aberta de outra resposta deste ticket. Conclua ou rejeite antes de selecionar outra.')
+            if proposal:
+                extraction = dict(existing.get('extraction') or {})
+                extraction.update(title=proposal['title'], procedure=proposal['procedure'],
+                                  customer_answer=proposal['answer'], images=proposal.get('images') or [],
+                                  confidence='HUMAN_PROPOSAL')
+                checks = quality_checks(extraction, proposal['answer'] + '\n' + proposal['procedure'])
+                conn.execute('''UPDATE cortex_kb.candidates SET extraction=%s,quality_checks=%s,
+                    suggested_module=%s,extractor='technician_proposal',source_question_action_id=%s,
+                    source_answer_action_id=%s WHERE id=%s''',
+                    (Jsonb(extraction), Jsonb(checks), module_key or existing['suggested_module'],
+                     proposal.get('question_action_id'), proposal.get('answer_action_id'), open_['id']))
+                existing.update(extraction=extraction, quality_checks=checks,
+                                suggested_module=module_key or existing['suggested_module'],
+                                extractor='technician_proposal')
             return existing
         ticket, actions = load_ticket(conn, external_id)
         if action_id:
@@ -387,8 +406,29 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
         score, signals, eligible = usefulness(ticket, actions)
         if not eligible and not force:
             raise PermissionError(json.dumps({'score': score, 'signals': signals}, ensure_ascii=False))
-    # Chamada ao modelo fora da transação: não segura conexão nem locks.
-    extraction, text, extractor = extract(ticket, actions)
+    # Uma proposta escrita pelo técnico é a fonte primária do rascunho. Ela não
+    # passa pelo modelo e continua isolada do RAG até a aprovação administrativa.
+    if proposal:
+        extraction = {
+            'title': proposal['title'],
+            'symptom': proposal.get('question') or sanitize(ticket.get('problem_statement') or ticket.get('subject') or proposal['title']),
+            'error_messages': [],
+            'root_cause': 'Orientação técnica proposta; causa deve ser confirmada na curadoria.',
+            'procedure': proposal['procedure'],
+            'customer_answer': proposal['answer'],
+            'prerequisites': None,
+            'expected_result': None,
+            'applicability': {},
+            'module_hint': module_key or 'unclassified',
+            'images': proposal.get('images') or [],
+            'evidence': {'root_cause_quote': None, 'procedure_quote': proposal['procedure'],
+                         'confirmation_quote': None},
+            'confidence': 'HUMAN_PROPOSAL',
+        }
+        text, extractor = proposal['answer'] + '\n' + proposal['procedure'], 'technician_proposal'
+    else:
+        # Chamada ao modelo fora da transação: não segura conexão nem locks.
+        extraction, text, extractor = extract(ticket, actions)
     module = module_key or extraction['module_hint']
     sub = taxonomy.subtopic(module, extraction['title'], [extraction['symptom'] or ''])
     checks = quality_checks(extraction, text)
@@ -397,11 +437,14 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
         status = 'conflict' if any(r['relation'] == 'conflict' for r in related) else 'pending'
         row = conn.execute('''INSERT INTO cortex_kb.candidates
             (ticket_external_id,status,usefulness_score,usefulness_signals,extraction,quality_checks,
-             suggested_module,suggested_subtopic,similar_items,extractor,created_by,source_action_id)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+             suggested_module,suggested_subtopic,similar_items,extractor,created_by,source_action_id,
+             source_question_action_id,source_answer_action_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (ticket_external_id) WHERE status IN ('pending','conflict') DO NOTHING RETURNING id''',
             (external_id, status, score, Jsonb(signals), Jsonb(extraction), Jsonb(checks), module, sub,
-             Jsonb(related), extractor, actor, str(action_id) if action_id else None)).fetchone()
+             Jsonb(related), extractor, actor, str(action_id) if action_id else None,
+             proposal.get('question_action_id') if proposal else None,
+             proposal.get('answer_action_id') if proposal else None)).fetchone()
         if not row:
             raise RuntimeError('Outra revisão foi aberta para este ticket. Recarregue a fila.')
         for r in related:
@@ -415,7 +458,9 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
 def get_candidate(candidate_id):
     with connect() as conn:
         row = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s', (candidate_id,)).fetchone()
-        reviews = conn.execute('SELECT rating,comment,actor,updated_at FROM cortex_kb.answer_reviews WHERE candidate_id=%s ORDER BY updated_at DESC', (candidate_id,)).fetchall()
+        reviews = conn.execute('''SELECT ticket_external_id,action_id,example_ticket_external_id,
+            question_action_id,source_answer_action_id,rating,comment,actor,updated_at FROM cortex_kb.answer_reviews
+            WHERE candidate_id=%s ORDER BY updated_at DESC''', (candidate_id,)).fetchall()
     if not row:
         raise LookupError('Sugestão não encontrada.')
     return {**dict(row), 'answer_reviews': reviews}
@@ -471,6 +516,8 @@ def _validate_content(c):
     for key in ('title', 'symptom', 'root_cause', 'procedure'):
         if len((c.get(key) or '').strip()) < 5:
             raise ValueError(f'Preencha "{key}" antes de publicar — conhecimento oficial precisa de causa e procedimento.')
+    if c.get('customer_answer'):
+        c['customer_answer'] = sanitize(c['customer_answer']).strip()
     if c['module_key'] == 'unclassified':
         raise ValueError('Selecione o módulo antes de publicar.')
     if c['module_key'] not in taxonomy.MODULE_NAMES and c['module_key'] not in {m['key'] for m in taxonomy_options()}:
@@ -495,13 +542,13 @@ def _validate_content(c):
     return c
 
 
-def _embed(text):
+def _embed(text, task_type='RETRIEVAL_DOCUMENT'):
     if not GEMINI_API_KEY:
         return None
     req = urllib.request.Request(
         f'https://generativelanguage.googleapis.com/v1beta/{GEMINI_EMBEDDING_MODEL}:embedContent?key={GEMINI_API_KEY}',
         data=json.dumps({'model': GEMINI_EMBEDDING_MODEL, 'content': {'parts': [{'text': text[:8000]}]},
-                         'taskType': 'RETRIEVAL_DOCUMENT'}).encode(), headers={'Content-Type': 'application/json'})
+                         'taskType': task_type}).encode(), headers={'Content-Type': 'application/json'})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             values = json.loads(r.read())['embedding']['values']
@@ -522,6 +569,7 @@ def document_text(item, version):
         f"Causa: {version['root_cause']}",
         f"Aplica-se a: {scope}" if scope else '',
         f"Pré-requisitos: {version['prerequisites']}" if version.get('prerequisites') else '',
+        f"Resposta pronta ao cliente: {version['customer_answer']}" if version.get('customer_answer') else '',
         f"Procedimento:\n{version['procedure']}",
         f"Resultado esperado: {version['expected_result']}" if version.get('expected_result') else '',
         f"Palavras-chave: {', '.join(version['keywords'])}" if version.get('keywords') else '') if p)
@@ -539,7 +587,8 @@ def _publish(conn, item_id, embedding_cache=None):
     values = dict(
         source_type='OFFICIAL_KB', source_id=f'canon:{item_id}', source_external_id=int(refs[0]) if refs else None,
         title=item['title'], content_for_embedding=text, problem=version['symptom'], diagnosis=version['root_cause'],
-        solution=version['procedure'], result=version['expected_result'],
+        solution=('\n\n'.join(p for p in (version.get('customer_answer'), version['procedure']) if p)),
+        result=version['expected_result'],
         modules=[taxonomy.MODULE_NAMES.get(item['module_key'], item['module_key'])], detected_error_codes=version['error_messages'],
         version_reference=(app.get('master_version') or None), tier='KB', confidence='HIGH',
         validation_score=100, final_score=100, source_authority=100,
@@ -568,11 +617,11 @@ def _new_version(conn, item_id, content, actor, reason):
     previous = conn.execute("SELECT max(version_no) AS n FROM cortex_kb.versions WHERE item_id=%s", (item_id,)).fetchone()['n'] or 0
     conn.execute("UPDATE cortex_kb.versions SET status='superseded' WHERE item_id=%s AND status='published'", (item_id,))
     version = conn.execute('''INSERT INTO cortex_kb.versions
-        (item_id,version_no,symptom,error_messages,root_cause,procedure,prerequisites,expected_result,
+        (item_id,version_no,symptom,error_messages,root_cause,procedure,customer_answer,prerequisites,expected_result,
          applicability,keywords,status,change_reason,approved_by,images)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'published',%s,%s,%s) RETURNING *''',
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'published',%s,%s,%s) RETURNING *''',
         (item_id, previous + 1, content['symptom'], content.get('error_messages') or [], content['root_cause'],
-         content['procedure'], content.get('prerequisites'), content.get('expected_result'),
+         content['procedure'], content.get('customer_answer'), content.get('prerequisites'), content.get('expected_result'),
          Jsonb(content.get('applicability') or {}), content.get('keywords') or [], reason, actor, Jsonb(content.get('images') or []))).fetchone()
     conn.execute('''UPDATE cortex_kb.items SET current_version_id=%s, title=%s, module_key=%s, subtopic_key=%s,
         status='active', updated_at=now() WHERE id=%s''',
@@ -751,6 +800,39 @@ def item_detail(item_id):
                 'audit': conn.execute("SELECT * FROM cortex_kb.audit WHERE entity='item' AND entity_id=%s ORDER BY at DESC LIMIT 50", (item_id,)).fetchall()}
 
 
+def test_item_retrieval(item_id, query):
+    """Executa a mesma recuperação do CORTEX e informa a posição do item esperado."""
+    query = sanitize(query).strip()
+    if len(query) < 5:
+        raise ValueError('Escreva uma pergunta de teste com pelo menos 5 caracteres.')
+    ensure_schema()
+    with connect() as conn:
+        item = conn.execute('SELECT id,title,status FROM cortex_kb.items WHERE id=%s', (item_id,)).fetchone()
+        if not item:
+            raise LookupError('Procedimento não encontrado.')
+        if item['status'] != 'active':
+            raise ValueError('Este procedimento está inativo e não participa das respostas da IA.')
+        query_vector = _embed(query, 'RETRIEVAL_QUERY')
+        rows = knowledge_access.search(conn, query, top_k=10, embedding=query_vector,
+                                       source_types=('OFFICIAL_KB',), maintain_index=False)
+    expected_source = f'canon:{item_id}'
+    rank = next((position for position, row in enumerate(rows, 1)
+                 if str(row.get('source_id')) == expected_source), None)
+    results = []
+    for position, row in enumerate(rows, 1):
+        results.append({
+            'rank': position,
+            'source_id': row.get('source_id'),
+            'title': row.get('title'),
+            'score': float(row.get('combined_score') or 0),
+            'retrieval_method': row.get('retrieval_method'),
+            'is_expected': str(row.get('source_id')) == expected_source,
+        })
+    return {'query': query, 'item_id': item_id, 'item_title': item['title'],
+            'found': rank is not None, 'rank': rank,
+            'query_embedding_ok': query_vector is not None, 'results': results}
+
+
 def resolve_conflict(conflict_id, actor, note, dismiss=False):
     if len((note or '').strip()) < 5:
         raise ValueError('Descreva como o conflito foi tratado.')
@@ -924,39 +1006,166 @@ def ticket_answers(ticket_id):
     ensure_schema()
     with connect() as conn:
         ticket, actions = load_ticket(conn, ticket_id)
-    from movidesk_note_worker import plain
-    return {'ticket': ticket_id, 'subject': ticket.get('subject'), 'answers': [
-        {'action_id': str(a['id']), 'text': plain(a.get('description') or ''), 'created_at': a.get('createdDate')}
-        for a in actions if a.get('id') is not None and 'CORTEX-AI-NOTE:' in str(a.get('description') or '')]}
+    from movidesk_note_worker import plain, automatic_receipt_action
+    ordered = sorted(actions, key=lambda a: (str(a.get('createdDate') or ''), int(a.get('id') or 0)))
+    questions, answers, latest_question = [], [], None
+    for action in ordered:
+        description = str(action.get('description') or '')
+        if action.get('id') is None or action.get('isDeleted') or automatic_receipt_action(action):
+            continue
+        text = sanitize(plain(description)).strip()
+        if 'CORTEX-AI-NOTE:' in description:
+            answers.append({'action_id': str(action['id']), 'text': text,
+                            'created_at': action.get('createdDate'),
+                            'suggested_question_action_id': latest_question})
+        elif not is_agent(action) and str(action.get('type')) == '2' and len(text) >= 5:
+            latest_question = str(action['id'])
+            questions.append({'action_id': latest_question, 'text': text[:10000],
+                              'created_at': action.get('createdDate')})
+    return {'ticket': ticket_id, 'subject': sanitize(ticket.get('subject')).strip(),
+            'questions': questions[-30:], 'answers': answers[-30:]}
 
 
-def review_answer(ticket_id, action_id, rating, module_key, comment, actor):
+def ticket_technician_answers(ticket_id):
+    """Notas treináveis e pareamento provável: pergunta do cliente -> resposta humana seguinte."""
+    ensure_schema()
+    with connect() as conn:
+        ticket, actions = load_ticket(conn, ticket_id)
+    from movidesk_note_worker import plain, automatic_receipt_action
+    ordered = sorted(actions, key=lambda a: (str(a.get('createdDate') or ''), int(a.get('id') or 0)))
+    questions, answers, latest_question = [], [], None
+    for action in ordered:
+        description = str(action.get('description') or '')
+        if (action.get('id') is None or action.get('isDeleted') or
+                'CORTEX-AI-NOTE:' in description or automatic_receipt_action(action)):
+            continue
+        text = sanitize(plain(description)).strip()
+        if is_agent(action) and len(text) >= 20:
+            answers.append({'action_id': str(action['id']), 'text': text[:10000],
+                            'created_at': action.get('createdDate'),
+                            'suggested_question_action_id': latest_question})
+        elif not is_agent(action) and str(action.get('type')) == '2' and len(text) >= 5:
+            latest_question = str(action['id'])
+            questions.append({'action_id': latest_question, 'text': text[:10000],
+                              'created_at': action.get('createdDate')})
+    return {'ticket': ticket_id, 'subject': sanitize(ticket.get('subject')).strip(),
+            'questions': questions[-30:], 'answers': answers[-30:]}
+
+
+TRAINING_MEDIA = Path(__file__).parent / 'output' / 'training_media'
+
+
+def _save_proposal_images(images, procedure):
+    if len(images or []) > 5:
+        raise ValueError('Envie no máximo 5 prints por proposta.')
+    steps = {int(n) for n in re.findall(r'^\s*(\d+)\.\s', procedure or '', re.M)}
+    saved = []
+    TRAINING_MEDIA.mkdir(parents=True, exist_ok=True)
+    for entry in images or []:
+        step = entry.get('after_step')
+        caption = sanitize(entry.get('caption')).strip()
+        if step not in steps or len(caption) < 3:
+            raise ValueError('Cada print precisa de legenda e deve estar ligado a um passo numerado existente.')
+        match = re.fullmatch(r'data:image/(png|jpeg|webp);base64,([A-Za-z0-9+/=\r\n]+)',
+                             str(entry.get('data_url') or ''), re.I)
+        if not match:
+            raise ValueError('Use apenas imagens PNG, JPEG ou WebP.')
+        try:
+            raw = base64.b64decode(match.group(2), validate=True)
+        except ValueError as exc:
+            raise ValueError('Um dos prints está corrompido.') from exc
+        if not raw or len(raw) > 5 * 1024 * 1024:
+            raise ValueError('Cada print deve ter no máximo 5 MB.')
+        try:
+            with Image.open(io.BytesIO(raw)) as source:
+                if source.width * source.height > 25_000_000:
+                    raise ValueError('A resolução do print é muito grande.')
+                source.load()
+                image = source.convert('RGBA' if source.mode in ('RGBA', 'LA') else 'RGB')
+                image.thumbnail((2400, 2400))
+                name = uuid.uuid4().hex + '.png'
+                image.save(TRAINING_MEDIA / name, 'PNG', optimize=True)
+        except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+            raise ValueError('Um dos arquivos não é uma imagem válida.') from exc
+        saved.append({'file': name, 'caption': caption[:300], 'after_step': step})
+    return saved
+
+
+def review_answer(ticket_id, action_id, rating, module_key, comment, actor, example_ticket_id=None,
+                  proposed_title=None, proposed_answer=None, proposed_procedure=None, proposed_images=None,
+                  question_action_id=None, source_answer_action_id=None):
     if rating not in (-1, 1):
         raise ValueError('Avaliação inválida.')
     if module_key == 'unclassified' or module_key not in {m['key'] for m in taxonomy_options()}:
         raise ValueError('Classifique o módulo da resposta.')
+    if rating == -1 and (not isinstance(example_ticket_id, int) or isinstance(example_ticket_id, bool)
+                         or example_ticket_id <= 0):
+        raise ValueError('Informe um ticket-exemplo válido para a resposta que precisa melhorar.')
+    proposal = None
+    if rating == -1:
+        proposed_title = sanitize(proposed_title).strip()
+        proposed_answer = sanitize(proposed_answer).strip()
+        proposed_procedure = sanitize(proposed_procedure).strip()
+        if len(proposed_title) < 5 or len(proposed_answer) < 20:
+            raise ValueError('Preencha o título e a resposta pronta ao cliente.')
+        if len(proposed_procedure) < 20 or not re.search(r'^\s*1\.\s', proposed_procedure, re.M):
+            raise ValueError('Escreva o passo a passo numerado, começando por “1.”.')
+        question_text = None
+        if question_action_id or source_answer_action_id:
+            if source_answer_action_id and not question_action_id:
+                raise ValueError('Selecione a nota da pergunta relacionada à resposta.')
+            notes = ticket_technician_answers(example_ticket_id)
+            question = next((q for q in notes['questions'] if q['action_id'] == str(question_action_id)), None)
+            source_answer = (next((a for a in notes['answers'] if a['action_id'] == str(source_answer_action_id)), None)
+                             if source_answer_action_id else None)
+            if not question or (source_answer_action_id and not source_answer):
+                raise ValueError('A pergunta ou resposta selecionada não pertence ao ticket indicado ou ainda não foi sincronizada.')
+            question_text = question['text']
+        saved_images = _save_proposal_images(proposed_images or [], proposed_procedure)
+        proposal = {'title': proposed_title, 'answer': proposed_answer,
+                    'procedure': proposed_procedure, 'images': saved_images, 'question': question_text,
+                    'question_action_id': str(question_action_id) if question_action_id else None,
+                    'answer_action_id': str(source_answer_action_id) if source_answer_action_id else None}
     with connect() as conn:
         _, actions = load_ticket(conn, ticket_id)
         selected = select_answer(actions, action_id)
-    candidate = create_candidate(ticket_id, actor, True, action_id, module_key) if rating == 1 else None
+    # A proposta do técnico sempre fica isolada na fila. Somente a decisão
+    # administrativa posterior pode publicá-la no índice usado pelo CORTEX.
+    candidate = create_candidate(example_ticket_id, actor, True, None, module_key, proposal) if rating == -1 else None
     with connect() as conn:
         row = conn.execute("""INSERT INTO cortex_kb.answer_reviews
-            (ticket_external_id,action_id,answer_text,rating,module_key,comment,actor,candidate_id)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(ticket_external_id,action_id,actor)
+            (ticket_external_id,action_id,answer_text,rating,module_key,comment,actor,
+             example_ticket_external_id,proposed_title,proposed_answer,proposed_procedure,proposed_images,
+             question_action_id,source_answer_action_id,candidate_id)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(ticket_external_id,action_id,actor)
             DO UPDATE SET rating=excluded.rating,module_key=excluded.module_key,comment=excluded.comment,
+            example_ticket_external_id=excluded.example_ticket_external_id,
+            proposed_title=excluded.proposed_title,proposed_answer=excluded.proposed_answer,
+            proposed_procedure=excluded.proposed_procedure,proposed_images=excluded.proposed_images,
+            question_action_id=excluded.question_action_id,source_answer_action_id=excluded.source_answer_action_id,
             candidate_id=COALESCE(excluded.candidate_id,answer_reviews.candidate_id),updated_at=now() RETURNING id""",
             (ticket_id,str(action_id),sanitize(selected['description']),rating,module_key,sanitize(comment),actor,
+             example_ticket_id if rating == -1 else None,
+             proposed_title if rating == -1 else None, proposed_answer if rating == -1 else None,
+             proposed_procedure if rating == -1 else None, Jsonb(proposal['images'] if proposal else []),
+             str(question_action_id) if rating == -1 and question_action_id else None,
+             str(source_answer_action_id) if rating == -1 and source_answer_action_id else None,
              candidate['id'] if candidate else None)).fetchone()
         audit(conn,'answer_review',row['id'],'rated',actor,sanitize(comment),
-              after={'rating':rating,'ticket':ticket_id,'action':str(action_id),'module':module_key})
-    return {'id':row['id'],'candidate_id':candidate['id'] if candidate else None}
+              after={'rating':rating,'ticket':ticket_id,'action':str(action_id),'module':module_key,
+                     'example_ticket':example_ticket_id if rating == -1 else None,
+                     'question_action':question_action_id if rating == -1 else None,
+                     'source_answer_action':source_answer_action_id if rating == -1 else None})
+    return {'id':row['id'],'candidate_id':candidate['id'] if candidate else None,
+            'example_ticket_id':example_ticket_id if rating == -1 else None}
 
 
 def answer_reviews(limit=100):
     ensure_schema()
     with connect() as conn:
         return conn.execute("""SELECT id,ticket_external_id,action_id,rating,module_key,comment,actor,
-            candidate_id,created_at,updated_at FROM cortex_kb.answer_reviews
+            example_ticket_external_id,proposed_title,proposed_answer,proposed_procedure,proposed_images,
+            question_action_id,source_answer_action_id,candidate_id,created_at,updated_at FROM cortex_kb.answer_reviews
             ORDER BY updated_at DESC LIMIT %s""",(limit,)).fetchall()
 
 
@@ -967,5 +1176,8 @@ def procedure_images():
         'payment-relation':'Forma de pagamento — Relação Site', 'duplicate-nfe-series-number':'NF-e — série e número',
         'ocorrencias-1':'Ocorrências — tela 1','ocorrencias-2':'Ocorrências — tela 2','ocorrencias-3':'Ocorrências — tela 3'}
     root = Path(__file__).parent / 'static' / 'reply-media'
-    return [{'file': p.name, 'label': labels.get(p.stem,p.stem), 'url':'/procedure-images/'+p.name}
-            for p in sorted(root.glob('*.png'))]
+    reviewed = [{'file': p.name, 'label': labels.get(p.stem,p.stem), 'url':'/procedure-images/'+p.name}
+                for p in sorted(root.glob('*.png'))]
+    uploaded = [{'file': p.name, 'label': 'Print enviado para curadoria', 'url':'/training-media/'+p.name}
+                for p in sorted(TRAINING_MEDIA.glob('*.png'))]
+    return reviewed + uploaded

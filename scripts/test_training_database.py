@@ -28,9 +28,14 @@ class TrainingDatabaseTests(unittest.TestCase):
                 options=kt.save_module('qa_training','Módulo QA','Teste transacional','tester')
                 self.assertTrue(any(m['key']=='qa_training' for m in options))
                 kt.save_module('qa_training','Módulo QA renomeado','Teste transacional','tester')
-                review=kt.review_answer(ticket['external_id'],'1',1,'qa_training','Boa resposta','tester')
+                example_ticket_id = ticket['external_id'] - 1
+                review=kt.review_answer(ticket['external_id'],'1',-1,'qa_training','Usar o procedimento do exemplo',
+                    'tester',example_ticket_id,'Procedimento de teste validado',
+                    'Sim, utilize o procedimento de teste validado abaixo.',
+                    '1. Conferir o cadastro correto.\n2. Validar o resultado.',[])
                 cand=kt.get_candidate(review['candidate_id'])
-                self.assertEqual(cand['source_action_id'],'1')
+                self.assertEqual(cand['ticket_external_id'],example_ticket_id)
+                self.assertIsNone(cand['source_action_id'])
                 self.assertEqual(cand['status'],'pending')
                 content={**extraction,'module_key':'qa_training','subtopic_key':'general','expected_result':'Cadastro validado'}
                 item=kt.approve(cand['id'],'new',content,'curador','Procedimento validado')

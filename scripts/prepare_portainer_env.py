@@ -24,13 +24,14 @@ def main() -> None:
     server = dotenv_values(SERVER_ENV, interpolate=False)
     access = dotenv_values(ACCESS_ENV, interpolate=False)
     values = {
-        "CORTEX_PUBLIC_URL": access.get("CORTEX_PUBLIC_URL") or "http://179.236.68.24",
+        "CORTEX_PUBLIC_URL": access.get("CORTEX_PUBLIC_URL") or "https://desk.cortexalter.tech",
         "CORTEX_IMAGE": server.get("CORTEX_IMAGE") or "ghcr.io/lucass352/cortex:latest",
         "CORTEX_ADMIN_USERNAME": access.get("CORTEX_ADMIN_USERNAME") or "alternativa",
         "CORTEX_ADMIN_PASSWORD_HASH": access.get("CORTEX_ADMIN_PASSWORD_HASH") or "",
         "CORTEX_SESSION_SECRET": access.get("CORTEX_SESSION_SECRET") or "",
-        # The existing Portainer volume was initialized by the old Compose fallback.
-        "POSTGRES_PASSWORD": "cortex_secret",
+        # Preserve the password already used by the existing PostgreSQL volume.
+        # Changing only this environment value does not rotate the database role.
+        "POSTGRES_PASSWORD": server.get("POSTGRES_PASSWORD") or "",
         "MOVIDESK_TOKEN": server.get("MOVIDESK_TOKEN") or "",
         "MOVIDESK_WEBHOOK_SECRET": server.get("MOVIDESK_WEBHOOK_SECRET") or "",
         "MASTER_CONFIG_WEBHOOK_SECRET": server.get("MASTER_CONFIG_WEBHOOK_SECRET") or "",
@@ -45,7 +46,7 @@ def main() -> None:
         "CORTEX_MOVIDESK_INTERVAL_SECONDS": server.get("CORTEX_MOVIDESK_INTERVAL_SECONDS") or "7",
         "CORTEX_RUNTIME_PILOT_CONTROL": "true",
     }
-    required = ("CORTEX_ADMIN_PASSWORD_HASH", "CORTEX_SESSION_SECRET", "MOVIDESK_WEBHOOK_SECRET",
+    required = ("CORTEX_ADMIN_PASSWORD_HASH", "CORTEX_SESSION_SECRET", "POSTGRES_PASSWORD", "MOVIDESK_WEBHOOK_SECRET",
                 "MASTER_CONFIG_WEBHOOK_SECRET")
     missing = [key for key in required if not values[key]]
     if missing:

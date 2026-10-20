@@ -1,13 +1,10 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    ports:
-      - "5432:5432"
     environment:
       POSTGRES_DB: deskcortex
       POSTGRES_USER: deskcortex
-      # Compatibilidade com volumes criados pelas versões anteriores da Stack.
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Informe a senha existente do PostgreSQL}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./infra/schema-current.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -27,7 +24,7 @@ services:
       POSTGRES_PORT: "5432"
       POSTGRES_DB: deskcortex
       POSTGRES_USER: deskcortex
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cortex_secret}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Informe a senha existente do PostgreSQL}
       MOVIDESK_TOKEN: ${MOVIDESK_TOKEN:-}
       MOVIDESK_WEBHOOK_SECRET: ${MOVIDESK_WEBHOOK_SECRET:?Gere um segredo para o webhook}
       MASTER_CONFIG_WEBHOOK_SECRET: ${MASTER_CONFIG_WEBHOOK_SECRET:?Gere um segredo exclusivo para o config.ini}

@@ -1,6 +1,11 @@
 """Human approval boundary and exact-answer regression checks."""
 import unittest
+import base64
+import io
+import tempfile
+from pathlib import Path
 from unittest.mock import patch, MagicMock
+from PIL import Image
 import knowledge_training as kt
 import knowledge_access as ka
 from fastapi import FastAPI
@@ -22,30 +27,70 @@ class TrainingWorkflowTests(unittest.TestCase):
         for action in ('1','3'):
             with self.assertRaises(ValueError): kt.select_answer(actions, action)
 
+    def test_clone_source_lists_only_human_technician_answers(self):
+        actions = [
+            {'id':1,'type':2,'description':'Mensagem longa enviada pelo cliente para solicitar ajuda.'},
+            {'id':2,'type':1,'description':'Resposta humana com o caminho correto para abrir o relatório.'},
+            {'id':3,'type':1,'description':'CORTEX-AI-NOTE:abc resposta automática que não pode ser clonada.'},
+        ]
+        with patch.object(kt,'ensure_schema'), patch.object(kt,'connect') as connect, \
+             patch.object(kt,'load_ticket',return_value=({'subject':'Relatório por fornecedor'},actions)):
+            result = kt.ticket_technician_answers(132084)
+        self.assertEqual([a['action_id'] for a in result['answers']],['2'])
+        self.assertEqual([q['action_id'] for q in result['questions']],['1'])
+        self.assertEqual(result['answers'][0]['suggested_question_action_id'],'1')
+        self.assertEqual(result['subject'],'Relatório por fornecedor')
+
+    def test_authoring_screen_lists_customer_question_and_suggests_it_for_cortex_answer(self):
+        actions = [
+            {'id':3,'type':2,'description':'Onde vejo os produtos comprados por fornecedor?'},
+            {'id':4,'type':2,'description':'Seu chamado foi recebido e iremos realizar a triagem por um atendente do suporte.'},
+            {'id':5,'type':1,'description':'CORTEX-AI-NOTE:abc resposta sugerida para o técnico revisar.'},
+        ]
+        with patch.object(kt,'ensure_schema'), patch.object(kt,'connect'), \
+             patch.object(kt,'load_ticket',return_value=({'subject':'Relatório por fornecedor'},actions)):
+            result = kt.ticket_answers(132084)
+        self.assertEqual([q['action_id'] for q in result['questions']],['3'])
+        self.assertEqual(result['answers'][0]['suggested_question_action_id'],'3')
+
     def test_unclassified_cannot_be_published(self):
         with self.assertRaisesRegex(ValueError, 'módulo'):
             kt._validate_content(dict(title='Titulo completo',symptom='Sintoma',root_cause='Causa confirmada',
                 procedure='1. Procedimento',module_key='unclassified',subtopic_key='general'))
 
-    def test_negative_feedback_never_creates_candidate(self):
-        db = MagicMock(); db.execute.return_value.fetchone.return_value = {'id': 4}
-        with patch.object(kt,'taxonomy_options',return_value=[{'key':'fiscal'}]), \
-             patch.object(kt,'connect') as connect, patch.object(kt,'load_ticket',return_value=({},[{'id':2,'description':'CORTEX-AI-NOTE:abc'}])), \
-             patch.object(kt,'create_candidate') as create:
-            connect.return_value.__enter__.return_value = db
-            result = kt.review_answer(131726,'2',-1,'fiscal','Passo incorreto','tecnico')
-            create.assert_not_called()
-            self.assertIsNone(result['candidate_id'])
+    def test_negative_feedback_requires_example_ticket(self):
+        with patch.object(kt,'taxonomy_options',return_value=[{'key':'fiscal'}]):
+            with self.assertRaisesRegex(ValueError, 'ticket-exemplo'):
+                kt.review_answer(131726,'2',-1,'fiscal','Passo incorreto','tecnico')
 
-    def test_positive_feedback_is_candidate_not_publication(self):
+    def test_negative_feedback_creates_candidate_from_example_ticket(self):
         db = MagicMock(); db.execute.return_value.fetchone.return_value = {'id': 4}
+        proposal = dict(proposed_title='Consultar relatório por fornecedor',
+                        proposed_answer='Sim, o relatório está disponível no menu de vendas.',
+                        proposed_procedure='1. Acesse Relatórios > Vendas.\n2. Selecione a aba Fornecedor.')
         with patch.object(kt,'taxonomy_options',return_value=[{'key':'fiscal'}]), \
              patch.object(kt,'connect') as connect, patch.object(kt,'load_ticket',return_value=({},[{'id':2,'description':'CORTEX-AI-NOTE:abc'}])), \
              patch.object(kt,'create_candidate',return_value={'id':8}) as create, patch.object(kt,'_publish') as publish:
             connect.return_value.__enter__.return_value = db
+            result = kt.review_answer(131726,'2',-1,'fiscal','Passo incorreto','tecnico',98765,
+                                      proposal['proposed_title'],proposal['proposed_answer'],proposal['proposed_procedure'],[])
+            create.assert_called_once_with(98765,'tecnico',True,None,'fiscal',{
+                'title':proposal['proposed_title'],'answer':proposal['proposed_answer'],
+                'procedure':proposal['proposed_procedure'],'images':[],
+                'question':None,'question_action_id':None,'answer_action_id':None})
+            publish.assert_not_called()
+            self.assertEqual(result['candidate_id'],8)
+            self.assertEqual(result['example_ticket_id'],98765)
+
+    def test_positive_feedback_only_records_confirmation(self):
+        db = MagicMock(); db.execute.return_value.fetchone.return_value = {'id': 4}
+        with patch.object(kt,'taxonomy_options',return_value=[{'key':'fiscal'}]), \
+             patch.object(kt,'connect') as connect, patch.object(kt,'load_ticket',return_value=({},[{'id':2,'description':'CORTEX-AI-NOTE:abc'}])), \
+             patch.object(kt,'create_candidate') as create, patch.object(kt,'_publish') as publish:
+            connect.return_value.__enter__.return_value = db
             result = kt.review_answer(131726,'2',1,'fiscal','Validado no atendimento','tecnico')
-            create.assert_called_once_with(131726,'tecnico',True,'2','fiscal')
-            publish.assert_not_called(); self.assertEqual(result['candidate_id'],8)
+            create.assert_not_called(); publish.assert_not_called()
+            self.assertIsNone(result['candidate_id'])
 
     def test_canonical_original_and_stale_version(self):
         db=MagicMock(); db.execute.return_value.fetchone.return_value={'id':1,'version_no':2,'approved_by':'curador','applicability':{}}
@@ -84,19 +129,102 @@ class TrainingWorkflowTests(unittest.TestCase):
         content['images'][0]['after_step']=1
         self.assertEqual(kt._validate_content(content)['images'][0]['after_step'],1)
 
+    def test_technician_print_is_reencoded_and_bound_to_a_numbered_step(self):
+        raw = io.BytesIO(); Image.new('RGB',(20,10),'white').save(raw,'JPEG')
+        data_url = 'data:image/jpeg;base64,' + base64.b64encode(raw.getvalue()).decode()
+        with tempfile.TemporaryDirectory() as folder, patch.object(kt,'TRAINING_MEDIA',Path(folder)):
+            saved = kt._save_proposal_images([{'data_url':data_url,'caption':'Aba Fornecedor','after_step':2}],
+                                             '1. Abra o relatório.\n2. Clique na aba Fornecedor.')
+            self.assertRegex(saved[0]['file'],r'^[0-9a-f]{32}\.png$')
+            self.assertTrue((Path(folder)/saved[0]['file']).is_file())
+            with self.assertRaisesRegex(ValueError,'passo numerado'):
+                kt._save_proposal_images([{'data_url':data_url,'caption':'Aba Fornecedor','after_step':3}],
+                                         '1. Abra o relatório.\n2. Clique na aba Fornecedor.')
+
     def test_feedback_link_targets_ticket_and_exact_marker(self):
         from movidesk_note_worker import render_note
         import os
         with patch.dict(os.environ, {'CORTEX_PUBLIC_URL':'https://cortex.example'}):
             note=render_note({'reply':'Resposta','feedback_ticket':131726},'CORTEX-AI-NOTE:abc')
-        self.assertIn('/admin?view=training&amp;ticket=131726&amp;marker=CORTEX-AI-NOTE%3Aabc',note)
-        self.assertIn('Avaliar esta resposta',note)
+        self.assertIn('/treinamento/tecnico?ticket=131726&amp;marker=CORTEX-AI-NOTE%3Aabc',note)
+        self.assertIn('Preparar resolução técnica',note)
 
     def test_review_api_rejects_invalid_rating(self):
         app=FastAPI(); app.include_router(router)
         with TestClient(app) as client, patch.object(kt,'review_answer') as review:
             result=client.post('/api/treinamento/tickets/131726/avaliar',json={'action_id':'1','module_key':'fiscal','rating':0})
             self.assertEqual(result.status_code,422); review.assert_not_called()
+
+    def test_review_api_forwards_example_ticket(self):
+        app=FastAPI(); app.include_router(router)
+        with TestClient(app) as client, patch.object(kt,'review_answer',return_value={'id':4,'candidate_id':8}) as review:
+            result=client.post('/api/treinamento/tickets/131726/avaliar',json={
+                'action_id':'1','module_key':'fiscal','rating':-1,'comment':'Passo incorreto',
+                'example_ticket_id':98765,'proposed_title':'Consultar relatório por fornecedor',
+                'proposed_answer':'Sim, o relatório está disponível no menu de vendas.',
+                'proposed_procedure':'1. Acesse Relatórios > Vendas.\n2. Selecione a aba Fornecedor.'})
+            self.assertEqual(result.status_code,200)
+            review.assert_called_once_with(131726,'1',-1,'fiscal','Passo incorreto','tecnico_local',98765,
+                'Consultar relatório por fornecedor','Sim, o relatório está disponível no menu de vendas.',
+                '1. Acesse Relatórios > Vendas.\n2. Selecione a aba Fornecedor.',[],None,None)
+
+    def test_admin_can_override_question_answer_pair(self):
+        db = MagicMock(); db.execute.return_value.fetchone.return_value = {'id': 4}
+        notes = {'questions':[{'action_id':'3','text':'Onde encontro o relatório por fornecedor?'}],
+                 'answers':[{'action_id':'5','text':'Acesse Relatórios > Vendas > Histórico.'}]}
+        with patch.object(kt,'taxonomy_options',return_value=[{'key':'fiscal'}]), \
+             patch.object(kt,'ticket_technician_answers',return_value=notes), \
+             patch.object(kt,'connect') as connect, \
+             patch.object(kt,'load_ticket',return_value=({},[{'id':2,'description':'CORTEX-AI-NOTE:abc'}])), \
+             patch.object(kt,'create_candidate',return_value={'id':8}) as create:
+            connect.return_value.__enter__.return_value = db
+            kt.review_answer(131726,'2',-1,'fiscal','Pareamento corrigido','tecnico',98765,
+                'Relatório por fornecedor','Sim, existe esse relatório no Master.',
+                '1. Acesse Relatórios > Vendas.\n2. Abra o relatório por fornecedor.',[], '3','5')
+        proposal = create.call_args.args[-1]
+        self.assertEqual(proposal['question'],'Onde encontro o relatório por fornecedor?')
+        self.assertEqual(proposal['question_action_id'],'3')
+        self.assertEqual(proposal['answer_action_id'],'5')
+
+    def test_technician_can_write_resolution_without_existing_human_answer(self):
+        db = MagicMock(); db.execute.return_value.fetchone.return_value = {'id': 4}
+        notes = {'questions':[{'action_id':'3','text':'Onde encontro o relatório por fornecedor?'}],
+                 'answers':[]}
+        with patch.object(kt,'taxonomy_options',return_value=[{'key':'fiscal'}]), \
+             patch.object(kt,'ticket_technician_answers',return_value=notes), \
+             patch.object(kt,'connect') as connect, \
+             patch.object(kt,'load_ticket',return_value=({},[{'id':9,'description':'CORTEX-AI-NOTE:abc'}])), \
+             patch.object(kt,'create_candidate',return_value={'id':8}) as create:
+            connect.return_value.__enter__.return_value = db
+            result = kt.review_answer(132084,'9',-1,'fiscal','Validado no Master','tecnico',132084,
+                'Relatório por fornecedor','Sim, existe esse relatório no Master.',
+                '1. Acesse Relatórios > Vendas.\n2. Abra o relatório por fornecedor.',[], '3',None)
+        proposal = create.call_args.args[-1]
+        self.assertEqual(proposal['question'],'Onde encontro o relatório por fornecedor?')
+        self.assertIsNone(proposal['answer_action_id'])
+        self.assertEqual(result['candidate_id'],8)
+
+    def test_retrieval_test_uses_query_embedding_and_reports_rank(self):
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = {'id':7,'title':'Relatório por fornecedor','status':'active'}
+        rows = [{'source_id':'canon:9','title':'Outro','combined_score':.7,'retrieval_method':'text_and_optional_vector'},
+                {'source_id':'canon:7','title':'Relatório por fornecedor','combined_score':.66,'retrieval_method':'text_and_optional_vector'}]
+        with patch.object(kt,'ensure_schema'), patch.object(kt,'connect') as connect, \
+             patch.object(kt,'_embed',return_value=[.1,.2]) as embed, \
+             patch.object(kt.knowledge_access,'search',return_value=rows) as search:
+            connect.return_value.__enter__.return_value = db
+            result = kt.test_item_retrieval(7,'Onde vejo os produtos por fornecedor?')
+        embed.assert_called_once_with('Onde vejo os produtos por fornecedor?', 'RETRIEVAL_QUERY')
+        self.assertTrue(result['found']); self.assertEqual(result['rank'],2)
+        self.assertEqual(search.call_args.kwargs['source_types'],('OFFICIAL_KB',))
+
+    def test_retrieval_api_delegates_to_production_search_test(self):
+        app=FastAPI(); app.include_router(router)
+        expected={'found':True,'rank':1,'query_embedding_ok':True,'results':[]}
+        with TestClient(app) as client, patch.object(kt,'test_item_retrieval',return_value=expected) as test:
+            result=client.get('/api/treinamento/itens/7/testar',params={'q':'Onde vejo por fornecedor?'})
+        self.assertEqual(result.status_code,200); self.assertEqual(result.json(),expected)
+        test.assert_called_once_with(7,'Onde vejo por fornecedor?')
 
     def test_master_release_requires_valid_evidence_and_is_sanitized(self):
         data = {'version_label':'16/08/2026','title':'Falha na importação','narrative':'O pedido não entra no Master.',
