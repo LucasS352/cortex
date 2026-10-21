@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,6 +9,8 @@ import agent_operations
 
 
 class EvaluationTest(unittest.TestCase):
+    @unittest.skipUnless(os.getenv('CORTEX_TEST_DATABASE') == '1',
+                         'requires the opt-in PostgreSQL integration database')
     def test_only_human_labeled_cases_enter_accuracy_denominator(self):
         with tempfile.TemporaryDirectory() as directory, patch.object(
                 agent_operations, 'OPERATIONS_DB', Path(directory) / 'evaluation.sqlite'):

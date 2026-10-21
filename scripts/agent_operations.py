@@ -3,6 +3,7 @@ import json
 import hashlib
 import math
 import sqlite3
+import threading
 import time
 import uuid
 from contextlib import contextmanager
@@ -11,6 +12,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 OPERATIONS_DB = Path(__file__).parent / "output" / "agent_operations.sqlite3"
+_SCHEMA_LOCK = threading.Lock()
 
 
 @contextmanager
@@ -18,33 +20,38 @@ def connect():
     OPERATIONS_DB.parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(OPERATIONS_DB, timeout=10)
     db.row_factory = sqlite3.Row
-    db.executescript("""
-        CREATE TABLE IF NOT EXISTS runs (
-            id TEXT PRIMARY KEY, subject TEXT NOT NULL, problem TEXT NOT NULL,
-            started REAL NOT NULL, finished REAL, duration REAL, status TEXT NOT NULL,
-            draft TEXT, sources TEXT NOT NULL, error TEXT,
-            verdict TEXT, review_note TEXT, reviewed REAL
-        );
-        CREATE TABLE IF NOT EXISTS audit (
-            id INTEGER PRIMARY KEY, created REAL NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS runs_started ON runs(started);
-        CREATE TABLE IF NOT EXISTS run_workflow (
-            run_id TEXT PRIMARY KEY, internal_ticket_id INTEGER NOT NULL,
-            relation_verified_at REAL NOT NULL, approved_text TEXT,
-            approved_by TEXT, approved_at REAL, approval_note TEXT,
-            approved_sha256 TEXT, delivery_state TEXT NOT NULL DEFAULT 'awaiting_review'
-        );
-    """)
-    columns = {row[1] for row in db.execute("PRAGMA table_info(runs)")}
-    if 'ticket_id' not in columns:
-        db.execute("ALTER TABLE runs ADD COLUMN ticket_id INTEGER")
-    if 'decision' not in columns:
-        db.execute("ALTER TABLE runs ADD COLUMN decision TEXT")
-    workflow_columns = {row[1] for row in db.execute("PRAGMA table_info(run_workflow)")}
-    if 'approval_action_id' not in workflow_columns:
-        db.execute("ALTER TABLE run_workflow ADD COLUMN approval_action_id TEXT")
     try:
+        # Schema upgrades used to race when two first requests opened the same
+        # SQLite file simultaneously.  Keep initialization serialized and the
+        # connection inside this try so a failed migration never leaks a handle.
+        with _SCHEMA_LOCK:
+            db.executescript("""
+                CREATE TABLE IF NOT EXISTS runs (
+                    id TEXT PRIMARY KEY, subject TEXT NOT NULL, problem TEXT NOT NULL,
+                    started REAL NOT NULL, finished REAL, duration REAL, status TEXT NOT NULL,
+                    draft TEXT, sources TEXT NOT NULL, error TEXT,
+                    verdict TEXT, review_note TEXT, reviewed REAL
+                );
+                CREATE TABLE IF NOT EXISTS audit (
+                    id INTEGER PRIMARY KEY, created REAL NOT NULL, action TEXT NOT NULL, detail TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS runs_started ON runs(started);
+                CREATE TABLE IF NOT EXISTS run_workflow (
+                    run_id TEXT PRIMARY KEY, internal_ticket_id INTEGER NOT NULL,
+                    relation_verified_at REAL NOT NULL, approved_text TEXT,
+                    approved_by TEXT, approved_at REAL, approval_note TEXT,
+                    approved_sha256 TEXT, delivery_state TEXT NOT NULL DEFAULT 'awaiting_review'
+                );
+            """)
+            columns = {row[1] for row in db.execute("PRAGMA table_info(runs)")}
+            if 'ticket_id' not in columns:
+                db.execute("ALTER TABLE runs ADD COLUMN ticket_id INTEGER")
+            if 'decision' not in columns:
+                db.execute("ALTER TABLE runs ADD COLUMN decision TEXT")
+            workflow_columns = {row[1] for row in db.execute("PRAGMA table_info(run_workflow)")}
+            if 'approval_action_id' not in workflow_columns:
+                db.execute("ALTER TABLE run_workflow ADD COLUMN approval_action_id TEXT")
+            db.commit()
         with db:
             yield db
     finally:

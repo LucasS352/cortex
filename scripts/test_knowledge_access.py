@@ -47,6 +47,30 @@ class AccessTests(unittest.TestCase):
         self.assertEqual(search(c,'como eu faço'),[])
         self.assertEqual(c.execute.call_count,1)
 
+    def test_semantic_search_uses_halfvec_index_expression(self):
+        class Result:
+            def __init__(self, rows): self.rows = rows
+            def fetchall(self): return self.rows
+
+        class Connection:
+            def __init__(self): self.calls = []
+            def execute(self, sql, params=None):
+                self.calls.append((sql, params))
+                return Result([{'id': 'tenant'}] if 'SELECT id FROM tenants' in sql else [])
+
+        connection = Connection()
+        search(connection, 'transportadora AnyMarket', embedding=[0.0] * 3072)
+        semantic_calls = [call for call in connection.calls if 'halfvec(3072)' in call[0]]
+        self.assertEqual(len(semantic_calls), 1)
+        sql, params = semantic_calls[0]
+        self.assertIn('embedding_generated IS TRUE', sql)
+        self.assertEqual(len(params), 2)
+
+    def test_invalid_embedding_dimension_falls_back_to_lexical_search(self):
+        c=MagicMock();c.execute.return_value.fetchall.side_effect=[[{'id':'tenant'}], [], [], [], []]
+        search(c, 'transportadora AnyMarket', embedding=[0.0] * 10)
+        self.assertFalse(any('halfvec(3072)' in call.args[0] for call in c.execute.call_args_list))
+
     def test_closure_and_gold_do_not_imply_usable_procedure(self):
         q=quality(dict(solution='Sistema atualizado. Favor testar novamente.',source_type='VALIDATED_TICKET',tier='GOLD'))
         self.assertEqual(q['answer_use'],'investigation_only')

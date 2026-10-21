@@ -32,6 +32,8 @@ GROUPS = {
     'Infraestrutura': ('firebird','sql','oracle','backup','servidor','instalacao'),
 }
 
+VECTOR_INDEX_DIMENSIONS = 3072
+
 
 def normalize(s):
     return ''.join(c for c in unicodedata.normalize('NFKD',str(s or '').lower()) if not unicodedata.combining(c))
@@ -320,11 +322,14 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
         rows+=conn.execute(f"""SELECT *,ts_rank_cd({expr},websearch_to_tsquery('portuguese',%s)) AS lexical_rank
              FROM ticket_knowledge_nodes WHERE {expr} @@ websearch_to_tsquery('portuguese',%s)
              ORDER BY lexical_rank DESC,id DESC LIMIT 100""",(plan['fts'],plan['fts'])).fetchall()
-        if embedding:
+        if embedding and len(embedding) == VECTOR_INDEX_DIMENSIONS:
             vector='['+','.join(str(float(v)) for v in embedding)+']'
-            rows.extend(conn.execute("""SELECT *,0.0 AS lexical_rank,1-(embedding <=> %s::vector) AS semantic_sim
-                FROM ticket_knowledge_nodes WHERE embedding_generated AND embedding IS NOT NULL
-                ORDER BY embedding <=> %s::vector LIMIT 30""",(vector,vector)).fetchall())
+            rows.extend(conn.execute("""SELECT *,0.0 AS lexical_rank,
+                1-(embedding::halfvec(3072) <=> %s::halfvec(3072)) AS semantic_sim
+                FROM ticket_knowledge_nodes
+                WHERE embedding_generated IS TRUE AND embedding IS NOT NULL
+                ORDER BY embedding::halfvec(3072) <=> %s::halfvec(3072) LIMIT 30""",
+                (vector, vector)).fetchall())
     # Corrected text has its own lexical lane because original imported text
     # and embeddings deliberately remain unchanged for provenance.
     rows.extend(conn.execute('''SELECT kn.*,0.0 AS lexical_rank FROM ticket_knowledge_nodes kn

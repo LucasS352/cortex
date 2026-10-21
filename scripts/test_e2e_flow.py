@@ -1,6 +1,11 @@
 # coding: utf-8
 import json
+import os
+import unittest
 import urllib.request
+
+if os.getenv("CORTEX_RUN_LIVE_TESTS") != "1":
+    raise unittest.SkipTest("Teste live: defina CORTEX_RUN_LIVE_TESTS=1 com o servidor isolado ativo")
 
 base_url = "http://127.0.0.1:8000"
 

@@ -1187,6 +1187,13 @@ CREATE INDEX idx_kn_embed_flag ON public.ticket_knowledge_nodes USING btree (emb
 
 
 --
+-- Name: idx_kn_embedding_halfvec_hnsw; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_kn_embedding_halfvec_hnsw ON public.ticket_knowledge_nodes USING hnsw (((embedding)::public.halfvec(3072)) public.halfvec_cosine_ops) WHERE ((embedding_generated IS TRUE) AND (embedding IS NOT NULL));
+
+
+--
 -- Name: idx_kn_fts; Type: INDEX; Schema: public; Owner: -
 --
 

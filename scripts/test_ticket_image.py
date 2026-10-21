@@ -1,5 +1,7 @@
 import base64
 import io
+import sys
+import types
 import unittest
 from unittest.mock import patch
 from PIL import Image
@@ -11,6 +13,11 @@ class ImageTests(unittest.TestCase):
         self.provider = patch('ticket_image.llm_client.status', return_value={'available': False})
         self.provider.start()
         self.addCleanup(self.provider.stop)
+        self.winocr = types.ModuleType('winocr')
+        self.winocr.recognize_pil_sync = lambda _image: {'text': ''}
+        self.winocr_patch = patch.dict(sys.modules, {'winocr': self.winocr})
+        self.winocr_patch.start()
+        self.addCleanup(self.winocr_patch.stop)
 
     def test_focus_preserves_rejection_without_customer_details(self):
         text = focused_text('Notas Fiscais Eletrônicas (NFe)\nJAPI S/A\nCPF/CNPJ\nRua Huber 370\n'

@@ -10,6 +10,8 @@ services:
       - ./infra/schema-current.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./infra/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
       - ./infra/005_company_workbench.sql:/docker-entrypoint-initdb.d/03-company-workbench.sql:ro
+      - ./infra/006_canonical_knowledge.sql:/docker-entrypoint-initdb.d/04-canonical-knowledge.sql:ro
+      - ./infra/007_vector_halfvec_hnsw.sql:/docker-entrypoint-initdb.d/05-vector-halfvec-hnsw.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U deskcortex -d deskcortex"]
       interval: 10s

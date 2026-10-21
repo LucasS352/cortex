@@ -60,12 +60,15 @@ class EvidenceTests(unittest.TestCase):
     def test_search_is_parameterized_and_paginates_without_llm(self):
         conn = MagicMock()
         conn.execute.return_value.fetchall.side_effect = [[{"id": "tenant"}], [{"id": "tenant"}],
-            [{"id": i, "source_external_id": i, "title": "tickets", "lexical_rank": 0.2} for i in range(6)], [], []]
-        result = retrieve(conn, "'; DROP TABLE tickets;--")
-        sql, params = conn.execute.call_args.args
-        self.assertNotIn("DROP TABLE", sql)
-        self.assertIn('"drop"', params[0])
-        self.assertIn('"table"', params[0])
+            [{"id": i, "source_external_id": i, "title": "tickets", "lexical_rank": 0.2} for i in range(6)], [], [], [], []]
+        with patch('knowledge_access.knowledge_index.ensure_coverage'), \
+                patch('knowledge_access.curation.ensure_schema'):
+            result = retrieve(conn, "'; DROP TABLE tickets;--")
+        calls = [call.args for call in conn.execute.call_args_list]
+        self.assertTrue(all("DROP TABLE" not in sql for sql, *_ in calls))
+        bound_parameters = " ".join(repr(args[1:]) for args in calls)
+        self.assertIn('"drop"', bound_parameters)
+        self.assertIn('"table"', bound_parameters)
         self.assertEqual(result["next_offset"], 5)
         self.assertEqual(len(result["items"]), 5)
 
@@ -130,12 +133,23 @@ class ReviewTests(unittest.TestCase):
 
 
 class DeskBoundaryTests(unittest.TestCase):
-    def test_external_network_and_host_are_rejected(self):
+    def test_unauthenticated_request_host_and_origin_are_rejected(self):
+        import os
         from simulator_app import app
-        with TestClient(app, client=("203.0.113.10", 12345)) as client:
-            self.assertEqual(client.get('/api/tech/evidence/1').status_code, 403)
-        with TestClient(app) as client:
+        import web_auth
+        environment = {
+            "CORTEX_AUTH_REQUIRED": "true",
+            "CORTEX_PUBLIC_URL": "http://testserver",
+            "CORTEX_ADMIN_USERNAME": "admin",
+            "CORTEX_ADMIN_PASSWORD_HASH": "scrypt$16384$8$1$" + "0" * 32 + "$" + "0" * 128,
+            "CORTEX_SESSION_SECRET": "s" * 32,
+            "MOVIDESK_WEBHOOK_SECRET": "m" * 32,
+            "MASTER_CONFIG_WEBHOOK_SECRET": "c" * 32,
+        }
+        with patch.dict(os.environ, environment, clear=False), TestClient(app, client=("203.0.113.10", 12345)) as client:
+            self.assertEqual(client.get('/api/tech/evidence/1').status_code, 401)
             self.assertEqual(client.get('/', headers={"Host": "untrusted.example"}).status_code, 400)
+            client.cookies.set(web_auth.COOKIE, web_auth._issue())
             self.assertEqual(client.post('/api/tech/review', headers={"Origin": "https://untrusted.example"}, json={}).status_code, 403)
 
     def test_legacy_approval_cannot_bypass_revision_and_notes_stay_internal(self):

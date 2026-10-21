@@ -10,6 +10,7 @@
 /.presentation-build/
 /.obsidian/
 /Instrucoes_master/
+/data_master/
 /dossie_movidesk/
 /deskcortex-api/
 /assets/
@@ -29,6 +30,7 @@
 /*.png
 /*.db
 /payload_test.json
+/workbook_diagnostic.json
 scripts/output/
 __pycache__/
 *.pyc

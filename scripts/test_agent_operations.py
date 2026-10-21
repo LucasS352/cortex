@@ -1,6 +1,7 @@
 """Regression checks against an isolated operational database; no provider calls."""
 import tempfile
 import unittest
+import os
 from pathlib import Path
 from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
@@ -63,6 +64,8 @@ class AgentOperationsTest(unittest.TestCase):
                 operations.begin('Teste', '', [], {**self.controls, **control})
             self.assertEqual(error.exception.status_code, 429)
 
+    @unittest.skipUnless(os.getenv('CORTEX_TEST_DATABASE') == '1',
+                         'requires the opt-in PostgreSQL integration database')
     def test_route_records_generation_and_review(self):
         with psycopg.connect(POSTGRES_DSN) as conn:
             source_id = conn.execute("SELECT id FROM ticket_knowledge_nodes WHERE source_type='OFFICIAL_KB' LIMIT 1").fetchone()[0]
@@ -77,6 +80,8 @@ class AgentOperationsTest(unittest.TestCase):
         self.assertEqual(self.client.get('/api/admin/performance').json()['approval_rate'], 100)
         self.assertEqual(self.client.get('/api/admin/runs').json()['items'][0]['draft'], 'Resposta de teste')
 
+    @unittest.skipUnless(os.getenv('CORTEX_TEST_DATABASE') == '1',
+                         'requires the opt-in PostgreSQL integration database')
     def test_linked_ticket_records_trace_without_external_write(self):
         with psycopg.connect(POSTGRES_DSN) as conn:
             ticket_id, subject = conn.execute('''SELECT external_id,subject FROM refined_tickets

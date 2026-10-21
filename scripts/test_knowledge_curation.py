@@ -1,6 +1,7 @@
 import unittest
 import io
 import json
+import os
 from unittest.mock import patch
 from knowledge_curation import apply_overlay, classify, subtopic, connect, ensure_schema, curate
 from knowledge_access import search
@@ -42,6 +43,8 @@ class KnowledgeCurationTest(unittest.TestCase):
         edit['status'] = 'approved'
         self.assertIn('frame-090.marked.svg', apply_overlay(original, edit)['solution'])
 
+    @unittest.skipUnless(os.getenv('CORTEX_TEST_DATABASE') == '1',
+                         'requires the opt-in PostgreSQL integration database')
     def test_exclusion_revision_and_corrected_retrieval_rollback(self):
         ensure_schema()
         with connect() as conn:
@@ -67,6 +70,8 @@ class KnowledgeCurationTest(unittest.TestCase):
             self.assertIn(node['id'],[r['id'] for r in approved])
             conn.rollback()
 
+    @unittest.skipUnless(os.getenv('CORTEX_TEST_DATABASE') == '1',
+                         'requires the opt-in PostgreSQL integration database')
     def test_draft_keywords_retrieve_original_without_approving_steps(self):
         ensure_schema()
         with connect() as conn:
@@ -85,12 +90,16 @@ class KnowledgeCurationTest(unittest.TestCase):
             self.assertIn('xylophonetik',match['search_keywords'])
             conn.rollback()
 
+    @unittest.skipUnless(os.getenv('CORTEX_TEST_DATABASE') == '1',
+                         'requires the opt-in PostgreSQL integration database')
     def test_article_video_is_linked_without_imagined_procedure(self):
         request=Request({'type':'http','client':('testclient',0)})
         detail=knowledge_detail(request,1325)
         self.assertTrue(any(m['kind']=='video' for m in detail['media']))
         self.assertFalse(detail['original_content_text'].strip())
 
+    @unittest.skipUnless(os.getenv('CORTEX_TEST_DATABASE') == '1',
+                         'requires the opt-in PostgreSQL integration database')
     def test_video_frames_generate_review_only_proposal(self):
         request=Request({'type':'http','client':('testclient',0)})
         with connect(True) as conn:

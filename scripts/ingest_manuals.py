@@ -2,8 +2,9 @@
 DeskCortex -- IngestManuals: Pipeline de Ingestao de Manuais Internos (Fase 2)
 ===============================================================================
 Extrai texto + imagens de todos os arquivos da pasta Instrucoes_master,
-vetoriza com Gemini Embedding e insere no banco com source_type=MANUAL,
-authority_score=100.
+vetoriza com Gemini Embedding e insere no banco com source_type=MANUAL.
+Materiais brutos entram como nao revisados e com autoridade 70; somente a
+curadoria humana pode promove-los a conhecimento canonico.
 
 Tipos suportados: .docx .pdf .rtf .txt .gif .png .jpg
 Ignorados: ~$*.docx (temp Word), .mp4, .xls, .xlsx
@@ -15,7 +16,7 @@ Uso:
   python ingest_manuals.py --media-only
 """
 from __future__ import annotations
-import argparse, base64, json, os, re, sys, time, urllib.error, urllib.request
+import argparse, base64, hashlib, json, os, re, sys, time, urllib.error, urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -41,10 +42,17 @@ BATCH_SIZE = 25
 MAX_CHARS_CHUNK = 1500
 OVERLAP_CHARS = 150
 MIN_CHUNK_CHARS = 80
-AUTHORITY_SCORE = 100
+AUTHORITY_SCORE = 70
 
-SHORTCUT_RE = re.compile(r"\b((?:Ctrl|Alt|Shift)(?:\+(?:Ctrl|Alt|Shift))*\+[A-Za-z0-9]+|F\d{1,2})\b", re.I)
-SCREEN_PATH_RE = re.compile(r"(?:Acesse|Va em|Menu|Aba|Tela|Modulo)[:\s]+([A-Za-z0-9\s]+(?:>\s*[A-Za-z0-9\s]+)+)", re.I)
+SHORTCUT_RE = re.compile(
+    r"\b((?:Ctrl|Alt|Shift)(?:\s*\+?\s*(?:Ctrl|Alt|Shift))*\s*\+?\s*(?:F\d{1,2}|[A-Za-z0-9]))\b",
+    re.I,
+)
+SCREEN_PATH_RE = re.compile(
+    r"(?:Acesse|V[áa]\s+em|Menu|Aba|Tela|M[óo]dulo)?[:\s]*"
+    r"([A-Za-zÀ-ÿ0-9%()./_ -]+(?:\s*>{1,2}\s*[A-Za-zÀ-ÿ0-9%()./_ -]+)+)",
+    re.I,
+)
 # ---------------------------------------------------------------------------
 # Mapa de categorias por nome de arquivo / pasta
 # ---------------------------------------------------------------------------
@@ -119,6 +127,9 @@ def extract_shortcuts(text: str) -> list[str]:
     found, seen = [], set()
     for m in SHORTCUT_RE.findall(text):
         sk = (m[0] if isinstance(m, tuple) else m).upper()
+        sk = re.sub(r"\s*\+\s*", "+", sk.strip())
+        sk = re.sub(r"\s+", "+", sk)
+        sk = re.sub(r"^(CTRL|ALT|SHIFT)(F\d{1,2}|[A-Z0-9])$", r"\1+\2", sk)
         if sk not in seen:
             seen.add(sk); found.append(sk)
     return found
@@ -126,9 +137,22 @@ def extract_shortcuts(text: str) -> list[str]:
 def extract_screen_path(text: str) -> Optional[str]:
     m = SCREEN_PATH_RE.search(text)
     if m:
-        path = re.sub(r"\s+>\s+", " > ", m.group(1).strip())
+        path = re.sub(r"\s*>{1,2}\s*", " > ", m.group(1).strip())
         return path if len(path) > 10 else None
     return None
+
+
+def manual_source_id(source_file: str, kind: str, index: int) -> str:
+    """Return a stable source id that fits the database VARCHAR(50).
+
+    A document may generate multiple chunks and images.  Using only its file
+    name made every item collide with the unique source_id constraint, so the
+    first chunk was stored and the rest were silently discarded.
+    """
+    normalized = source_file.replace("\\", "/").casefold().encode("utf-8")
+    file_hash = hashlib.sha256(normalized).hexdigest()[:16]
+    kind_code = {"chunk": "C", "image": "I", "media": "M"}.get(kind, "X")
+    return f"MANUAL:{file_hash}:{kind_code}{index:04d}"
 # ---------------------------------------------------------------------------
 # Extratores por tipo de arquivo
 # ---------------------------------------------------------------------------
@@ -324,7 +348,8 @@ def batch_embed(texts: list[str]) -> list[Optional[list[float]]]:
 def insert_manual_chunk(conn, title: str, content_text: str, embedding: list[float],
                          category: str, source_file: str, shortcut_keys: list[str],
                          screen_path: Optional[str], media_path: Optional[str] = None,
-                         media_type: Optional[str] = None, media_metadata: Optional[dict] = None) -> bool:
+                         media_type: Optional[str] = None, media_metadata: Optional[dict] = None,
+                         source_id: Optional[str] = None, node_metadata: Optional[dict] = None) -> bool:
     vec_str = "[" + ",".join(str(float(v)) for v in embedding) + "]"
     modules_arr = [category] if category and category != "Geral" else None
     shortcuts_arr = shortcut_keys if shortcut_keys else None
@@ -338,24 +363,45 @@ def insert_manual_chunk(conn, title: str, content_text: str, embedding: list[flo
                     final_score, validation_evidence,
                     embedding, embedding_generated, embedding_model,
                     manual_category, shortcut_keys, screen_path,
-                    media_path, media_type, media_metadata,
+                    media_path, media_type, media_metadata, metadata,
                     created_at
                 ) VALUES (
                     'MANUAL', %s, %s,
                     %s, %s, 'Master ERP',
-                    %s, 'MANUAL', 'HIGH', 100,
-                    100, ARRAY['INTERNAL_MANUAL'],
+                    %s, 'MANUAL', 'MEDIUM', %s,
+                    %s, ARRAY['RAW_INTERNAL_MANUAL_UNREVIEWED'],
                     %s::vector, TRUE, 'models/gemini-embedding-2',
                     %s, %s, %s,
-                    %s, %s, %s,
+                    %s, %s, %s, %s,
                     NOW()
-                ) ON CONFLICT DO NOTHING
+                ) ON CONFLICT (source_id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    content_for_embedding = EXCLUDED.content_for_embedding,
+                    solution = EXCLUDED.solution,
+                    modules = EXCLUDED.modules,
+                    confidence = EXCLUDED.confidence,
+                    source_authority = EXCLUDED.source_authority,
+                    final_score = EXCLUDED.final_score,
+                    validation_evidence = EXCLUDED.validation_evidence,
+                    embedding = EXCLUDED.embedding,
+                    embedding_generated = EXCLUDED.embedding_generated,
+                    embedding_model = EXCLUDED.embedding_model,
+                    manual_category = EXCLUDED.manual_category,
+                    shortcut_keys = EXCLUDED.shortcut_keys,
+                    screen_path = EXCLUDED.screen_path,
+                    media_path = EXCLUDED.media_path,
+                    media_type = EXCLUDED.media_type,
+                    media_metadata = EXCLUDED.media_metadata,
+                    metadata = EXCLUDED.metadata,
+                    updated_at = NOW()
             """, (
-                f"MANUAL::{source_file}",
+                source_id or manual_source_id(source_file, "chunk", 1),
                 (title or "")[:500],
                 content_text[:8000],
                 content_text[:8000],
                 modules_arr,
+                AUTHORITY_SCORE,
+                AUTHORITY_SCORE,
                 vec_str,
                 category,
                 shortcuts_arr,
@@ -363,8 +409,9 @@ def insert_manual_chunk(conn, title: str, content_text: str, embedding: list[flo
                 media_path,
                 media_type,
                 json.dumps(media_metadata) if media_metadata else None,
+                json.dumps(node_metadata or {"source_file": source_file, "review_status": "UNREVIEWED"}),
             ))
-        return True
+            return cur.rowcount == 1
     except Exception as e:
         conn.rollback()
         console.print(f"[red]INSERT erro: {e}[/red]")
@@ -441,7 +488,9 @@ def process_file(filepath: Path, conn, dry_run: bool = False, vision_enabled: bo
             ok = insert_manual_chunk(conn, title=meta.get("title") or filepath.stem,
                 content_text=text, embedding=embs[0], category=category,
                 source_file=rel_path, shortcut_keys=shortcuts, screen_path=meta.get("screen"),
-                media_path=rel_path, media_type=ext.lstrip("."), media_metadata=meta)
+                media_path=rel_path, media_type=ext.lstrip("."), media_metadata=meta,
+                source_id=manual_source_id(rel_path, "media", 1),
+                node_metadata={"source_file": rel_path, "item_kind": "standalone_media", "review_status": "UNREVIEWED"})
             conn.commit()
             return (1, 0) if ok else (0, 1)
         return 0, 1
@@ -469,18 +518,27 @@ def process_file(filepath: Path, conn, dry_run: bool = False, vision_enabled: bo
             if not emb:
                 skipped += 1
                 continue
+            chunk_number = i + j + 1
             ok = insert_manual_chunk(
                 conn, title=f"{filepath.stem} (p{i+j+1})", content_text=chunk_text,
                 embedding=emb, category=category, source_file=rel_path,
                 shortcut_keys=extract_shortcuts(chunk_text),
-                screen_path=extract_screen_path(chunk_text))
+                screen_path=extract_screen_path(chunk_text),
+                source_id=manual_source_id(rel_path, "chunk", chunk_number),
+                node_metadata={
+                    "source_file": rel_path,
+                    "item_kind": "text_chunk",
+                    "chunk_index": chunk_number,
+                    "chunk_total": len(text_chunks),
+                    "review_status": "UNREVIEWED",
+                })
             if ok: inserted += 1
             else: skipped += 1
         conn.commit()
 
-    # -- Imagens embutidas no docx (max 5 por arquivo) --
+    # -- Imagens embutidas no docx --
     if vision_enabled and embedded_images:
-        for img_info in embedded_images[:5]:
+        for image_index, img_info in enumerate(embedded_images, start=1):
             try:
                 tmp = Path(os.environ.get("TEMP","/tmp")) / f"dc_tmp_{img_info['name']}"
                 tmp.write_bytes(base64.b64decode(img_info["data"]))
@@ -499,7 +557,14 @@ def process_file(filepath: Path, conn, dry_run: bool = False, vision_enabled: bo
                         content_text=text, embedding=embs[0], category=category,
                         source_file=rel_path, shortcut_keys=meta.get("shortcuts") or [],
                         screen_path=meta.get("screen"), media_type=img_info.get("format","png"),
-                        media_metadata=meta)
+                        media_metadata=meta,
+                        source_id=manual_source_id(rel_path, "image", image_index),
+                        node_metadata={
+                            "source_file": rel_path,
+                            "item_kind": "embedded_image",
+                            "image_index": image_index,
+                            "review_status": "UNREVIEWED",
+                        })
                     conn.commit()
                     if ok: inserted += 1
             except Exception as e:

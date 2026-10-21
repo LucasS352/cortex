@@ -1977,13 +1977,13 @@ def index():
                 // Transformar URLs em links clicáveis
                 function linkify(text) {
                     if (!text) return '';
-                    return text.replace(/(https?:\/\/[^\\s<]+)/g, '<a href="$1" target="_blank" class="text-indigo-400 underline hover:text-indigo-300 font-semibold inline-flex items-center gap-1">$1 <i data-lucide="external-link" class="w-3 h-3 inline"></i></a>');
+                    return text.replace(/(https?:[/][/][^\\s<]+)/g, '<a href="$1" target="_blank" class="text-indigo-400 underline hover:text-indigo-300 font-semibold inline-flex items-center gap-1">$1 <i data-lucide="external-link" class="w-3 h-3 inline"></i></a>');
                 }
 
                 // Detectar se há chamados citados no texto
                 let ticketButtonsHtml = '';
                 const allText = (doc.problem || '') + ' ' + (doc.solution || '');
-                const citedTickets = allText.match(/Ticket\/Edit\/(\d+)/g);
+                const citedTickets = allText.match(/Ticket[/]Edit[/]([0-9]+)/g);
                 if (citedTickets && citedTickets.length > 0) {
                     const uniqueTicketIds = [...new Set(citedTickets.map(t => t.split('/')[2]))];
                     ticketButtonsHtml = `

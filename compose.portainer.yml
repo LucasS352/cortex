@@ -10,6 +10,8 @@ services:
       - ./infra/schema-current.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./infra/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
       - ./infra/005_company_workbench.sql:/docker-entrypoint-initdb.d/03-company-workbench.sql:ro
+      - ./infra/006_canonical_knowledge.sql:/docker-entrypoint-initdb.d/04-canonical-knowledge.sql:ro
+      - ./infra/007_vector_halfvec_hnsw.sql:/docker-entrypoint-initdb.d/05-vector-halfvec-hnsw.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U deskcortex -d deskcortex"]
       interval: 10s
@@ -45,6 +47,7 @@ services:
       CORTEX_ADMIN_PASSWORD_HASH: ${CORTEX_ADMIN_PASSWORD_HASH:?Gere o hash com scripts/create_admin_hash.py}
       CORTEX_SESSION_SECRET: ${CORTEX_SESSION_SECRET:?Gere uma chave de sessao}
       CORTEX_PUBLIC_URL: ${CORTEX_PUBLIC_URL:?Informe http://IP_DO_SERVIDOR ou https://DOMINIO}
+      CORTEX_TECHNICIAN_PINS: ${CORTEX_TECHNICIAN_PINS:-1234:Lucas,0000:Marília}
       CORTEX_ALLOWED_HOSTS: ${CORTEX_ALLOWED_HOSTS:-localhost,127.0.0.1}
     volumes:
       - cortex_output:/app/scripts/output

@@ -369,11 +369,10 @@ class TestSimulatorFastAPIEndpoints(unittest.TestCase):
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
         self.assertIn("DeskCortex", response.text)
-        self.assertIn("Romário", response.text)
         self.assertIn("Mesa do Técnico", response.text)
 
-    def test_client_submit_and_chat_flow(self):
-        """Simula abertura de chamado pelo cliente e resposta investigativa do Romário."""
+    def test_client_submit_is_received_and_legacy_chat_is_disabled(self):
+        """A abertura entra na fila; o chat antigo não pode gerar resposta paralela."""
         payload = {
             "subject": "Pedido nao caiu no sistema",
             "module": "Ecommerce",
@@ -384,20 +383,17 @@ class TestSimulatorFastAPIEndpoints(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertIn("session_id", data)
-        self.assertIn("reply", data)
+        self.assertEqual(data["status"], "received")
         session_id = data["session_id"]
-        # Romario se apresenta
-        self.assertIn("Romário", data["reply"])
 
-        # Envia mensagem subsequente no chat
+        # O chat legado foi intencionalmente encerrado; a análise é iniciada
+        # pela mesa do técnico para não existir resposta automática ao cliente.
         chat_payload = {
             "session_id": session_id,
             "message": "Aparece um erro de transportadora nao vinculada na coluna de erro"
         }
         res_chat = self.client.post("/api/chat", json=chat_payload)
-        self.assertEqual(res_chat.status_code, 200)
-        chat_data = res_chat.json()
-        self.assertIn("reply", chat_data)
+        self.assertEqual(res_chat.status_code, 410)
 
     def test_tech_desk_report_and_action(self):
         """Verifica o relatório da Mesa do Técnico e execução de ação do especialista."""
@@ -486,11 +482,8 @@ class TestSimulatorFastAPIEndpoints(unittest.TestCase):
             "image_base64": f"data:image/png;base64,{fake_b64}",
             "message": "Segue o print da tela de ocorrencias"
         })
-        self.assertEqual(res_img.status_code, 200)
-        data = res_img.json()
-        self.assertIn("reply", data)
-        self.assertIn("SKU_NOT_FOUND", data["reply"])
-        self.assertIn("investigation_state", data)
+        self.assertEqual(res_img.status_code, 410)
+        self.assertFalse(mock_vision.called)
 
 
 if __name__ == "__main__":

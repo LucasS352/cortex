@@ -43,6 +43,28 @@ Depois que a imagem corrigida estiver publicada, use **Pull and redeploy**, soli
 
 As duas falhas corrigidas eram: `/healthz` retornava 404 quando a autenticação estava desativada, e o Compose interpolava a variável do Caddy antes de iniciar o container. O YAML agora usa `{$$CORTEX_DOMAIN}`; dentro do Caddyfile o resultado correto é `{$CORTEX_DOMAIN}`.
 
+## Atualização de banco existente
+
+As migrations em `/docker-entrypoint-initdb.d` só executam automaticamente quando o volume PostgreSQL é novo. Em uma Stack já em uso, faça primeiro um backup do banco da VPS e mantenha `CORTEX_AUTONOTE_MODE=disabled` durante a atualização.
+
+1. Publique o commit, aguarde a imagem correspondente no GHCR e use **Pull and redeploy** na Stack sem alterar nem remover os volumes.
+2. Em **Containers**, abra o Console do container PostgreSQL da Stack (por exemplo, `cortex-postgres-1`) com `/bin/sh`.
+3. Execute, uma vez, os dois comandos abaixo. Eles são idempotentes; o segundo cria um índice sem apagar ou reprocessar embeddings.
+
+```sh
+psql -U deskcortex -d deskcortex -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/04-canonical-knowledge.sql
+psql -U deskcortex -d deskcortex -v ON_ERROR_STOP=1 -f /docker-entrypoint-initdb.d/05-vector-halfvec-hnsw.sql
+```
+
+4. Antes de habilitar qualquer automação, confirme o resultado ainda no Console:
+
+```sh
+psql -U deskcortex -d deskcortex -c "SELECT count(*) AS tabelas_canonicas FROM information_schema.tables WHERE table_schema = 'cortex_kb';"
+psql -U deskcortex -d deskcortex -c "SELECT indexrelid::regclass AS indice, indisvalid, indisready FROM pg_index WHERE indexrelid = 'public.idx_kn_embedding_halfvec_hnsw'::regclass;"
+```
+
+O primeiro comando deve retornar `10`; o segundo deve retornar `t` para `indisvalid` e `indisready`. Se o índice não ficar válido, não habilite o treinamento nem o envio automático: preserve o backup e interrompa a atualização para investigação.
+
 ## Stack de Git no Portainer
 
 Em **Stacks > Add stack > Git repository**:

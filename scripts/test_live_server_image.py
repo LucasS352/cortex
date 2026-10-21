@@ -8,8 +8,13 @@ import urllib.request
 import json
 import base64
 import io
+import os
 import sys
+import unittest
 from PIL import Image, ImageDraw, ImageFont
+
+if os.getenv("CORTEX_RUN_LIVE_TESTS") != "1":
+    raise unittest.SkipTest("Teste live: defina CORTEX_RUN_LIVE_TESTS=1 com o servidor isolado ativo")
 
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
