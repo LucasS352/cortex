@@ -64,6 +64,15 @@ PRODUCT_REPLY = '''A mensagem indica que o produto do pedido ainda não está re
 
 Antes de salvar, confirme no log quais valores pertencem ao produto desse pedido; os números mostrados na imagem são apenas exemplos.'''
 
+TRANSPORTADORA_REPLY = '''A mensagem indica que a transportadora recebida da AnyMarket ainda não está relacionada no Master.
+
+1. Acesse Cadastros → Outros → Transportadoras e localize a transportadora que deve atender esse pedido.
+2. Com a transportadora selecionada, pressione Ctrl+R para abrir a janela Relação - Site.
+3. Selecione a integração AnyMarket e informe no relacionamento o código externo retornado pela plataforma (Carrier). Use o Carrier deste pedido; não use valores de exemplo de outro chamado.
+4. Confirme a relação e reprocese a integração do pedido. A validação é o pedido integrar sem a mensagem de transportadora não relacionada.
+
+Se o retorno não informar qual Carrier foi recebido, envie somente essa identificação da ocorrência antes de criar o relacionamento.'''
+
 STATE_REGISTRATION_REPLY = '''Olá!
 
 A mensagem “Inscrição Estadual inválida” indica que devemos conferir a IE informada nos dados de entrega da nota fiscal.
@@ -193,6 +202,24 @@ def match(query):
             'images': [
                 {'file': 'product-relation.png', 'caption': 'Relação - Site do produto: Código de fora, Adicional e Tipo. Os códigos do print são apenas exemplos.'},
             ],
+        }
+    transportadora_anymarket = (
+        re.search(r'\banymarket\b', text) and
+        re.search(r'\b(?:transportadora|metodo de envio|frete)\b', text) and
+        (re.search(r'\bcarrier\b', text) or
+         re.search(r'\b(?:nao )?(?:vinculad[ao]|relacionad[ao]|associad[ao])\b|\bde[ -]?para\b|\brelacionamento\b', text))
+    )
+    if transportadora_anymarket:
+        return {
+            'id': 'reviewed-anymarket-carrier-relation-v1', 'source_type': 'REVIEWED_PROCEDURE',
+            'title': 'AnyMarket — relacionar transportadora pelo Ctrl+R',
+            'problem': 'Transportadora/Carrier da AnyMarket sem relacionamento no Master',
+            'solution': TRANSPORTADORA_REPLY, 'reviewed_reply': TRANSPORTADORA_REPLY,
+            'applicable': True, 'answer_use': 'procedure_reference',
+            'quality_flags': [], 'applicability_reasons': [], 'reviewed_at': '2026-10-21',
+            'provenance': ('Procedimento conferido no catálogo oficial do Master: Cadastros > Outros > '
+                           'Transportadoras; Relação - Site pelo atalho Ctrl+R. O Carrier vem do retorno da AnyMarket.'),
+            'resolved_examples': [], 'images': [],
         }
     # Do not apply this recipe to generic missing orders or orders already
     # integrated without payment (ANY_PAGAMENTO_STATUS is a different issue).

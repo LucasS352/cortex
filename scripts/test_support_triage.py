@@ -25,9 +25,22 @@ class SupportTriageTests(unittest.TestCase):
 
     def test_known_error_in_text_or_print_bypasses_intake(self):
         for error in ('Forma de pagamento não integrada', 'HTTP 401 Unauthorized',
-                      'Texto extraído do print: IE do destinatário inválida'):
+                      'Texto extraído do print: IE do destinatário inválida',
+                      'AnyMarket: Carrier FedEx não relacionado à transportadora no Master'):
             question = 'Meu pedido não caiu no Master. ' + error
             self.assertIsNone(intake(question, question, []))
+
+    def test_anymarket_carrier_has_a_reviewed_procedure(self):
+        import mapped_replies
+        from technician_workbench import build_reply
+        result = mapped_replies.match('Erro AnyMarket: Carrier FedEx; transportadora não relacionada no de-para.')
+        self.assertIsNotNone(result)
+        self.assertEqual(result['id'], 'reviewed-anymarket-carrier-relation-v1')
+        self.assertIn('Ctrl+R', result['solution'])
+        reply, meta = build_reply({}, '', [], [], [result],
+                                  'Erro AnyMarket: Carrier FedEx; transportadora não relacionada no de-para.')
+        self.assertEqual(meta['mode'], 'reviewed_procedure')
+        self.assertIn('Cadastros → Outros → Transportadoras', reply)
 
     def test_followup_does_not_repeat_intake(self):
         question = 'Meu pedido não caiu no Master'
