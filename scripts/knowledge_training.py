@@ -535,9 +535,19 @@ def _validate_content(c):
         raise ValueError('A validade final deve ser posterior à inicial.')
     allowed = {image['file'] for image in procedure_images()}
     steps = {int(n) for n in re.findall(r'^\s*(\d+)\.\s', c['procedure'], re.M)}
+    image_names = set()
     for image in c.get('images') or []:
-        if image.get('file') not in allowed or image.get('after_step') not in steps:
-            raise ValueError('Vincule cada imagem revisada a um passo numerado existente (1. …).')
+        placement = image.get('placement') or 'procedure'
+        if image.get('file') not in allowed or placement not in ('answer', 'procedure'):
+            raise ValueError('A imagem revisada ou seu local de exibição é inválido.')
+        if placement == 'procedure' and image.get('after_step') not in steps:
+            raise ValueError('Vincule cada imagem do procedimento a um passo numerado existente (1. …).')
+        image['placement'] = placement
+        image['after_step'] = image.get('after_step') if placement == 'procedure' else None
+        image['name'] = sanitize(str(image.get('name') or image.get('caption') or 'Tela de referência')).strip()[:120]
+        if len(image['name']) < 3 or norm(image['name']) in image_names:
+            raise ValueError('Cada imagem precisa de um nome único com pelo menos 3 caracteres.')
+        image_names.add(norm(image['name']))
         image['caption'] = sanitize(str(image.get('caption') or 'Tela de referência'))[:300]
     return c
 
@@ -561,6 +571,8 @@ def _embed(text, task_type='RETRIEVAL_DOCUMENT'):
 def document_text(item, version):
     app = version['applicability'] or {}
     scope = '; '.join(f'{k}: {", ".join(v) if isinstance(v, list) else v}' for k, v in app.items() if v)
+    images = '; '.join(f"{image.get('name') or 'Imagem'}: {image.get('caption') or ''}"
+                       for image in version.get('images') or [])
     return '\n'.join(p for p in (
         f"PROCEDIMENTO OFICIAL ALTERNATIVA: {item['title']}",
         f"Módulo: {taxonomy.MODULE_NAMES.get(item['module_key'], item['module_key'])}",
@@ -571,6 +583,7 @@ def document_text(item, version):
         f"Pré-requisitos: {version['prerequisites']}" if version.get('prerequisites') else '',
         f"Resposta pronta ao cliente: {version['customer_answer']}" if version.get('customer_answer') else '',
         f"Procedimento:\n{version['procedure']}",
+        f"Imagens de apoio: {images}" if images else '',
         f"Resultado esperado: {version['expected_result']}" if version.get('expected_result') else '',
         f"Palavras-chave: {', '.join(version['keywords'])}" if version.get('keywords') else '') if p)
 
@@ -1059,13 +1072,23 @@ def _save_proposal_images(images, procedure):
     if len(images or []) > 5:
         raise ValueError('Envie no máximo 5 prints por proposta.')
     steps = {int(n) for n in re.findall(r'^\s*(\d+)\.\s', procedure or '', re.M)}
-    saved = []
+    saved, names = [], set()
     TRAINING_MEDIA.mkdir(parents=True, exist_ok=True)
     for entry in images or []:
-        step = entry.get('after_step')
+        placement = entry.get('placement') or 'procedure'
+        step = entry.get('after_step') if placement == 'procedure' else None
+        name = sanitize(entry.get('name')).strip()
         caption = sanitize(entry.get('caption')).strip()
-        if step not in steps or len(caption) < 3:
-            raise ValueError('Cada print precisa de legenda e deve estar ligado a um passo numerado existente.')
+        if placement not in ('answer', 'procedure'):
+            raise ValueError('Escolha se a imagem aparece na resposta final ou no passo a passo.')
+        if len(name) < 3 or len(name) > 120:
+            raise ValueError('Dê um nome de 3 a 120 caracteres para cada imagem.')
+        normalized_name = norm(name)
+        if normalized_name in names:
+            raise ValueError('Use um nome diferente para cada imagem.')
+        names.add(normalized_name)
+        if len(caption) < 3 or (placement == 'procedure' and step not in steps):
+            raise ValueError('Cada print precisa de legenda e, no procedimento, deve estar ligado a um passo numerado existente.')
         match = re.fullmatch(r'data:image/(png|jpeg|webp);base64,([A-Za-z0-9+/=\r\n]+)',
                              str(entry.get('data_url') or ''), re.I)
         if not match:
@@ -1083,11 +1106,12 @@ def _save_proposal_images(images, procedure):
                 source.load()
                 image = source.convert('RGBA' if source.mode in ('RGBA', 'LA') else 'RGB')
                 image.thumbnail((2400, 2400))
-                name = uuid.uuid4().hex + '.png'
-                image.save(TRAINING_MEDIA / name, 'PNG', optimize=True)
+                file_name = uuid.uuid4().hex + '.png'
+                image.save(TRAINING_MEDIA / file_name, 'PNG', optimize=True)
         except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
             raise ValueError('Um dos arquivos não é uma imagem válida.') from exc
-        saved.append({'file': name, 'caption': caption[:300], 'after_step': step})
+        saved.append({'file': file_name, 'name': name[:120],
+                      'caption': caption[:300], 'placement': placement, 'after_step': step})
     return saved
 
 

@@ -130,6 +130,15 @@ async def gate(request: Request, call_next):
         response.headers["Cache-Control"] = "public, max-age=86400"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
+    # Editor externo do técnico: a página não expõe dados sozinha e suas APIs
+    # dedicadas validam o PIN, limitam tentativas e registram a identidade.
+    if ((request.method in {"GET", "HEAD"} and path == "/treinamento/tecnico") or
+            path.startswith("/api/treinamento/tecnico/")):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        return response
     if not enabled():
         return await call_next(request)
     if path == "/login":

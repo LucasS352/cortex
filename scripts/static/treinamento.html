@@ -297,8 +297,8 @@ function contentForm(c) {
         <div><label>Integrações (separadas por vírgula)</label><input type="text" id="a_int" value="${esc((a.integrations || []).join(', '))}"></div>
         <div><label>Válido a partir de</label><input type="text" id="a_from" placeholder="AAAA-MM-DD" value="${esc(a.valid_from)}"></div>
         <div><label>Válido até</label><input type="text" id="a_until" placeholder="AAAA-MM-DD" value="${esc(a.valid_until)}"></div></div></div>
-    <div class="panel"><h3>Imagens revisadas por passo</h3><p>Marque apenas telas que correspondam a este procedimento. Informe o número do passo; a imagem aparecerá logo abaixo dele.</p>
-    ${availableImages.map((image,i) => { const chosen = (c.images || []).find(x => x.file === image.file); return `<div class="grid2" style="margin-bottom:12px"><div><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''}> ${esc(chosen?.caption || image.label)}</label><img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}" style="max-width:220px;max-height:100px"></div><div><label>Após o passo</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || 1}"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"></div></div>`; }).join('')}</div>
+    <div class="panel"><h3>Imagens revisadas</h3><p>Confirme o nome e escolha se a imagem aparece após a resposta final ou após um passo.</p>
+    ${availableImages.map((image,i) => { const chosen = (c.images || []).find(x => x.file === image.file); return `<div class="grid2" style="margin-bottom:12px"><div><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''}> ${esc(chosen?.name || chosen?.caption || image.label)}</label><img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}" style="max-width:220px;max-height:100px"></div><div><label>Nome da imagem</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><label>Onde exibir</label><select id="img_place_${i}"><option value="answer" ${chosen?.placement === 'answer' ? 'selected' : ''}>Após a resposta final</option><option value="procedure" ${chosen?.placement !== 'answer' ? 'selected' : ''}>Após um passo</option></select><label>Número do passo</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || 1}"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"></div></div>`; }).join('')}</div>
     <label>Palavras-chave de busca (vírgula)</label><input type="text" id="f_kw" value="${esc((c.keywords || []).join(', '))}">`;
 }
 function bindForm() { $('#f_module').onchange = (e) => $('#f_sub').innerHTML = subOptions(e.target.value, 'general'); }
@@ -307,7 +307,7 @@ function readForm() {
   return { title: $('#f_title').value.trim(), module_key: $('#f_module').value, subtopic_key: $('#f_sub').value,
     symptom: $('#f_symptom').value.trim(), error_messages: list('#f_errors', '\n'), root_cause: $('#f_cause').value.trim(),
     customer_answer: $('#f_answer').value.trim() || null, procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
-    images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => { const i = Number(input.id.split('_').pop()); return input.checked ? {file:input.dataset.file,after_step:Number($('#img_step_'+i).value),caption:$('#img_caption_'+i).value} : null; }).filter(Boolean),
+    images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => { const i = Number(input.id.split('_').pop()), placement=$('#img_place_'+i).value; return input.checked ? {file:input.dataset.file,name:$('#img_name_'+i).value.trim(),placement,after_step:placement==='procedure'?Number($('#img_step_'+i).value):null,caption:$('#img_caption_'+i).value} : null; }).filter(Boolean),
     keywords: list('#f_kw'),
     applicability: { master_version: $('#a_ver').value.trim() || null, tax_regime: $('#a_reg').value.trim() || null,
       ufs: list('#a_ufs').map(u => u.toUpperCase()), integrations: list('#a_int'),
@@ -448,7 +448,7 @@ async function reviewTicket(ticket, marker = '') {
     $('#proposalFiles').onchange = e => {
       proposalFiles = [...e.target.files].slice(0, 5);
       if (e.target.files.length > 5) toast('Serão usados somente os 5 primeiros prints.');
-      $('#proposalImageList').innerHTML = proposalFiles.map((file,i) => `<div class="grid2" style="margin-top:10px"><div><img src="${URL.createObjectURL(file)}" alt="Prévia" style="max-width:220px;max-height:120px"><small>${esc(file.name)}</small></div><div><label>Após o passo</label><input id="proposalStep_${i}" type="number" min="1" max="100" value="${i+1}"><label>Legenda obrigatória</label><input id="proposalCaption_${i}" type="text" placeholder="O que este print demonstra"></div></div>`).join('');
+      $('#proposalImageList').innerHTML = proposalFiles.map((file,i) => `<div class="grid2" style="margin-top:10px"><div><img src="${URL.createObjectURL(file)}" alt="Prévia" style="max-width:220px;max-height:120px"><small>${esc(file.name)}</small></div><div><label>Nome da imagem</label><input id="proposalName_${i}" value="${esc(file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' '))}"><label>Onde exibir</label><select id="proposalPlace_${i}"><option value="answer">Após a resposta final</option><option value="procedure" selected>Após um passo</option></select><label>Número do passo</label><input id="proposalStep_${i}" type="number" min="1" max="100" value="${i+1}"><label>Legenda obrigatória</label><input id="proposalCaption_${i}" type="text" placeholder="O que este print demonstra"></div></div>`).join('');
     };
     let exampleQuestions = [], exampleAnswers = [];
     $('#exampleTicket').oninput = () => {
@@ -498,7 +498,7 @@ async function reviewTicket(ticket, marker = '') {
       try {
         const proposedImages = await Promise.all(proposalFiles.map((file,i) => new Promise((resolve,reject) => {
           const reader = new FileReader(); reader.onerror = () => reject(new Error('Não foi possível ler um dos prints.'));
-          reader.onload = () => resolve({data_url:reader.result,after_step:Number($(`#proposalStep_${i}`).value),caption:$(`#proposalCaption_${i}`).value.trim()});
+          reader.onload = () => { const placement=$(`#proposalPlace_${i}`).value; resolve({data_url:reader.result,name:$(`#proposalName_${i}`).value.trim(),placement,after_step:placement==='procedure'?Number($(`#proposalStep_${i}`).value):null,caption:$(`#proposalCaption_${i}`).value.trim()}); };
           reader.readAsDataURL(file);
         })));
         if (proposedImages.some(x => x.caption.length < 3)) throw new Error('Informe uma legenda para cada print.');

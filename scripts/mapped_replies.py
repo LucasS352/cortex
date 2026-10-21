@@ -252,5 +252,7 @@ def note_images(source):
         route = '/procedure-images/' if path == reviewed else '/training-media/'
         images.append({'url': origin + route + name if origin else '',
                        'data_url': 'data:image/png;base64,' + base64.b64encode(path.read_bytes()).decode(),
-                       'caption': item['caption'], 'after_step': item.get('after_step')})
+                       'name': item.get('name') or item.get('caption') or 'Imagem de apoio',
+                       'caption': item['caption'], 'placement': item.get('placement') or 'procedure',
+                       'after_step': item.get('after_step')})
     return images, notices

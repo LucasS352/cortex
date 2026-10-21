@@ -2,15 +2,52 @@
 from __future__ import annotations
 
 import json
+import hmac
+import os
+import re
+import threading
+import time
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 import knowledge_training as kt
+import web_auth
 from technician_workbench import actor
 
 router = APIRouter(prefix='/api/treinamento', tags=['Treinamento da IA'])
+_technician_failures: dict[str, list[float]] = {}
+_technician_failure_lock = threading.Lock()
+
+
+def _technician_name(pin: str, request: Request) -> str:
+    ip = request.client.host if request.client else 'unknown'
+    now = time.time()
+    configured = os.getenv('CORTEX_TECHNICIAN_PINS', '1234:Lucas,0000:Marília')
+    identities = []
+    for entry in configured.split(','):
+        code, separator, name = entry.partition(':')
+        if separator and re.fullmatch(r'\d{4}', code.strip()) and name.strip():
+            identities.append((code.strip(), name.strip()[:80]))
+    candidate = str(pin or '').strip()
+    with _technician_failure_lock:
+        attempts = [stamp for stamp in _technician_failures.get(ip, []) if now - stamp < 900]
+        _technician_failures[ip] = attempts
+        if len(attempts) >= 8:
+            raise HTTPException(429, 'Muitas tentativas. Aguarde alguns minutos.')
+        for code, name in identities:
+            if hmac.compare_digest(candidate.encode(), code.encode()):
+                _technician_failures.pop(ip, None)
+                return name
+        attempts.append(now)
+    raise HTTPException(401, 'PIN inválido.')
+
+
+def _technician_origin(request: Request):
+    origin = request.headers.get('origin', '').rstrip('/')
+    if not origin or origin != web_auth.public_origin():
+        raise HTTPException(403, 'Origem inválida.')
 
 
 def _guard(fn, *args, **kwargs):
@@ -39,8 +76,10 @@ class Applicability(BaseModel):
 
 class ProcedureImage(BaseModel):
     file: str = Field(min_length=1, max_length=100)
+    name: str | None = Field(default=None, max_length=120)
     caption: str = Field(min_length=3, max_length=300)
-    after_step: int = Field(ge=1, le=100)
+    placement: Literal['answer', 'procedure'] = 'procedure'
+    after_step: int | None = Field(default=None, ge=1, le=100)
 
 
 class Content(BaseModel):
@@ -219,6 +258,25 @@ class AnswerReview(BaseModel):
     source_answer_action_id: str | None = Field(default=None, max_length=80)
 
 
+class TechnicianProposalImage(BaseModel):
+    data_url: str = Field(min_length=30, max_length=7_100_000)
+    name: str = Field(min_length=3, max_length=120)
+    caption: str = Field(min_length=3, max_length=300)
+    placement: Literal['answer', 'procedure']
+    after_step: int | None = Field(default=None, ge=1, le=100)
+
+
+class TechnicianProposal(BaseModel):
+    action_id: str = Field(min_length=1, max_length=80)
+    question_action_id: str = Field(min_length=1, max_length=80)
+    module_key: str = Field(min_length=2, max_length=50)
+    title: str = Field(min_length=5, max_length=200)
+    answer: str = Field(min_length=20, max_length=10000)
+    procedure: str = Field(min_length=20, max_length=10000)
+    comment: str = Field(default='', max_length=1000)
+    images: list[TechnicianProposalImage] = Field(default_factory=list, max_length=5)
+
+
 @router.post('/taxonomia')
 def save_module(body: ModuleEdit, request: Request):
     return _guard(kt.save_module, body.key, body.label, body.description, actor(request))
@@ -232,6 +290,25 @@ def ticket_answers(ticket_id: int):
 @router.get('/tickets/{ticket_id}/respostas-tecnicas')
 def ticket_technician_answers(ticket_id: int):
     return _guard(kt.ticket_technician_answers, ticket_id)
+
+
+@router.get('/tecnico/tickets/{ticket_id}')
+def technician_context(ticket_id: int, request: Request,
+                       technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
+    name = _technician_name(technician_pin, request)
+    context = _guard(kt.ticket_answers, ticket_id)
+    return {'technician': name, 'context': context,
+            'taxonomy': [module for module in _guard(kt.taxonomy_options) if module['key'] != 'unclassified']}
+
+
+@router.post('/tecnico/tickets/{ticket_id}/propostas')
+def technician_proposal(ticket_id: int, body: TechnicianProposal, request: Request,
+                        technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
+    _technician_origin(request)
+    name = _technician_name(technician_pin, request)
+    return _guard(kt.review_answer, ticket_id, body.action_id, -1, body.module_key, body.comment,
+                  name, ticket_id, body.title, body.answer, body.procedure,
+                  [image.model_dump() for image in body.images], body.question_action_id, None)
 
 
 @router.post('/tickets/{ticket_id}/avaliar')

@@ -10,7 +10,7 @@ import knowledge_training as kt
 import knowledge_access as ka
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from knowledge_training_api import router
+from knowledge_training_api import router, _technician_failures
 import test_knowledge_training as legacy
 
 
@@ -133,13 +133,22 @@ class TrainingWorkflowTests(unittest.TestCase):
         raw = io.BytesIO(); Image.new('RGB',(20,10),'white').save(raw,'JPEG')
         data_url = 'data:image/jpeg;base64,' + base64.b64encode(raw.getvalue()).decode()
         with tempfile.TemporaryDirectory() as folder, patch.object(kt,'TRAINING_MEDIA',Path(folder)):
-            saved = kt._save_proposal_images([{'data_url':data_url,'caption':'Aba Fornecedor','after_step':2}],
+            saved = kt._save_proposal_images([{'data_url':data_url,'name':'Aba Fornecedor','caption':'Aba Fornecedor','placement':'procedure','after_step':2}],
                                              '1. Abra o relatório.\n2. Clique na aba Fornecedor.')
             self.assertRegex(saved[0]['file'],r'^[0-9a-f]{32}\.png$')
             self.assertTrue((Path(folder)/saved[0]['file']).is_file())
             with self.assertRaisesRegex(ValueError,'passo numerado'):
-                kt._save_proposal_images([{'data_url':data_url,'caption':'Aba Fornecedor','after_step':3}],
+                kt._save_proposal_images([{'data_url':data_url,'name':'Aba Fornecedor','caption':'Aba Fornecedor','placement':'procedure','after_step':3}],
                                          '1. Abra o relatório.\n2. Clique na aba Fornecedor.')
+
+    def test_technician_print_can_be_placed_after_customer_answer(self):
+        raw = io.BytesIO(); Image.new('RGB',(20,10),'white').save(raw,'PNG')
+        data_url = 'data:image/png;base64,' + base64.b64encode(raw.getvalue()).decode()
+        with tempfile.TemporaryDirectory() as folder, patch.object(kt,'TRAINING_MEDIA',Path(folder)):
+            saved = kt._save_proposal_images([{'data_url':data_url,'name':'Visão geral do relatório',
+                'caption':'Tela inicial do relatório','placement':'answer','after_step':None}], '1. Abra o relatório.')
+        self.assertEqual(saved[0]['placement'],'answer')
+        self.assertIsNone(saved[0]['after_step'])
 
     def test_feedback_link_targets_ticket_and_exact_marker(self):
         from movidesk_note_worker import render_note
@@ -167,6 +176,33 @@ class TrainingWorkflowTests(unittest.TestCase):
             review.assert_called_once_with(131726,'1',-1,'fiscal','Passo incorreto','tecnico_local',98765,
                 'Consultar relatório por fornecedor','Sim, o relatório está disponível no menu de vendas.',
                 '1. Acesse Relatórios > Vendas.\n2. Selecione a aba Fornecedor.',[],None,None)
+
+    def test_technician_pin_identifies_actor_and_forwards_named_images(self):
+        app=FastAPI(); app.include_router(router); _technician_failures.clear()
+        context={'subject':'Relatório','questions':[{'action_id':'3','text':'Pergunta'}],
+                 'answers':[{'action_id':'5','text':'Resposta'}]}
+        body={'action_id':'5','question_action_id':'3','module_key':'fiscal',
+              'title':'Relatório por fornecedor','answer':'Sim, o relatório está disponível no Master.',
+              'procedure':'1. Abra o relatório no menu de vendas.', 'comment':'Validado',
+              'images':[]}
+        with patch.dict('os.environ',{'CORTEX_PUBLIC_URL':'https://desk.cortexalter.tech',
+                                      'CORTEX_TECHNICIAN_PINS':'1234:Lucas,0000:Marília'}), \
+             TestClient(app,base_url='https://desk.cortexalter.tech') as client, \
+             patch.object(kt,'ticket_answers',return_value=context), \
+             patch.object(kt,'taxonomy_options',return_value=[{'key':'fiscal','label':'Fiscal'}]), \
+             patch.object(kt,'review_answer',return_value={'candidate_id':8}) as review:
+            opened=client.get('/api/treinamento/tecnico/tickets/132084',headers={'X-Cortex-Technician-Pin':'1234'})
+            self.assertEqual(opened.status_code,200); self.assertEqual(opened.json()['technician'],'Lucas')
+            sent=client.post('/api/treinamento/tecnico/tickets/132084/propostas',json=body,
+                             headers={'X-Cortex-Technician-Pin':'1234','Origin':'https://desk.cortexalter.tech'})
+        self.assertEqual(sent.status_code,200)
+        self.assertEqual(review.call_args.args[5],'Lucas')
+
+    def test_technician_pin_rejects_unknown_code(self):
+        app=FastAPI(); app.include_router(router); _technician_failures.clear()
+        with patch.dict('os.environ',{'CORTEX_TECHNICIAN_PINS':'1234:Lucas'}), TestClient(app) as client:
+            result=client.get('/api/treinamento/tecnico/tickets/132084',headers={'X-Cortex-Technician-Pin':'9999'})
+        self.assertEqual(result.status_code,401)
 
     def test_admin_can_override_question_answer_pair(self):
         db = MagicMock(); db.execute.return_value.fetchone.return_value = {'id': 4}

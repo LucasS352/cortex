@@ -310,6 +310,14 @@ class WorkerTests(unittest.TestCase):
         self.assertNotIn('<script>', result)
         self.assertIn('&lt;script&gt;', result)
 
+    def test_named_images_follow_answer_and_selected_procedure_step(self):
+        pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+        result = worker.render_note({'reply':'Resposta pronta.\n1. Abra o menu.\n2. Selecione o relatório.',
+            'images':[{'name':'Visão geral','caption':'Tela inicial','placement':'answer','after_step':None,'data_url':pixel},
+                      {'name':'Aba fornecedor','caption':'Seleção correta','placement':'procedure','after_step':2,'data_url':pixel}]}, 'marker')
+        self.assertLess(result.index('Visão geral'), result.index('1. Abra o menu'))
+        self.assertGreater(result.index('Aba fornecedor'), result.index('2. Selecione o relatório'))
+
     def test_render_appends_company_similar_tickets_with_status(self):
         result = worker.render_note({'reply': 'Confira o cadastro.', 'similar_tickets': [
             {'ticket': 131549, 'title': 'Erro de etiqueta', 'status': 'Resolvido', 'active': False},

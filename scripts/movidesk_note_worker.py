@@ -504,29 +504,41 @@ def render_note(result, marker):
         image_src = mapped_replies.safe_image_data(item.get('data_url')) or url
         if not image_src:
             return ''
+        name = html.escape(item.get('name') or 'Imagem de apoio')
         caption = html.escape(item.get('caption') or 'Tela de referência do procedimento')
         safe_src = html.escape(image_src, quote=True)
         image = '<img src="' + safe_src + '" alt="' + caption + \
                 '" width="900" style="max-width:100%;height:auto">'
         if url:
             image = '<a href="' + html.escape(url, quote=True) + '">' + image + '</a>'
-        return '<p>' + image + '</p><p><small>' + caption + '</small></p>'
+        return '<p><strong>' + name + '</strong></p><p>' + image + '</p><p><small>' + caption + '</small></p>'
 
     images = result.get('images') or []
+    answer_images = [item for item in images if item.get('placement') == 'answer']
     positioned = {}
     for item in images:
+        if item.get('placement') == 'answer':
+            continue
         step = item.get('after_step')
         if isinstance(step, int) and step > 0:
             positioned.setdefault(step, []).append(item)
     lines = ['<p><strong>Cortex — resposta sugerida ao cliente (nota interna)</strong></p>']
+    answer_images_emitted = False
     for raw_line in str(result['reply']).splitlines():
         if not raw_line.strip():
             continue
-        lines.append('<p>' + inline_text(raw_line.strip()) + '</p>')
         numbered = re.match(r'^(\d+)\.\s', raw_line.strip())
+        if numbered and not answer_images_emitted:
+            for item in answer_images:
+                lines.append(image_block(item))
+            answer_images_emitted = True
+        lines.append('<p>' + inline_text(raw_line.strip()) + '</p>')
         if numbered:
             for item in positioned.get(int(numbered.group(1)), []):
                 lines.append(image_block(item))
+    if not answer_images_emitted:
+        for item in answer_images:
+            lines.append(image_block(item))
     for source in result.get('sources', []):
         label = str(source.get('title') or 'Referência')
         if source.get('ticket'):
@@ -563,7 +575,7 @@ def render_note(result, marker):
         lines.append('</ul>')
     if result.get('history_notice'):
         lines.append('<p><strong>Observação interna:</strong> ' + html.escape(result['history_notice']) + '</p>')
-    remaining_images = [item for item in images if not item.get('after_step')]
+    remaining_images = [item for item in images if item.get('placement') != 'answer' and not item.get('after_step')]
     if remaining_images:
         lines.append('<p><strong>Imagens do procedimento:</strong></p>')
         for item in remaining_images:
