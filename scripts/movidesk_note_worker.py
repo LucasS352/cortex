@@ -435,6 +435,10 @@ def generate_note(ticket, settings, api):
             if str(case['external_id']) not in known:
                 cases.append(case)
                 known.add(str(case['external_id']))
+    import triage_router
+    specialist, route_info = triage_router.resolve_specialist(str(ticket.get('subject') or ''), str(query))
+    sources = triage_router.filter_by_specialist(sources, specialist, route_info)
+    cases = triage_router.filter_by_specialist(cases, specialist, route_info)
     decision = decide(query, sources, company_cases)
     if triage and not decision['can_propose_procedure']:
         triage.update(decision=decision, similar_tickets=[
@@ -447,8 +451,12 @@ def generate_note(ticket, settings, api):
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in active_history)
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
            'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
-    reply, meta = build_reply(row, context, facts, envs, sources, question, company_cases,
-                              audience='customer_draft', capability_leads=capability_leads, decision_query=query)
+    active_company = [c for c in company_cases if c.get('is_active')]
+    active_ids = {str(c.get('external_id')) for c in active_company}
+    cases_for_reply = active_company + [c for c in cases if str(c.get('external_id')) not in active_ids]
+    reply, meta = build_reply(row, context, facts, envs, sources, question, cases_for_reply,
+                              audience='customer_draft', capability_leads=capability_leads,
+                              decision_query=query, specialist=specialist)
     decision = meta.get('decision') or decision
     if not meta.get('used'):
         raise RetryJob('Gemini indisponível; nenhuma nota de contingência publicada')
@@ -500,14 +508,14 @@ def generate_note(ticket, settings, api):
                          'provenance': s.get('provenance')} for s in reference + [s for s in tutorials if s not in reference]],
             'videos': [video for source in tutorials for video in source['videos']],
             'similar_tickets': similar, 'evidence_scope': evidence_scope,
-            'decision': decision,
+            'decision': decision, 'specialist': meta.get('specialist'),
             'mode': meta.get('mode'), 'attachments': attachment_notices + media_notices, 'images': images,
             'history_notice': ('Nenhum chamado resolvido qualificado foi encontrado para apoiar este procedimento.'
                                if reference and not any(not c.get('active') and c.get('resolution') for c in similar) else
                                'Tutorial localizado na base; vídeo sem transcrição validada para gerar passos escritos.' if tutorials and not reference else
                                'Há evidências internas da funcionalidade, mas ainda não existe um procedimento completo aprovado.'
                                if capability_leads and not reference else
-                               'Diagnóstico pendente: nenhuma solução comprovada foi selecionada.' if not reference else '')}
+                               'Diagnóstico pendente: nenhuma solução comprovada foi selecionada.' if not (reference or any(not c.get('active') and c.get('resolution') for c in similar)) else '')}
 
 
 def render_note(result, marker):
@@ -607,6 +615,9 @@ def render_note(result, marker):
         lines.append('</ul>')
     if result.get('history_notice'):
         lines.append('<p><strong>Observação interna:</strong> ' + html.escape(result['history_notice']) + '</p>')
+    spec = result.get('specialist') or (result.get('decision') or {}).get('specialist') or {}
+    if isinstance(spec, dict) and spec.get('name'):
+        lines.append('<p><strong>Especialista acionado:</strong> ' + html.escape(str(spec['name'])) + '</p>')
     decision = result.get('decision') or {}
     if decision:
         lines.append('<p><strong>Decisão interna:</strong> ' + html.escape(str(decision.get('state', ''))) +
