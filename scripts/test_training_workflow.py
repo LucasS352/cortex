@@ -189,6 +189,7 @@ class TrainingWorkflowTests(unittest.TestCase):
                                       'CORTEX_TECHNICIAN_PINS':'1234:Lucas,0000:Marília'}), \
              TestClient(app,base_url='https://desk.cortexalter.tech') as client, \
              patch.object(kt,'ticket_answers',return_value=context), \
+             patch.object(kt,'revision_requests',return_value=[]), \
              patch.object(kt,'taxonomy_options',return_value=[{'key':'fiscal','label':'Fiscal'}]), \
              patch.object(kt,'review_answer',return_value={'candidate_id':8}) as review:
             opened=client.get('/api/treinamento/tecnico/tickets/132084',headers={'X-Cortex-Technician-Pin':'1234'})

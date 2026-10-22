@@ -535,13 +535,16 @@ def search_context_query(question, recent_messages):
     from support_policy import evidence
     curr_ev = evidence(question)
     prev_ev = evidence(previous)
+    prev_plan = knowledge_access.query_plan(previous)
+    if curr_ev["mapping_failure"] and prev_ev["mapping_failure"] and not prev_plan["howto"]:
+        return question[:3500]
     no_entity_conflict = not (curr_ev["entities"] and prev_ev["entities"] and
                               not (set(curr_ev["entities"]) & set(prev_ev["entities"])))
     no_integration_conflict = not (curr_ev["integrations"] and prev_ev["integrations"] and
                                    not (set(curr_ev["integrations"]) & set(prev_ev["integrations"])))
     generic_terms = {"erro", "problema", "sistema", "master", "erp", "pedido", "venda"}
     curr_terms = set(knowledge_access.query_plan(question)["terms"]) - generic_terms
-    prev_terms = set(knowledge_access.query_plan(previous)["terms"]) - generic_terms
+    prev_terms = set(prev_plan["terms"]) - generic_terms
     shared_domain = bool(no_entity_conflict and no_integration_conflict and (
         (set(curr_ev["entities"]) & set(prev_ev["entities"])) or
         (set(curr_ev["integrations"]) & set(prev_ev["integrations"])) or

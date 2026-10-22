@@ -73,6 +73,42 @@ TRANSPORTADORA_REPLY = '''A mensagem indica que a transportadora recebida da Any
 
 Se o retorno não informar qual Carrier foi recebido, envie somente essa identificação da ocorrência antes de criar o relacionamento.'''
 
+
+def build_transportadora_reply(query, norm_text, facts):
+    raw = str(query or '')
+    quoted = re.findall(
+        r'transportadora\s+["“]([^"”\r\n]{2,80})["”]\s+n[aã]o\s+(?:est[aá]\s+)?(?:integrad[ao]|relacionad[ao]|configurad[ao]|cadastrad[ao])',
+        raw, flags=re.I)
+    carrier_field = re.findall(r'carrier(?:\s+retornado\s+pela\s+plataforma)?\s*[:=-]\s*([^\r\n.;,]{2,60})', raw, flags=re.I)
+    external_name = (quoted[-1].strip() if quoted else carrier_field[-1].strip() if carrier_field else '')
+    code_match = re.findall(
+        r'\b(?:transportadora|c[oó]digo)\s+(?:de\s+c[oó]digo\s+)?(\d{1,6})\b',
+        norm_text)
+    target_code = code_match[-1] if code_match else ''
+    is_anymarket = 'anymarket' in facts.get('integrations', ()) or bool(re.search(r'\banymarket\b', norm_text))
+    if is_anymarket and not quoted and not target_code:
+        return TRANSPORTADORA_REPLY
+    origin_label = 'da AnyMarket' if is_anymarket else 'do integrador'
+    site_instruction = 'Selecione a integração AnyMarket' if is_anymarket else 'Selecione o Site/integrador correspondente ao pedido'
+    intro_carrier = f' "{external_name}"' if external_name else ''
+    target_intro = f' Para vinculá-la à transportadora de código {target_code}, faça o de/para assim:' if target_code else ' Faça o de/para assim:'
+    step1 = (f'1. Acesse Cadastros → Outros → Transportadoras e localize a transportadora de código {target_code} no Master '
+             f'(caso o código {target_code} ainda não esteja cadastrado, cadastre a transportadora primeiro).'
+             if target_code else
+             '1. Acesse Cadastros → Outros → Transportadoras e localize a transportadora que deve atender esse pedido no Master '
+             '(caso ainda não esteja cadastrada, cadastre-a primeiro).')
+    step2 = (f'2. Com a transportadora {target_code} selecionada, pressione Ctrl+R para abrir a janela Relação - Site.'
+             if target_code else
+             '2. Com a transportadora selecionada, pressione Ctrl+R para abrir a janela Relação - Site.')
+    step3 = (f'3. {site_instruction}, clique em Adicionar e preencha o campo Código de fora exatamente com o identificador '
+             f'externo informado no erro ("{external_name}"). Não utilize o UUID do código do erro.'
+             if external_name else
+             f'3. {site_instruction}, clique em Adicionar e preencha o campo Código de fora com o nome ou código externo '
+             'da transportadora retornado pelo integrador. Não utilize o UUID do código do erro.')
+    step4 = ('4. Clique no botão verde de confirmação (✔) do registro, salve a janela Relação - Site e reprocesse o pedido '
+             'no sincronizador. A validação é o pedido integrar sem a mensagem de transportadora não integrada.')
+    return f'A mensagem indica que a transportadora{intro_carrier} recebida {origin_label} ainda não está relacionada no Master.{target_intro}\n\n{step1}\n{step2}\n{step3}\n{step4}'
+
 STATE_REGISTRATION_REPLY = '''Olá!
 
 A mensagem “Inscrição Estadual inválida” indica que devemos conferir a IE informada nos dados de entrega da nota fiscal.
@@ -205,28 +241,31 @@ def match(query):
         }
     from support_policy import evidence
     facts = evidence(query)
-    transportadora_anymarket = (
-        (re.search(r'\banymarket\b', text) or
-         (re.search(r'\bcarrier\b', text) and not facts['integrations'])) and
+    transportadora_missing = (
         re.search(r'\b(?:transportadora|metodo de envio|frete|carrier)\b', text) and
         facts['mapping_failure'] and not facts['attempt_already_failed']
     )
-    if transportadora_anymarket:
+    if transportadora_missing:
+        reply_text = build_transportadora_reply(query, text, facts)
+        is_anymarket = 'anymarket' in facts['integrations'] or bool(re.search(r'\banymarket\b', text))
         return {
             'id': 'reviewed-anymarket-carrier-relation-v1', 'source_type': 'REVIEWED_PROCEDURE',
-            'title': 'AnyMarket — relacionar transportadora pelo Ctrl+R',
-            'problem': 'Transportadora/Carrier da AnyMarket sem relacionamento no Master',
-            'solution': TRANSPORTADORA_REPLY, 'reviewed_reply': TRANSPORTADORA_REPLY,
+            'title': ('AnyMarket — relacionar transportadora pelo Ctrl+R'
+                      if is_anymarket else 'Transportadora não integrada — relação pelo Ctrl+R'),
+            'problem': ('Transportadora/Carrier da AnyMarket sem relacionamento no Master'
+                        if is_anymarket else 'Transportadora do integrador sem relacionamento no Master'),
+            'solution': reply_text, 'reviewed_reply': reply_text,
             'applicable': True, 'answer_use': 'procedure_reference',
             'quality_flags': [], 'applicability_reasons': [], 'reviewed_at': '2026-10-21',
             'provenance': ('Procedimento conferido no catálogo oficial do Master: Cadastros > Outros > '
-                           'Transportadoras; Relação - Site pelo atalho Ctrl+R. O Carrier vem do retorno da AnyMarket.'),
+                           'Transportadoras; Relação - Site pelo atalho Ctrl+R.'),
             'resolved_examples': [],
             'images': [
                 {'file': 'anymarket-carrier-relation.png', 'after_step': 3,
                  'name': 'Janela Relação - Site (Ctrl+R)',
-                 'caption': ('Passos 2–3: em Relação - Site (Ctrl+R), selecione AnyMarket e informe o Carrier '
-                             'do pedido em Código de fora. Os valores do print são exemplos.')},
+                 'caption': ('Passos 2–3: em Relação - Site (Ctrl+R), selecione o site/integrador do pedido, '
+                             'informe o identificador externo da transportadora em Código de fora e confirme nos botões verdes (✔). '
+                             'Os valores do print são apenas exemplos.')},
             ],
         }
     # Do not apply this recipe to generic missing orders or orders already

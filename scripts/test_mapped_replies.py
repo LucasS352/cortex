@@ -275,7 +275,32 @@ class MappedReplyTests(unittest.TestCase):
         note = render_note({'reply': source['reviewed_reply'], 'images': images}, 'marker')
         self.assertNotIn('<p><strong>' + html.escape(images[0]['caption']) + '</strong></p>', note)
 
+    def test_synchronizer_transportadora_log_and_target_code_10(self):
+        from technician_workbench import search_context_query
+        log = ('16/01/2025 09:45:44 ------------------------------Forçando Pedido 871'
+               'Não será possível baixar o pedido [871]: Transportadora "Mini Envios Kangu via Ag Correios" '
+               'não integrada.Código do erro: [3F638290-EDEE-474F-BCFA-E66547F56B61]')
+        source_log = mapped.match(log)
+        self.assertIsNotNone(source_log)
+        self.assertIn('Mini Envios Kangu via Ag Correios', source_log['reviewed_reply'])
+        self.assertIn('Ctrl+R', source_log['reviewed_reply'])
+        self.assertNotIn('AnyMarket', source_log['reviewed_reply'])
+
+        recent = [
+            {'role': 'technician', 'content': log},
+            {'role': 'technician', 'content': 'Carrier retornado pela plataforma: FedEx. O pedido não foi integrado porque não existe relacionamento da transportadora no ERP Master.'},
+        ]
+        contextual = search_context_query('quero cadastrar na transportadora 10', recent)
+        self.assertNotIn('FedEx', contextual)
+        source_10 = mapped.match(contextual)
+        self.assertIsNotNone(source_10)
+        self.assertIn('código 10', source_10['reviewed_reply'])
+        self.assertIn('Mini Envios Kangu via Ag Correios', source_10['reviewed_reply'])
+        self.assertNotIn('AnyMarket', source_10['reviewed_reply'])
+        self.assertNotIn('FedEx', source_10['reviewed_reply'])
+
 
 if __name__ == '__main__':
     unittest.main()
+
 

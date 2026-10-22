@@ -711,10 +711,13 @@ def request_revision(candidate_id, actor, reason):
 
 
 def revision_requests(ticket_id):
-    with connect() as conn:
-        return conn.execute("""SELECT id,extraction->'review_request' request FROM cortex_kb.candidates
-            WHERE ticket_external_id=%s AND status IN ('pending','conflict')
-            AND extraction ? 'review_request'""", (ticket_id,)).fetchall()
+    try:
+        with connect() as conn:
+            return conn.execute("""SELECT id,extraction->'review_request' request FROM cortex_kb.candidates
+                WHERE ticket_external_id=%s AND status IN ('pending','conflict')
+                AND extraction ? 'review_request'""", (ticket_id,)).fetchall()
+    except psycopg.Error:
+        return []
 
 
 def reject(candidate_id, actor, reason):
