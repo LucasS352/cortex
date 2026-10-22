@@ -337,6 +337,48 @@ class MappedReplyTests(unittest.TestCase):
     def test_conflicting_destinations_are_not_silently_selected(self):
         self.assertEqual(mapped.carrier_target_code('transportadora 10 ou transportadora 20'), '')
 
+    def test_turn_aware_destination_correction_and_same_turn_ambiguity(self):
+        from technician_workbench import search_context_query
+        log = 'Transportadora "Mini Envios Kangu via Ag Correios" não integrada.'
+        recent_corrected = [
+            {'role': 'technician', 'content': 'quero cadastrar na transportadora 10'},
+            {'role': 'technician', 'content': log},
+        ]
+        corrected_query = search_context_query('perdão, quero cadastrar na transportadora 20', recent_corrected)
+        self.assertEqual(mapped.carrier_target_code(corrected_query), '20')
+        source = mapped.match(corrected_query)
+        self.assertIsNotNone(source)
+        self.assertIn('transportadora de código 20', source['reviewed_reply'])
+        self.assertNotIn('transportadora de código 10', source['reviewed_reply'])
+
+        ambiguous_query = search_context_query('ou melhor, na transportadora 10 ou transportadora 20', recent_corrected)
+        self.assertEqual(mapped.carrier_target_code(ambiguous_query), '')
+        ambiguous_source = mapped.match(ambiguous_query)
+        self.assertIsNotNone(ambiguous_source)
+        self.assertNotRegex(ambiguous_source['reviewed_reply'], r'transportadora de código \d+')
+
+    def test_order_qualified_carrier_phrases_select_recipe_without_false_positives(self):
+        valid_queries = (
+            'A transportadora do pedido não está relacionada no Master.',
+            'Transportadora deste pedido não integrada na AnyMarket.',
+            'Não existe relacionamento para o pedido na transportadora FedEx.',
+            'O frete do pedido não está relacionado no Master.',
+        )
+        for query in valid_queries:
+            with self.subTest(query=query):
+                source = mapped.match(query)
+                self.assertIsNotNone(source)
+                self.assertEqual(source['id'], 'reviewed-anymarket-carrier-relation-v1')
+
+        invalid_queries = (
+            'Transportadora FedEx: pedido não integrado.',
+            'Transportadora FedEx no pedido não integrado.',
+            'API da transportadora FedEx não integrada (HTTP 503).',
+        )
+        for query in invalid_queries:
+            with self.subTest(query=query):
+                self.assertIsNone(mapped.match(query))
+
 
 if __name__ == '__main__':
     unittest.main()

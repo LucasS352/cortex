@@ -341,8 +341,8 @@ def generate_note(ticket, settings, api):
     import ticket_image
     from agent_control import organization
     from technician_workbench import (connection, build_reply, evidence_for_company, environment_card,
-                                      environment_rows, search_context_query, resolved_support_cases, capability_evidence_cases,
-                                      company_case_source)
+                                      environment_rows, active_issue_messages, search_context_query,
+                                      resolved_support_cases, capability_evidence_cases, company_case_source)
     from tech_evidence import ensure_single_tenant
     from conversation_outcome import classify_outcome, RESOLVED_REPLY, ACKNOWLEDGED_REPLY
 
@@ -380,11 +380,13 @@ def generate_note(ticket, settings, api):
     if len(current_attachments) > 2:
         attachment_notices.append('Há outros anexos pendentes de leitura pelo técnico.')
     question += '\n' + '\n'.join(attachment_notices) if attachment_notices else ''
-    query = search_context_query(question, list(reversed(messages[:-1])))
+    recent = list(reversed(messages[:-1]))
+    active_history = active_issue_messages(question, recent)
+    query = search_context_query(question, recent)
     from support_policy import decide
     org_id, org_name, _ = organization(ticket.get('clients'))
     from support_triage import intake
-    triage = intake(question, query, messages[:-1])
+    triage = intake(question, query, active_history)
     if triage and not org_id:
         triage['attachments'].extend(attachment_notices)
         triage['decision'] = decide(query, [])
@@ -401,7 +403,7 @@ def generate_note(ticket, settings, api):
             has_links = conn.execute("SELECT to_regclass('company_environment_links') AS name").fetchone()['name']
             if has_links:
                 envs = [environment_card(e) for e in environment_rows(conn, tenant, org_id)]
-        query = search_context_query(question, list(reversed(messages[:-1])))
+        query = search_context_query(question, recent)
         reviewed = mapped_replies.match(query)
         sources, cases, evidence_scope = [], [], 'general_knowledge'
         has_directory = conn.execute("SELECT to_regclass('movidesk_company_tickets') AS name").fetchone()['name']
@@ -439,7 +441,7 @@ def generate_note(ticket, settings, api):
             for c in company_cases[:3]])
         triage['attachments'].extend(attachment_notices)
         return triage
-    context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in messages[:-1])
+    context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in active_history)
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
            'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
     reply, meta = build_reply(row, context, facts, envs, sources, question, company_cases,

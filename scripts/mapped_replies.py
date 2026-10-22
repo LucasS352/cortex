@@ -75,9 +75,20 @@ Se o retorno não informar qual Carrier foi recebido, envie somente essa identif
 
 
 def carrier_mapping_failure(text):
-    """Require a missing relation on the carrier itself, not another order field."""
-    entity = r'\b(?:transportadora|carrier|metodo de envio|frete)\b'
-    detail = r'(?:(?!\b(?:pedido|pagamento|produto|api|http|nota fiscal)\b)[^.!?;\n]){0,85}'
+    """Require a missing relation on the carrier itself, not another order field or API outage."""
+    explicit_relation = bool(re.search(
+        r'\b(?:relacionamento|relacao|vinculo|de[ /-]?para|relacionad[ao]|vinculad[ao]|associad[ao]|relacionar|vincular)\b',
+        text))
+    if not explicit_relation and re.search(
+            r'\b(?:http(?:/\d\.\d)?\s*[: -]?\s*[45]\d\d|service unavailable|unauthorized|forbidden|'
+            r'bad gateway|gateway timeout|timeout|api\s+da\s+transportadora)\b', text):
+        return False
+    entity = r'(?<!\bapi da )(?<!\bapi de )(?<!\bapi do )\b(?:transportadora|carrier|metodo de envio|frete)\b'
+    unqualified_order = (r'(?<!\bdo )(?<!\bda )(?<!\bdos )(?<!\bdas )(?<!\bdeste )(?<!\bdessa )'
+                         r'(?<!\bnesse )(?<!\bnessa )(?<!\bno )(?<!\bna )(?<!\bpara o )(?<!\bpara a )\bpedidos?\b|'
+                         r'\bpedidos?(?:\s+\d+)?\s+nao\s+(?:esta\s+|foi\s+)?integrado\b')
+    detail = (r'(?:(?!' + unqualified_order +
+              r'|\b(?:pagamento|produto|api|http|timeout|unauthorized|service unavailable|nota fiscal)\b)[^.!?;\n]){0,85}')
     missing = (r'\b(?:nao (?:esta |foi )?(?:integrad[ao]|relacionad[ao]|'
                r'configurad[ao]|cadastrad[ao]|associad[ao])|'
                r'sem (?:relacionamento|vinculo|de[ /-]?para))\b')
@@ -96,18 +107,26 @@ def carrier_mapping_failure(text):
                  re.search(entity + detail + request, text)))
 
 
-def carrier_target_code(text):
-    """Only an explicitly named carrier destination can identify an ERP record."""
-    matches = re.finditer(
-        r'\btransportadora\s+(?:(?:de\s+)?codigo\s*[:=-]?\s*)?(\d{1,6})\b', text)
-    codes = []
-    for match in matches:
-        suffix = text[match.end():]
-        if re.match(r'\s*(?:extern[oa]|d[ao] (?:pedido|plataforma|integrador)|retornad[oa])\b', suffix):
-            continue
-        codes.append(match[1])
-    codes = list(dict.fromkeys(codes))
-    return codes[0] if len(codes) == 1 else ''
+def carrier_target_code(query_or_turns):
+    """Only an explicitly named carrier destination can identify an ERP record (newest turn wins)."""
+    if isinstance(query_or_turns, (list, tuple)):
+        raw_turns = query_or_turns
+    else:
+        raw_turns = getattr(query_or_turns, 'turns', None) or [str(query_or_turns or '')]
+    for raw_turn in reversed(raw_turns):
+        turn = normalized(raw_turn)
+        matches = re.finditer(
+            r'\btransportadora\s+(?:(?:de\s+)?codigo\s*[:=-]?\s*)?(\d{1,6})\b', turn)
+        codes = []
+        for match in matches:
+            suffix = turn[match.end():]
+            if re.match(r'\s*(?:extern[oa]|d[ao] (?:pedido|plataforma|integrador)|retornad[oa])\b', suffix):
+                continue
+            codes.append(match[1])
+        codes = list(dict.fromkeys(codes))
+        if codes:
+            return codes[0] if len(codes) == 1 else ''
+    return ''
 
 
 def build_transportadora_reply(query, norm_text, facts):
@@ -120,7 +139,7 @@ def build_transportadora_reply(query, norm_text, facts):
         raw, flags=re.I))
     names = sorted(quoted + carrier_field, key=lambda match: match.start())
     external_name = names[-1][1].strip() if names else ''
-    target_code = carrier_target_code(norm_text)
+    target_code = carrier_target_code(query)
     is_anymarket = 'anymarket' in facts.get('integrations', ()) or bool(re.search(r'\banymarket\b', norm_text))
     if is_anymarket and not external_name and not target_code:
         return TRANSPORTADORA_REPLY

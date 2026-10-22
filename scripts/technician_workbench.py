@@ -523,24 +523,53 @@ def source_cards(rows):
             for r in rows]
 
 
-def _merge_search_context(question, previous, assistant_raw=''):
-    """Continue the active issue; new requests must not inherit an old diagnosis."""
+class ContextualQuery(str):
+    """Active-issue query string carrying structured technician turn boundaries."""
+    def __new__(cls, value, turns=()):
+        obj = super().__new__(cls, value)
+        obj.turns = tuple(str(t) for t in turns if str(t).strip())
+        return obj
+
+
+def _has_diagnostic_payload(text):
+    """True when text carries a concrete error log, named carrier/entity, or HTTP/API fault."""
+    raw = str(text or '')
+    norm = knowledge_access.normalize(raw)
+    plan = knowledge_access.query_plan(raw)
+    if any(plan[k] for k in ('codes', 'objects', 'identifiers')):
+        return True
+    if re.search(r'\b(?:for[cç]ando pedido|n[aã]o ser[aá] poss[ií]vel baixar o pedido|c[oó]digo do erro|'
+                 r'rejei[cç][aã]o|duplicidade de nf-?e|inscri[cç][aã]o estadual.{0,40}inv[aá]lid[ao]|'
+                 r'ie do destinat[aá]rio.{0,40}inv[aá]lid[ao]|unauthorized|forbidden|exception|'
+                 r'access violation|timeout|service unavailable|bad request|'
+                 r'http(?:/\d\.\d)?\s*[: -]?\s*[45]\d\d)\b', norm):
+        return True
+    if re.search(r'(?:transportadora|forma de pagamento|produto)\s+["“][^"”\r\n]{2,80}["”]', raw, flags=re.I):
+        return True
+    if re.search(r'\bcarrier(?:\s+retornado\s+pela\s+plataforma)?\s*[:=-]\s*[^\r\n.;,]{2,60}', raw, flags=re.I):
+        return True
+    return False
+
+
+def _step_issue_segment(question, segment, active_text, assistant_raw=''):
+    """Advance the active-issue segment with one technician turn, resetting on a new issue."""
+    curr_msg = {'role': 'technician', 'content': question}
     normalized = knowledge_access.normalize(question)
     if re.search(r'\b(?:outr[oa] (?:erro|problema|duvida|assunto)|novo (?:erro|problema|assunto)|'
                  r'nova duvida|mudando de assunto)\b', normalized):
-        return question[:3500]
-    if not previous:
-        return question[:3500]
+        return [curr_msg], question[:3500]
+    if not active_text:
+        return [curr_msg], question[:3500]
     from support_policy import evidence
     curr_ev = evidence(question)
-    prev_ev = evidence(previous)
-    prev_plan = knowledge_access.query_plan(previous)
+    prev_ev = evidence(active_text)
+    prev_plan = knowledge_access.query_plan(active_text)
     no_entity_conflict = not (curr_ev["entities"] and prev_ev["entities"] and
                               not (set(curr_ev["entities"]) & set(prev_ev["entities"])))
     no_integration_conflict = not (curr_ev["integrations"] and prev_ev["integrations"] and
                                    not (set(curr_ev["integrations"]) & set(prev_ev["integrations"])))
     if not no_entity_conflict or not no_integration_conflict:
-        return question[:3500]
+        return [curr_msg], question[:3500]
     generic_terms = {"erro", "problema", "sistema", "master", "erp", "pedido", "venda"}
     curr_terms = set(knowledge_access.query_plan(question)["terms"]) - generic_terms
     prev_terms = set(prev_plan["terms"]) - generic_terms
@@ -553,14 +582,21 @@ def _merge_search_context(question, previous, assistant_raw=''):
     new_request = bool(re.search(r'\b(?:como|qual|quais|onde)\b', normalized))
     if new_request and not referring_back and not curr_ev['mapping_failure'] and (
             not shared_domain or re.search(r'\b(?:cadastrar|consultar|relatorio|emitir|importar|exportar)\b', normalized)):
-        return question[:3500]
-    # A new diagnostic supersedes the old fault. Retain only a known integrator,
-    # never an obsolete Carrier/name/error that could select the previous recipe.
-    if curr_ev['concrete_error'] and (not curr_ev['mapping_failure'] or
-            (prev_ev['mapping_failure'] and not prev_plan['howto'])):
+        return [curr_msg], question[:3500]
+    curr_diag = _has_diagnostic_payload(question)
+    prev_diag = _has_diagnostic_payload(active_text)
+    same_diag = curr_diag and prev_diag and (normalized in knowledge_access.normalize(active_text))
+    # A new autonomous diagnostic log after an already diagnosed turn starts a new issue segment.
+    if curr_diag and prev_diag and not same_diag and not referring_back:
+        return [curr_msg], question[:3500]
+    # When the first concrete diagnostic after a generic opening is a non-mapping fault (e.g. HTTP 503),
+    # retain only the integrator from the opening so generic relation words do not contaminate the fault.
+    if curr_diag and not prev_diag and not curr_ev['mapping_failure']:
         integrations = curr_ev['integrations'] or prev_ev['integrations']
         prefix = 'Integrador informado: ' + ', '.join(integrations) + '\n' if integrations else ''
-        return (prefix + question)[:3500]
+        merged = (prefix + question)[:3500]
+        seed = [{'role': 'technician', 'content': prefix.strip()}] if prefix else []
+        return seed + [curr_msg], merged
     assistant_norm = knowledge_access.normalize(assistant_raw)
     assistant_asked = bool(assistant_raw and (
         "?" in assistant_raw or
@@ -573,28 +609,42 @@ def _merge_search_context(question, previous, assistant_raw=''):
     if (re.search(r'\berro\b', normalized) and
             not re.search(r'\b(mesmo|esse|essa|ainda|continua)\b', normalized) and
             not shared_domain and not diagnostic_followup):
-        return question[:3500]
+        return [curr_msg], question[:3500]
     follow_up = (len(knowledge_access.query_plan(question)["terms"]) <= 3 or
                  bool(re.search(r'\b(verifiquei|olhei|testei|continua|ainda|mesmo|isso|esse|essa)\b', normalized)) or
                  shared_domain or diagnostic_followup)
     if not follow_up:
-        return question[:3500]
-    return (previous[-2200:] + "\n" + question)[:3500]
+        return [curr_msg], question[:3500]
+    return segment + [curr_msg], (active_text[-2200:] + "\n" + question)[:3500]
 
 
-def search_context_query(question, recent_messages):
-    """Reconstruct the active issue from recent messages (newest first)."""
-    active, assistant = '', ''
+def _resolve_active_issue(question, recent_messages):
+    segment, active, assistant = [], '', ''
     for message in reversed(list(recent_messages)[:20]):
         content = str(message.get('content') or '').strip()
         if not content:
             continue
         if message.get('role') == 'technician':
-            active = _merge_search_context(content, active, assistant)
+            segment, active = _step_issue_segment(content, segment, active, assistant)
             assistant = ''
         elif message.get('role') == 'assistant':
             assistant = content
-    return _merge_search_context(question, active, assistant)
+            if segment:
+                segment = segment + [{'role': 'assistant', 'content': content}]
+    return _step_issue_segment(question, segment, active, assistant)
+
+
+def active_issue_messages(question, recent_messages):
+    """Return chronological prior messages belonging to the same active issue as question."""
+    segment, _ = _resolve_active_issue(question, recent_messages)
+    return segment[:-1]
+
+
+def search_context_query(question, recent_messages):
+    """Reconstruct the active issue from recent messages (newest first)."""
+    segment, active = _resolve_active_issue(question, recent_messages)
+    turns = [m['content'] for m in segment if m.get('role') == 'technician']
+    return ContextualQuery(active, turns=turns)
 
 
 def source_fallback(primary, company_case=False):
@@ -775,12 +825,13 @@ def add_message(cid: uuid.UUID, body: NewMessage):
         if confirmed:
             reply, sources, model = ("Ótimo, o resultado foi confirmado. Registre abaixo a ação que você executou e o resultado observado; assim preparo o chamado sem presumir etapas.", [], {"used": False})
         else:
+            active_history = active_issue_messages(question, existing)
             with connection() as conn:
                 search_query = search_context_query(question, existing)
                 sources, cases, _scope = evidence_for_company(
                     conn, tenant, row["movidesk_company_id"], search_query, limit=20)
                 capability_leads = capability_evidence_cases(conn, tenant, search_query)
-            history = "\n".join(f"{m['role']}: {m['content'][:800]}" for m in reversed(existing))
+            history = "\n".join(f"{m['role']}: {m['content'][:800]}" for m in active_history)
             reply, model = build_reply({**row, "company_name": prof["company_name"]}, history, prof["facts"], envs,
                                        sources, question, cases, capability_leads=capability_leads, decision_query=search_query)
         # Only show evidence actually used for the answer. Other search hits may

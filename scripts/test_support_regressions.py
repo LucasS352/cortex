@@ -108,6 +108,121 @@ class SupportRegressionTests(unittest.TestCase):
         self.assertIn('DHL', source['reviewed_reply'])
         self.assertNotIn('FedEx', source['reviewed_reply'])
 
+    def test_four_turn_ticket_132084_kangu_log_does_not_inherit_anymarket_or_fedex(self):
+        from technician_workbench import active_issue_messages, search_context_query
+        turn_1 = 'cara como faço pra relacionar a transportadora, esta dando um erro no pedido da anymarket.'
+        turn_2 = ('Carrier retornado pela plataforma: FedEx. O pedido não foi integrado '
+                  'porque não existe relacionamento da transportadora no ERP Master.')
+        turn_3 = ('16/01/2025 09:45:44 ------------------------------Forçando Pedido 871 '
+                  'Não será possível baixar o pedido [871]: Transportadora "Mini Envios Kangu via Ag Correios" '
+                  'não integrada. Código do erro: [3F638290-EDEE-474F-BCFA-E66547F56B61]')
+        turn_4 = 'quero cadastrar na transportadora 10'
+        recent = [
+            {'role': 'assistant', 'content': 'Identifiquei a transportadora Mini Envios Kangu.'},
+            {'role': 'technician', 'content': turn_3},
+            {'role': 'assistant', 'content': 'Para vincular a FedEx na AnyMarket, use o Ctrl+R.'},
+            {'role': 'technician', 'content': turn_2},
+            {'role': 'assistant', 'content': 'Envie o erro exato.'},
+            {'role': 'technician', 'content': turn_1},
+        ]
+        active_msgs = active_issue_messages(turn_4, recent)
+        active_blob = '\n'.join(m['content'] for m in active_msgs)
+        self.assertIn('Mini Envios Kangu via Ag Correios', active_blob)
+        self.assertNotIn('anymarket', active_blob.lower())
+        self.assertNotIn('fedex', active_blob.lower())
+
+        query = search_context_query(turn_4, recent)
+        self.assertNotIn('anymarket', query.lower())
+        self.assertNotIn('fedex', query.lower())
+        source = mapped_replies.match(query)
+        self.assertIsNotNone(source)
+        self.assertIn('Mini Envios Kangu via Ag Correios', source['reviewed_reply'])
+        self.assertIn('transportadora de código 10', source['reviewed_reply'])
+        self.assertNotIn('AnyMarket', source['reviewed_reply'])
+        self.assertNotIn('FedEx', source['reviewed_reply'])
+
+    def test_repeated_same_log_does_not_drop_opening_integrator(self):
+        from technician_workbench import search_context_query
+        turn_1 = 'Estou com erro de transportadora na AnyMarket'
+        turn_2 = 'Transportadora "FedEx" não integrada.'
+        recent = [
+            {'role': 'technician', 'content': turn_2},
+            {'role': 'technician', 'content': turn_1},
+        ]
+        query = search_context_query(turn_2, recent)
+        self.assertIn('anymarket', query.lower())
+        source = mapped_replies.match(query)
+        self.assertIsNotNone(source)
+        self.assertIn('AnyMarket', source['reviewed_reply'])
+        self.assertIn('FedEx', source['reviewed_reply'])
+
+    def test_worker_and_workbench_llm_prompts_exclude_previous_issue_segment(self):
+        import uuid
+        from unittest.mock import MagicMock, Mock, patch
+        from movidesk_note_worker import Settings, generate_note
+        import technician_workbench as tw
+
+        old_turn_1 = 'Como relacionar transportadora com erro na AnyMarket?'
+        old_turn_2 = 'Carrier: FedEx. Não existe relacionamento da transportadora no ERP Master.'
+        new_turn_3 = ('16/01/2025 09:45:44 ------------------------------Forçando Pedido 871 '
+                      'Não será possível baixar o pedido [871]: Erro desconhecido XYZ999 no sincronizador.')
+        new_turn_4 = 'esse mesmo retorno aparece no pedido 871'
+
+        # 1) Verify Worker prompt sent to llm_client.generate
+        ticket = {
+            'id': 132084,
+            'subject': 'Dúvida sincronizador',
+            'clients': [{'id': 'req', 'email': 'c@example.test',
+                         'organization': {'id': 'org-1', 'businessName': 'Cliente Teste'}}],
+            'actions': [
+                {'id': 1, 'type': 2, 'description': old_turn_1, 'createdBy': {'id': 'req', 'profileType': 2}},
+                {'id': 2, 'type': 2, 'description': old_turn_2, 'createdBy': {'id': 'req', 'profileType': 2}},
+                {'id': 3, 'type': 2, 'description': new_turn_3, 'createdBy': {'id': 'req', 'profileType': 2}},
+                {'id': 4, 'type': 2, 'description': new_turn_4, 'createdBy': {'id': 'req', 'profileType': 2}},
+            ],
+        }
+        conn = MagicMock()
+        conn.__enter__.return_value.execute.return_value.fetchone.return_value = {'name': None}
+        conn.__enter__.return_value.execute.return_value.fetchall.return_value = []
+        llm_ok = {'ok': True, 'text': 'Orientação de investigação sem procedimentos.', 'model': 'gemini-test'}
+        with patch('technician_workbench.connection', return_value=conn), \
+             patch('tech_evidence.ensure_single_tenant', return_value='tenant'), \
+             patch('agent_control.organization', return_value=('org-1', 'Cliente Teste', None)), \
+             patch('knowledge_access.search', return_value=[]), \
+             patch('knowledge_access.approved_procedures', return_value=[]), \
+             patch('technician_workbench.llm_client.generate', return_value=llm_ok) as worker_llm:
+            generate_note(ticket, Settings(), Mock())
+        worker_llm.assert_called_once()
+        worker_prompt = worker_llm.call_args[0][0]
+        self.assertIn('XYZ999', worker_prompt)
+        self.assertNotIn('AnyMarket', worker_prompt)
+        self.assertNotIn('FedEx', worker_prompt)
+
+        # 2) Verify Workbench add_message prompt sent to llm_client.generate
+        existing_desc = [
+            {'role': 'technician', 'content': new_turn_3},
+            {'role': 'technician', 'content': old_turn_2},
+            {'role': 'technician', 'content': old_turn_1},
+        ]
+        wb_conn = MagicMock()
+        wb_conn.__enter__.return_value.execute.return_value.fetchall.return_value = existing_desc
+        wb_conn.__enter__.return_value.execute.return_value.fetchone.return_value = {'id': 99}
+        with patch.object(tw, 'connection', return_value=wb_conn), \
+             patch.object(tw, 'ensure_single_tenant', return_value='tenant'), \
+             patch.object(tw, 'conversation', return_value={'id': uuid.uuid4(), 'status': 'open', 'movidesk_company_id': 'org-1', 'subject': 'Teste'}), \
+             patch.object(tw, 'profile', return_value={'company_name': 'Cliente Teste', 'facts': []}), \
+             patch.object(tw, 'environment_rows', return_value=[]), \
+             patch.object(tw, 'evidence_for_company', return_value=([], [], 'general_knowledge')), \
+             patch.object(tw, 'capability_evidence_cases', return_value=[]), \
+             patch('support_events.record'), \
+             patch('technician_workbench.llm_client.generate', return_value=llm_ok) as wb_llm:
+            tw.add_message(uuid.uuid4(), tw.NewMessage(content=new_turn_4))
+        wb_llm.assert_called_once()
+        wb_prompt = wb_llm.call_args[0][0]
+        self.assertIn('XYZ999', wb_prompt)
+        self.assertNotIn('AnyMarket', wb_prompt)
+        self.assertNotIn('FedEx', wb_prompt)
+
 
 if __name__ == '__main__':
     unittest.main()
