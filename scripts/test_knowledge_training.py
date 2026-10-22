@@ -56,6 +56,36 @@ def test_hallucinated_quote_is_flagged():
     assert check(real) and not check(fake)
 
 
+def test_ticket_text_keeps_customer_and_human_resolution_but_drops_automatic_receipt():
+    actions = [
+        {'id': 1, 'type': 2, 'createdDate': '2026-10-21', 'createdBy': {'profileType': 2},
+         'description': 'Pedido da Magazord não integrou.'},
+        {'id': 2, 'type': 2, 'createdDate': '2026-10-22T08:00', 'createdBy': {'profileType': 3},
+         'description': 'Recebemos a sua solicitação e encaminhamos para o atendente que irá iniciar a análise do caso.'},
+        {'id': 3, 'type': 2, 'createdDate': '2026-10-22T09:00', 'createdBy': {'profileType': '3'},
+         'description': 'Relacionamos o código de fora e o pedido foi integrado com sucesso.'},
+    ]
+    text = kt.ticket_text({'subject': 'Venda não integrada'}, actions)
+    assert '[Ação 1 · Cliente]' in text
+    assert '[Ação 3 · Técnico]' in text
+    assert 'integrado com sucesso' in text
+    assert 'Recebemos a sua solicitação' not in text
+
+
+def test_technician_successful_result_makes_resolved_procedure_useful():
+    ticket = {'base_status': 'Resolved', 'quality_tier': 'SILVER', 'subject': 'Venda Magazord não integrada',
+              'solution_statement': ('Entramos no cadastro do produto, inserimos o código de fora e o tipo S. '
+                                     'Após realizarmos esse processo o pedido foi integrado com sucesso.')}
+    actions = [
+        {'id': 1, 'type': 2, 'createdBy': {'profileType': 2}, 'description': 'Venda não integra.'},
+        {'id': 3, 'type': 2, 'createdBy': {'profileType': 3},
+         'description': ticket['solution_statement']},
+    ]
+    score, signals, eligible = kt.usefulness(ticket, actions)
+    assert eligible and score >= kt.SUGGESTION_THRESHOLD
+    assert any('resultado bem-sucedido' in item['label'] for item in signals)
+
+
 def existing(**over):
     base = {'module_key': 'fiscal', 'symptom': 'Nota rejeitada 539 duplicidade NF-e', 'error_messages': ['Rejeição 539'],
             'procedure': 'Alterar série da nota fiscal e retransmitir', 'applicability': {}}

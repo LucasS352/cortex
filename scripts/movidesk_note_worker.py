@@ -235,9 +235,12 @@ def automatic_receipt_action(action):
     if str(action.get('type')) != '2':
         return False
     text = plain(action.get('description')).casefold()
-    return ('seu chamado foi recebido' in text and
-            'iremos realizar a triagem' in text and
-            'atendente do suporte' in text)
+    return (('seu chamado foi recebido' in text and
+             'iremos realizar a triagem' in text and
+             'atendente do suporte' in text) or
+            ('recebemos a sua solicitação' in text and
+             'encaminhamos para' in text and
+             'iniciar a análise do caso' in text))
 
 
 def actions(ticket, settings):

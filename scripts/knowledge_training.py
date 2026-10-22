@@ -87,6 +87,8 @@ def sanitize(text):
 _WEAK = re.compile(r'reinici|sem retorno|nao respondeu|nao retornou|inatividade|encerrad[oa] automatic|'
                    r'duplicad|resolveu sozinh|normalizou sozinh|voltou a funcionar sozinh|abrir outro (ticket|chamado)')
 _CONFIRM = re.compile(r'funcionou|deu certo|resolvid|resolveu|ok,? obrigad|agora (foi|esta|ta) (ok|certo|funcionando)|perfeito')
+_TECHNICAL_SUCCESS = re.compile(r'integrad[oa] com sucesso|inclu[ií]d[oa] com sucesso|emitid[oa] com sucesso|'
+                                r'transmitid[oa] com sucesso|processad[oa] com sucesso|resolvid[oa] com sucesso')
 _STEPS = re.compile(r'(^|\n)\s*(\d+[.)-]|passo|- )|acess(e|ar) o menu|configura(c|r)|cadastr|marque|desmarque|altere|parametr|>')
 _ERROR = re.compile(r'rejei(c|ç)|erro\s*\d+|codigo\s*\d+|exception|falha (na|ao)|\b[a-z]*error\b')
 _AGENT_PROFILES = {1, 3}
@@ -94,7 +96,17 @@ _AGENT_PROFILES = {1, 3}
 
 def is_agent(action):
     created_by = action.get('createdBy') or {}
-    return created_by.get('profileType') in _AGENT_PROFILES or action.get('type') == 1
+    return str(created_by.get('profileType')) in {str(value) for value in _AGENT_PROFILES} or str(action.get('type')) == '1'
+
+
+def curation_actions(actions):
+    """Return the real customer/technician conversation in chronological order."""
+    from movidesk_note_worker import automatic_receipt_action
+    return sorted((action for action in actions or [] if isinstance(action, dict)
+                   and action.get('id') is not None and not action.get('isDeleted')
+                   and 'CORTEX-AI-NOTE:' not in str(action.get('description') or '')
+                   and not automatic_receipt_action(action)),
+                  key=lambda action: (str(action.get('createdDate') or ''), int(action.get('id') or 0)))
 
 
 def usefulness(ticket, actions=()):
@@ -138,6 +150,8 @@ def usefulness(ticket, actions=()):
     agent_texts = [t for a, t in zip(actions, texts) if is_agent(a)]
     if _STEPS.search(solution) or any(_STEPS.search(t) for t in agent_texts):
         add(10, 'Técnico descreveu procedimento')
+    if _TECHNICAL_SUCCESS.search(solution) or any(_TECHNICAL_SUCCESS.search(t) for t in agent_texts):
+        add(10, 'Técnico registrou o resultado bem-sucedido')
     last_agent = max((i for i, a in enumerate(actions) if is_agent(a)), default=-1)
     if any(_CONFIRM.search(t) for a, t in list(zip(actions, texts))[last_agent + 1:] if not is_agent(a)):
         add(15, 'Cliente confirmou a solução')
@@ -185,7 +199,8 @@ def ticket_text(ticket, actions=(), limit=14000):
              f"Serviço: {ticket.get('service_full') or ''}",
              f"Problema (refinaria): {ticket.get('problem_statement') or ''}",
              f"Solução registrada: {ticket.get('solution_statement') or ''}"]
-    parts += [f"[{labels(a)}] {str(a.get('description') or '')[:1500]}" for a in list(actions)[-40:]
+    parts += [f"[Ação {a.get('id')} · {labels(a)}] {str(a.get('description') or '')[:1500]}"
+              for a in curation_actions(actions)[-40:]
               if (a.get('description') or '').strip()]
     return sanitize('\n'.join(parts))[:limit]
 
@@ -367,19 +382,79 @@ def load_ticket(conn, external_id):
     return dict(ticket), [a for a in actions if isinstance(a, dict)]
 
 
+def refresh_live_ticket(external_id):
+    """Refresh one ticket from Movidesk before curating it.
+
+    Curating a stale snapshot can omit the technician's resolution and turn a
+    useful ticket into a question-only draft. The manual curation action is a
+    suitable place for this bounded, read-only Movidesk fetch.
+    """
+    from config import MOVIDESK_TOKEN
+    if not MOVIDESK_TOKEN:
+        raise RuntimeError('Token do Movidesk ausente; não foi possível atualizar o chamado antes da curadoria.')
+    from movidesk_note_worker import Api, RetryJob, Settings, persist_operational_ticket
+    api = Api(Settings(interval=0))
+    try:
+        ticket = api.ticket(external_id)
+    except RetryJob as exc:
+        raise RuntimeError('Não foi possível atualizar o chamado no Movidesk antes da curadoria: ' + str(exc)) from exc
+    finally:
+        api.client.close()
+    persist_operational_ticket(ticket)
+    return ticket
+
+
+def _refresh_open_candidate(candidate_id, external_id, actor, force):
+    """Re-extract an existing open candidate after its live ticket was refreshed."""
+    with connect() as conn:
+        ticket, actions = load_ticket(conn, external_id)
+    actions = curation_actions(actions)
+    score, signals, eligible = usefulness(ticket, actions)
+    if not eligible and not force:
+        raise PermissionError(json.dumps({'score': score, 'signals': signals}, ensure_ascii=False))
+    extraction, text, extractor = extract(ticket, actions)
+    module = extraction['module_hint']
+    sub = taxonomy.subtopic(module, extraction['title'], [extraction['symptom'] or ''])
+    checks = quality_checks(extraction, text)
+    with connect() as conn:
+        related = find_related(conn, extraction, module)
+        status = 'conflict' if any(item['relation'] == 'conflict' for item in related) else 'pending'
+        conn.execute('''UPDATE cortex_kb.conflicts SET status='dismissed',resolved_by=%s,resolved_at=now(),
+            resolution_note='Candidato reextraído após atualização do chamado'
+            WHERE candidate_id=%s AND status='open' ''', (actor, candidate_id))
+        conn.execute('''UPDATE cortex_kb.candidates SET status=%s,usefulness_score=%s,usefulness_signals=%s,
+            extraction=%s,quality_checks=%s,suggested_module=%s,suggested_subtopic=%s,similar_items=%s,
+            extractor=%s WHERE id=%s''',
+            (status, score, Jsonb(signals), Jsonb(extraction), Jsonb(checks), module, sub,
+             Jsonb(related), extractor, candidate_id))
+        for item in related:
+            if item['relation'] == 'conflict':
+                conn.execute('INSERT INTO cortex_kb.conflicts(item_id,candidate_id,reason) VALUES (%s,%s,%s)',
+                             (item['item_id'], candidate_id,
+                              f"Ticket #{external_id}: " + '; '.join(item['reasons'])))
+        audit(conn, 'candidate', candidate_id, 'refreshed', actor,
+              'Chamado atualizado no Movidesk e histórico completo reextraído',
+              after={'ticket': external_id, 'score': score, 'status': status})
+    return get_candidate(candidate_id)
+
+
 # ───────────────────────────── 4. fila de curadoria ─────────────────────────────
 
-def create_candidate(external_id, actor, force=False, action_id=None, module_key=None, proposal=None):
+def create_candidate(external_id, actor, force=False, action_id=None, module_key=None, proposal=None,
+                     refresh_live=False):
     """Analista clicou em 'Transformar em Conhecimento' (ou aceitou uma sugestão)."""
     ensure_schema()
+    if refresh_live:
+        refresh_live_ticket(external_id)
     with connect() as conn:
         open_ = conn.execute("SELECT id FROM cortex_kb.candidates WHERE ticket_external_id=%s AND status IN ('pending','conflict')",
                              (external_id,)).fetchone()
-        if open_:
-            existing = get_candidate(open_['id'])
-            if action_id and existing.get('source_action_id') != str(action_id):
-                raise RuntimeError('Já existe revisão aberta de outra resposta deste ticket. Conclua ou rejeite antes de selecionar outra.')
-            if proposal:
+    if open_:
+        existing = get_candidate(open_['id'])
+        if action_id and existing.get('source_action_id') != str(action_id):
+            raise RuntimeError('Já existe revisão aberta de outra resposta deste ticket. Conclua ou rejeite antes de selecionar outra.')
+        if proposal:
+            with connect() as conn:
                 extraction = dict(existing.get('extraction') or {})
                 extraction.pop('review_request', None)
                 extraction.update(title=proposal['title'], procedure=proposal['procedure'],
@@ -397,7 +472,12 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
                 audit(conn, 'candidate', open_['id'], 'technician:revised', actor,
                       'Proposta reenviada para curadoria', after={'extraction': extraction})
             return existing
+        if refresh_live and not action_id:
+            return _refresh_open_candidate(open_['id'], external_id, actor, force)
+        return existing
+    with connect() as conn:
         ticket, actions = load_ticket(conn, external_id)
+        actions = curation_actions(actions)
         if action_id:
             selected = select_answer(actions, action_id)
             from movidesk_note_worker import plain

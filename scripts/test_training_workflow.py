@@ -164,6 +164,20 @@ class TrainingWorkflowTests(unittest.TestCase):
             result=client.post('/api/treinamento/tickets/131726/avaliar',json={'action_id':'1','module_key':'fiscal','rating':0})
             self.assertEqual(result.status_code,422); review.assert_not_called()
 
+    def test_transform_refreshes_live_ticket_before_extraction(self):
+        app=FastAPI(); app.include_router(router)
+        with TestClient(app) as client, \
+             patch.object(kt,'create_candidate',return_value={'id':12}) as create:
+            result=client.post('/api/treinamento/candidatos',json={'ticket_external_id':132176,'force':True})
+        self.assertEqual(result.status_code,200)
+        create.assert_called_once_with(132176,'tecnico_local',True,refresh_live=True)
+
+    def test_candidate_screen_does_not_mix_global_image_library(self):
+        page=Path(__file__).parent/'static'/'treinamento.html'
+        text=page.read_text(encoding='utf-8')
+        self.assertIn('contentForm(content,true)',text)
+        self.assertIn('A biblioteca global não é misturada ao chamado.',text)
+
     def test_review_api_forwards_example_ticket(self):
         app=FastAPI(); app.include_router(router)
         with TestClient(app) as client, patch.object(kt,'review_answer',return_value={'id':4,'candidate_id':8}) as review:

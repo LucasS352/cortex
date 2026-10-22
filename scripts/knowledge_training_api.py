@@ -208,7 +208,8 @@ def candidates(module: str | None = None, status: str = 'open'):
 @router.post('/candidatos')
 def create_candidate(body: NewCandidate, request: Request):
     """Botão 'Transformar em Conhecimento'."""
-    return _guard(kt.create_candidate, body.ticket_external_id, actor(request), body.force)
+    return _guard(kt.create_candidate, body.ticket_external_id, actor(request), body.force,
+                  refresh_live=True)
 
 
 @router.get('/candidatos/{candidate_id}')
