@@ -299,6 +299,44 @@ class MappedReplyTests(unittest.TestCase):
         self.assertNotIn('AnyMarket', source_10['reviewed_reply'])
         self.assertNotIn('FedEx', source_10['reviewed_reply'])
 
+    def test_api_failure_does_not_authorize_carrier_mapping(self):
+        queries = (
+            'AnyMarket: pedido não integrado porque a API da transportadora retornou HTTP 503 Service Unavailable.',
+            'Pedido não integrado: timeout na API da transportadora FedEx.',
+            'Transportadora FedEx: API não integrada por HTTP 401 Unauthorized.',
+        )
+        for query in queries:
+            with self.subTest(query=query):
+                self.assertIsNone(mapped.match(query))
+
+    def test_other_entity_failure_does_not_select_carrier_recipe(self):
+        source = mapped.match('AnyMarket pedido não integrado: forma de pagamento não integrada. Transportadora FedEx.')
+        self.assertEqual(source['id'], 'reviewed-payment-relation-v1')
+        self.assertIsNone(mapped.match('Produto não integrado. Transportadora FedEx.'))
+        self.assertFalse(mapped.carrier_mapping_failure(
+            'Transportadora FedEx, forma de pagamento não integrada.'))
+
+    def test_order_external_and_error_codes_are_not_carrier_destination(self):
+        for detail in ('Código 871 do pedido.', 'Código 123 externo recebido da plataforma.',
+                       'Código 503 do erro.', 'Transportadora 123 externa da plataforma.'):
+            with self.subTest(detail=detail):
+                source = mapped.match('Transportadora "FedEx" não integrada. ' + detail)
+                self.assertIsNotNone(source)
+                self.assertNotRegex(source['reviewed_reply'], r'transportadora (?:de código )?\d+')
+                self.assertNotIn('cadastre a transportadora primeiro', source['reviewed_reply'])
+
+    def test_only_explicit_internal_carrier_code_is_bound(self):
+        for detail in ('Quero relacionar à transportadora 10.',
+                       'Usar transportadora de código 10 no Master.',
+                       'Código 871 do pedido. Quero relacionar à transportadora 10.'):
+            with self.subTest(detail=detail):
+                source = mapped.match('Transportadora "FedEx" não integrada. ' + detail)
+                self.assertIn('transportadora de código 10', source['reviewed_reply'])
+                self.assertNotIn('transportadora de código 871', source['reviewed_reply'])
+
+    def test_conflicting_destinations_are_not_silently_selected(self):
+        self.assertEqual(mapped.carrier_target_code('transportadora 10 ou transportadora 20'), '')
+
 
 if __name__ == '__main__':
     unittest.main()

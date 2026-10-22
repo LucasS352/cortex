@@ -523,25 +523,24 @@ def source_cards(rows):
             for r in rows]
 
 
-def search_context_query(question, recent_messages):
-    """Carry the last technical report into a short follow-up, never across a new issue."""
+def _merge_search_context(question, previous, assistant_raw=''):
+    """Continue the active issue; new requests must not inherit an old diagnosis."""
     normalized = knowledge_access.normalize(question)
-    if re.search(r'\b(agora|outro|outra|novo|nova|mudando de assunto)\b', normalized):
+    if re.search(r'\b(?:outr[oa] (?:erro|problema|duvida|assunto)|novo (?:erro|problema|assunto)|'
+                 r'nova duvida|mudando de assunto)\b', normalized):
         return question[:3500]
-    previous = next((m["content"] for m in recent_messages
-                     if m["role"] == "technician" and m["content"].strip()), "")
     if not previous:
         return question[:3500]
     from support_policy import evidence
     curr_ev = evidence(question)
     prev_ev = evidence(previous)
     prev_plan = knowledge_access.query_plan(previous)
-    if curr_ev["mapping_failure"] and prev_ev["mapping_failure"] and not prev_plan["howto"]:
-        return question[:3500]
     no_entity_conflict = not (curr_ev["entities"] and prev_ev["entities"] and
                               not (set(curr_ev["entities"]) & set(prev_ev["entities"])))
     no_integration_conflict = not (curr_ev["integrations"] and prev_ev["integrations"] and
                                    not (set(curr_ev["integrations"]) & set(prev_ev["integrations"])))
+    if not no_entity_conflict or not no_integration_conflict:
+        return question[:3500]
     generic_terms = {"erro", "problema", "sistema", "master", "erp", "pedido", "venda"}
     curr_terms = set(knowledge_access.query_plan(question)["terms"]) - generic_terms
     prev_terms = set(prev_plan["terms"]) - generic_terms
@@ -550,8 +549,18 @@ def search_context_query(question, recent_messages):
         (set(curr_ev["integrations"]) & set(prev_ev["integrations"])) or
         (curr_terms & prev_terms)
     ))
-    assistant_raw = next((m["content"] for m in recent_messages
-                          if m["role"] == "assistant" and m["content"].strip()), "")
+    referring_back = bool(re.search(r'\b(?:mesmo|esse|essa|isso|ainda|continua|verifiquei|testei)\b', normalized))
+    new_request = bool(re.search(r'\b(?:como|qual|quais|onde)\b', normalized))
+    if new_request and not referring_back and not curr_ev['mapping_failure'] and (
+            not shared_domain or re.search(r'\b(?:cadastrar|consultar|relatorio|emitir|importar|exportar)\b', normalized)):
+        return question[:3500]
+    # A new diagnostic supersedes the old fault. Retain only a known integrator,
+    # never an obsolete Carrier/name/error that could select the previous recipe.
+    if curr_ev['concrete_error'] and (not curr_ev['mapping_failure'] or
+            (prev_ev['mapping_failure'] and not prev_plan['howto'])):
+        integrations = curr_ev['integrations'] or prev_ev['integrations']
+        prefix = 'Integrador informado: ' + ', '.join(integrations) + '\n' if integrations else ''
+        return (prefix + question)[:3500]
     assistant_norm = knowledge_access.normalize(assistant_raw)
     assistant_asked = bool(assistant_raw and (
         "?" in assistant_raw or
@@ -571,6 +580,21 @@ def search_context_query(question, recent_messages):
     if not follow_up:
         return question[:3500]
     return (previous[-2200:] + "\n" + question)[:3500]
+
+
+def search_context_query(question, recent_messages):
+    """Reconstruct the active issue from recent messages (newest first)."""
+    active, assistant = '', ''
+    for message in reversed(list(recent_messages)[:20]):
+        content = str(message.get('content') or '').strip()
+        if not content:
+            continue
+        if message.get('role') == 'technician':
+            active = _merge_search_context(content, active, assistant)
+            assistant = ''
+        elif message.get('role') == 'assistant':
+            assistant = content
+    return _merge_search_context(question, active, assistant)
 
 
 def source_fallback(primary, company_case=False):

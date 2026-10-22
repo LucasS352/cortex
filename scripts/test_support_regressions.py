@@ -50,6 +50,64 @@ class SupportRegressionTests(unittest.TestCase):
         self.assertEqual(len(images), 1)
         self.assertFalse(notices)
 
+    def test_short_new_requests_do_not_reuse_carrier_diagnosis(self):
+        from technician_workbench import search_context_query
+        recent = [{'role': 'assistant', 'content': 'Informe o Carrier.'},
+                  {'role': 'technician', 'content': 'AnyMarket transportadora sem relacionamento'}]
+        for question in ('Como cadastrar um produto?', 'Como configurar forma de pagamento?',
+                         'Qual relatório de vendas?', 'Como cadastrar transportadora?'):
+            with self.subTest(question=question):
+                query = search_context_query(question, recent)
+                self.assertEqual(query, question)
+                self.assertIsNone(mapped_replies.match(query))
+
+    def test_three_turn_followup_preserves_integrator_and_current_carrier(self):
+        from technician_workbench import search_context_query
+        recent = [
+            {'role': 'assistant', 'content': 'Confira a relação no Ctrl+R.'},
+            {'role': 'technician', 'content': 'Carrier: FedEx. Não existe relacionamento da transportadora no ERP Master.'},
+            {'role': 'assistant', 'content': 'Envie o erro completo.'},
+            {'role': 'technician', 'content': 'Como faço pra relacionar a transportadora com erro na AnyMarket?'},
+        ]
+        query = search_context_query('Agora quero relacionar na transportadora 10', recent)
+        source = mapped_replies.match(query)
+        self.assertIn('anymarket', query.lower())
+        self.assertIn('transportadora de código 10', source['reviewed_reply'])
+        self.assertIn('FedEx', source['reviewed_reply'])
+
+    def test_new_diagnostic_does_not_keep_old_missing_relation(self):
+        from technician_workbench import search_context_query
+        recent = [{'role': 'technician', 'content': 'AnyMarket: transportadora sem relacionamento'}]
+        query = search_context_query('HTTP 503 Service Unavailable na API da transportadora', recent)
+        self.assertIn('anymarket', query.lower())
+        self.assertNotIn('sem relacionamento', query)
+        self.assertIsNone(mapped_replies.match(query))
+
+    def test_replacement_log_does_not_inherit_old_carrier_name(self):
+        from technician_workbench import search_context_query
+        recent = [{'role': 'technician', 'content': 'AnyMarket: Transportadora "FedEx" não integrada'}]
+        query = search_context_query('Transportadora "DHL" não integrada', recent)
+        source = mapped_replies.match(query)
+        self.assertIn('DHL', source['reviewed_reply'])
+        self.assertNotIn('FedEx', source['reviewed_reply'])
+
+    def test_short_followup_after_topic_change_does_not_resurrect_carrier(self):
+        from technician_workbench import search_context_query
+        query = search_context_query('Onde fica?', [
+            {'role': 'technician', 'content': 'Como cadastrar um produto?'},
+            {'role': 'technician', 'content': 'AnyMarket transportadora sem relacionamento'}])
+        self.assertNotIn('transportadora', query)
+        self.assertIsNone(mapped_replies.match(query))
+
+    def test_latest_carrier_field_replaces_quoted_name_in_active_issue(self):
+        from technician_workbench import search_context_query
+        recent = [{'role': 'technician', 'content': 'Agora o Carrier é DHL'},
+                  {'role': 'technician', 'content': 'AnyMarket: Transportadora "FedEx" não integrada'}]
+        query = search_context_query('Quero relacionar na transportadora 10', recent)
+        source = mapped_replies.match(query)
+        self.assertIn('DHL', source['reviewed_reply'])
+        self.assertNotIn('FedEx', source['reviewed_reply'])
+
 
 if __name__ == '__main__':
     unittest.main()

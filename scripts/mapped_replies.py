@@ -74,29 +74,65 @@ TRANSPORTADORA_REPLY = '''A mensagem indica que a transportadora recebida da Any
 Se o retorno não informar qual Carrier foi recebido, envie somente essa identificação da ocorrência antes de criar o relacionamento.'''
 
 
+def carrier_mapping_failure(text):
+    """Require a missing relation on the carrier itself, not another order field."""
+    entity = r'\b(?:transportadora|carrier|metodo de envio|frete)\b'
+    detail = r'(?:(?!\b(?:pedido|pagamento|produto|api|http|nota fiscal)\b)[^.!?;\n]){0,85}'
+    missing = (r'\b(?:nao (?:esta |foi )?(?:integrad[ao]|relacionad[ao]|'
+               r'configurad[ao]|cadastrad[ao]|associad[ao])|'
+               r'sem (?:relacionamento|vinculo|de[ /-]?para))\b')
+    absent_relation = (r'\b(?:nao (?:existe|ha|possui) (?:o |um )?'
+                       r'(?:relacionamento|relacao|vinculo)|'
+                       r'sem (?:relacionamento|vinculo|de[ /-]?para))\b')
+    if (re.search(entity + detail + missing, text) or
+            re.search(absent_relation + detail + entity, text) or
+            re.search(r'\b(?:relacao|relacionamento|vinculo)\b' + detail + entity +
+                      detail + r'\bnao encontrad[ao]\b', text)):
+        return True
+    # An explicit request to relate the carrier is also a supported use case.
+    request = r'\b(?:relacionar|vincular|fazer (?:o )?de[ /-]?para)\b'
+    return bool(re.search(r'\b(?:como|erro)\b', text) and
+                (re.search(request + detail + entity, text) or
+                 re.search(entity + detail + request, text)))
+
+
+def carrier_target_code(text):
+    """Only an explicitly named carrier destination can identify an ERP record."""
+    matches = re.finditer(
+        r'\btransportadora\s+(?:(?:de\s+)?codigo\s*[:=-]?\s*)?(\d{1,6})\b', text)
+    codes = []
+    for match in matches:
+        suffix = text[match.end():]
+        if re.match(r'\s*(?:extern[oa]|d[ao] (?:pedido|plataforma|integrador)|retornad[oa])\b', suffix):
+            continue
+        codes.append(match[1])
+    codes = list(dict.fromkeys(codes))
+    return codes[0] if len(codes) == 1 else ''
+
+
 def build_transportadora_reply(query, norm_text, facts):
     raw = str(query or '')
-    quoted = re.findall(
+    quoted = list(re.finditer(
         r'transportadora\s+["“]([^"”\r\n]{2,80})["”]\s+n[aã]o\s+(?:est[aá]\s+)?(?:integrad[ao]|relacionad[ao]|configurad[ao]|cadastrad[ao])',
-        raw, flags=re.I)
-    carrier_field = re.findall(r'carrier(?:\s+retornado\s+pela\s+plataforma)?\s*[:=-]\s*([^\r\n.;,]{2,60})', raw, flags=re.I)
-    external_name = (quoted[-1].strip() if quoted else carrier_field[-1].strip() if carrier_field else '')
-    code_match = re.findall(
-        r'\b(?:transportadora|c[oó]digo)\s+(?:de\s+c[oó]digo\s+)?(\d{1,6})\b',
-        norm_text)
-    target_code = code_match[-1] if code_match else ''
+        raw, flags=re.I))
+    carrier_field = list(re.finditer(
+        r'\bcarrier(?:\s+retornado\s+pela\s+plataforma)?\s*(?:[:=-]|\b[ée]\b)\s*([^\r\n.;,]{2,60})',
+        raw, flags=re.I))
+    names = sorted(quoted + carrier_field, key=lambda match: match.start())
+    external_name = names[-1][1].strip() if names else ''
+    target_code = carrier_target_code(norm_text)
     is_anymarket = 'anymarket' in facts.get('integrations', ()) or bool(re.search(r'\banymarket\b', norm_text))
-    if is_anymarket and not quoted and not target_code:
+    if is_anymarket and not external_name and not target_code:
         return TRANSPORTADORA_REPLY
     origin_label = 'da AnyMarket' if is_anymarket else 'do integrador'
     site_instruction = 'Selecione a integração AnyMarket' if is_anymarket else 'Selecione o Site/integrador correspondente ao pedido'
     intro_carrier = f' "{external_name}"' if external_name else ''
     target_intro = f' Para vinculá-la à transportadora de código {target_code}, faça o de/para assim:' if target_code else ' Faça o de/para assim:'
     step1 = (f'1. Acesse Cadastros → Outros → Transportadoras e localize a transportadora de código {target_code} no Master '
-             f'(caso o código {target_code} ainda não esteja cadastrado, cadastre a transportadora primeiro).'
+             '(confirme que este é o cadastro interno correto antes de salvar a relação).'
              if target_code else
-             '1. Acesse Cadastros → Outros → Transportadoras e localize a transportadora que deve atender esse pedido no Master '
-             '(caso ainda não esteja cadastrada, cadastre-a primeiro).')
+             '1. Acesse Cadastros → Outros → Transportadoras e confirme qual cadastro interno deve atender esse pedido no Master. '
+             'Não confunda o código do pedido ou o identificador externo com o código interno da transportadora.')
     step2 = (f'2. Com a transportadora {target_code} selecionada, pressione Ctrl+R para abrir a janela Relação - Site.'
              if target_code else
              '2. Com a transportadora selecionada, pressione Ctrl+R para abrir a janela Relação - Site.')
@@ -242,8 +278,7 @@ def match(query):
     from support_policy import evidence
     facts = evidence(query)
     transportadora_missing = (
-        re.search(r'\b(?:transportadora|metodo de envio|frete|carrier)\b', text) and
-        facts['mapping_failure'] and not facts['attempt_already_failed']
+        carrier_mapping_failure(text) and not facts['attempt_already_failed']
     )
     if transportadora_missing:
         reply_text = build_transportadora_reply(query, text, facts)
