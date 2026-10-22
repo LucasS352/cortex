@@ -83,6 +83,27 @@ DEFAULT_SPECIALISTS = [
         "keywords": [".fr3", "fastreport", "etiqueta", "zebra", "argox", "elgin", "termica", "bobina", "margem", "cortada", "desalinhada", "codigo de barras", "relatorio personalizado"]
     },
     {
+        "id": "reports",
+        "name": "Relatórios & Indicadores",
+        "icon": "📊",
+        "modules": ["reports"],
+        "enabled": True,
+        "description": "Catálogo e uso dos relatórios de Vendas, Estoque, Financeiro, Compras, Fiscal e indicadores como margem, markup, CMV e Curva ABC.",
+        "prompt": (
+            "Você é especialista no catálogo de relatórios e indicadores do ERP Master. "
+            "Identifique a necessidade de negócio, selecione o relatório adequado e explique seus filtros, "
+            "colunas e interpretação usando somente procedimentos recuperados da base de conhecimento. "
+            "Consulte fontes de todos os módulos relacionados ao relatório. Diferencie margem/markup/CMV "
+            "de margem física de impressão e diferencie uso do relatório de erro, divergência ou customização FR3. "
+            "Nunca invente caminho de menu, nome de campo ou regra de cálculo ausente nas fontes."
+        ),
+        "keywords": [
+            "relatorio", "relatorios", "indicador", "indicadores", "margem de venda", "margem de lucro",
+            "markup", "cmv", "rentabilidade", "curva abc", "estatistica de vendas", "vendas por produto",
+            "posicao de estoque", "fechamento", "projecao de compras"
+        ]
+    },
+    {
         "id": "integrations",
         "name": "Hubs & Integrações",
         "icon": "🔌",
@@ -171,8 +192,13 @@ def get_state():
         try:
             state = json.loads(STATE_FILE.read_text(encoding="utf-8"))
             merged = {**DEFAULT_STATE, **state, "human_review_required": True, "auto_send_enabled": False}
-            if not merged.get("specialists"):
-                merged["specialists"] = DEFAULT_SPECIALISTS
+            configured = merged.get("specialists") or []
+            configured_ids = {item.get("id") for item in configured if isinstance(item, dict)}
+            # New built-in specialists must appear after an application update
+            # without overwriting prompts or enable/disable choices already saved.
+            merged["specialists"] = list(configured) + [
+                item for item in DEFAULT_SPECIALISTS if item.get("id") not in configured_ids
+            ]
             return merged
         except (OSError, ValueError, TypeError):
             return dict(DEFAULT_STATE)

@@ -31,6 +31,21 @@ class AccessTests(unittest.TestCase):
         self.assertNotIn('dando', plan['terms'])
         self.assertNotIn('tentar', plan['terms'])
 
+    def test_monthly_sales_margin_maps_to_markup_without_conversational_noise(self):
+        plan = query_plan('agora preciso de um relatório que mostra a margem das minhas vendas do mês')
+        self.assertEqual(plan['terms'], ['relatorio', 'margem', 'vendas'])
+        self.assertIn('markup', plan['expanded_terms'])
+        self.assertNotIn('agora', plan['terms'])
+        self.assertNotIn('mes', plan['terms'])
+
+    def test_markup_article_is_applicable_to_sales_margin_request(self):
+        source = {
+            'title': 'Relatório Gerenciamento de Markup de Vendas',
+            'solution': 'O relatório mostra o lucro líquido de cada venda no período selecionado.',
+        }
+        result = applicability(source, 'relatório que mostra a margem das vendas do mês')
+        self.assertTrue(result['applicable'])
+
     def test_similar_fiscal_topic_with_different_rejection_is_not_a_procedure(self):
         source = {'title': 'SEFAZ não permite Contribuinte Isento de Inscrição Estadual',
                   'solution': 'Preencher a IE do destinatário e validar a nota.'}

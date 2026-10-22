@@ -6,7 +6,7 @@ import knowledge_curation as curation
 import knowledge_index
 from collections import Counter
 
-STOP = set('a o os as de do da dos das e em um uma para por no na nos nas com como que eu meu minha esta estou erro error problema fazer faco fica nao ao pelo pela mais esse essa tem la favor ajuda consigo preciso quero saber bom dia ola ocorre qual onde master erp sistema contexto mensagem atual integradores ver quantas quanto quantos quanta tive teve tinha ter isso estes estas aquele aquela aquilo consegue pode podemos poderia sobre alguem gente aqui ali assim gostaria informacao informacoes duvida dando tentando tentar tentando esta ta tao foi fui iria'.split())
+STOP = set('a o os as de do da dos das e em um uma para por no na nos nas com como que eu meu meus minha minhas esta estou erro error problema fazer faco fica nao ao pelo pela mais esse essa tem la favor ajuda consigo preciso quero saber bom dia ola ocorre qual onde master erp sistema contexto mensagem atual integradores ver quantas quanto quantos quanta tive teve tinha ter isso estes estas aquele aquela aquilo consegue pode podemos poderia sobre alguem gente aqui ali assim gostaria informacao informacoes duvida dando tentando tentar tentando esta ta tao foi fui iria agora mostra mostrar mostrou foram mes mensal'.split())
 DOMAIN_SPELLING = ('destinatario', 'remetente', 'inscricao', 'estadual', 'invalida', 'rejeicao',
                    'sincronizador', 'integracao', 'etiqueta', 'transportadora', 'fabricante')
 ALIASES = {
@@ -18,6 +18,10 @@ ALIASES = {
     'sincroniza': ('sincronizar','integracao','sincronizador'),
     'sincronizacao': ('sincronizacao','integracao','sincronizador'),
     'boleto': ('boleto','cnab','cobranca'),
+    # Customers normally ask for "margem" while the Master screen and KB use
+    # the product name "Markup". Keep both vocabularies in the same intent.
+    'margem': ('margem','markup','mark-up','lucro'),
+    'markup': ('markup','mark-up','margem','lucro'),
 }
 GROUPS = {
     'Fiscal': ('fiscal','nf-e','nfe','nota_fiscal','nota fiscal','sefaz','danfe','cfop'),

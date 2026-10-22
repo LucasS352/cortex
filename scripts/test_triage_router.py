@@ -30,6 +30,22 @@ class TriageRouterTest(unittest.TestCase):
         result = route('Atendimento rápido no caixa', 'Uma dúvida simples.')
         self.assertNotIn('integrations', result['modules'])
 
+    def test_sales_margin_request_routes_to_reports_specialist(self):
+        from triage_router import resolve_specialist
+        specialist, result = resolve_specialist(
+            'Relatório mensal', 'Preciso ver a margem das minhas vendas do mês.'
+        )
+        self.assertIn('reports', result['modules'])
+        self.assertEqual(specialist['id'], 'reports')
+
+    def test_fastreport_physical_margin_stays_with_fr3_specialist(self):
+        from triage_router import resolve_specialist
+        specialist, result = resolve_specialist(
+            'Relatório FR3', 'A margem da etiqueta está cortada na impressora Zebra.'
+        )
+        self.assertNotIn('reports', result['modules'])
+        self.assertEqual(specialist['id'], 'fr3_logistics')
+
     def test_resolve_specialist_selects_configured_subagent_and_filters_domain(self):
         from triage_router import resolve_specialist, filter_by_specialist
         spec_fiscal, route_fiscal = resolve_specialist('Erro ao transmitir NF-e', 'Rejeição 694 da SEFAZ no CFOP')

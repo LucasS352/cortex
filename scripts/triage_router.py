@@ -29,6 +29,7 @@ SIGNALS = {
 }
 PRINT_SIGNALS = ("fr3", "fastreport", "gondola", "impressora", "margem", "bobina", "desalinhad", "cortad", "codigo de barras", "zebra", "argox")
 SHIP_SIGNALS = ("envio", "transportadora", "marketplace", "mercado livre", "shopee", "correios", "plp", "baixar etiqueta")
+REPORT_SIGNALS = ("relatorio", "relatorios", "indicador", "indicadores", "markup", "cmv", "rentabilidade", "curva abc", "estatistica de vendas", "vendas por produto", "posicao de estoque", "projecao de compras")
 
 
 def _has_signal(text: str, term: str) -> bool:
@@ -43,6 +44,13 @@ def route(subject: str, problem: str) -> dict:
     matches = {key: terms for key, terms in matches.items() if terms}
     print_hits = [term for term in PRINT_SIGNALS if _has_signal(text, term)]
     shipping_hits = [term for term in SHIP_SIGNALS if _has_signal(text, term)]
+    report_hits = [term for term in REPORT_SIGNALS if _has_signal(text, term)]
+    business_margin = bool(_has_signal(text, "margem") and re.search(r"\b(?:venda|vendas|lucro|custo|produto|produtos)\b", text))
+    technical_print = bool(any(_has_signal(text, term) for term in ("fr3", "fastreport", "etiqueta", "bobina", "impressora", "zebra", "argox")))
+    if business_margin:
+        report_hits.append("margem de venda")
+    if report_hits and (business_margin or not technical_print):
+        matches["reports"] = sorted(set(report_hits))
     label_context = bool(re.search(r"\betiquet", text))
     if label_context and print_hits:
         matches.setdefault("products", []).extend(print_hits)
@@ -125,6 +133,10 @@ def filter_by_specialist(items: list[dict], specialist: dict | None, route_info:
     # Integrations frequently touch carriers (logistics), orders (sales), payments (finance), and products.
     if "integrations" in allowed_modules:
         allowed_modules.update({"logistics", "sales", "products", "finance"})
+    elif "reports" in allowed_modules:
+        # Business reports are cross-domain by nature. The specialist still
+        # relies on retrieval/applicability gates before using any source.
+        allowed_modules.update({"sales", "finance", "products", "purchases", "fiscal", "logistics", "production", "registration"})
     elif "products" in allowed_modules:
         allowed_modules.update({"registration", "logistics"})
     elif "sales" in allowed_modules:
