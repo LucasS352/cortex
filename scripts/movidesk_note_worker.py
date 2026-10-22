@@ -431,7 +431,7 @@ def generate_note(ticket, settings, api):
         # History attached to a solution must describe a completed procedure.
         cases = [case for case in cases if company_case_source(case)]
         known = {str(case['external_id']) for case in cases}
-        for case in resolved_support_cases(conn, tenant, query, ticket.get('id')):
+        for case in resolved_support_cases(conn, tenant, query, ticket.get('id'), company_id=org_id):
             if str(case['external_id']) not in known:
                 cases.append(case)
                 known.add(str(case['external_id']))
@@ -466,7 +466,9 @@ def generate_note(ticket, settings, api):
                 'status': case.get('status') or case.get('base_status'),
                 'active': bool(case.get('is_active')),
                 'resolution': case.get('solution_statement') if not case.get('is_active') and
-                    not case.get('hard_block_reason') and case.get('quality_tier') in ('GOLD', 'SILVER') else None}
+                    not case.get('hard_block_reason') and (case.get('quality_tier') in ('GOLD', 'SILVER') or
+                                                           case.get('resolution_verified')) else None,
+                'same_company': bool(case.get('same_company'))}
                for case in cases[:5]]
     images, media_notices = [], []
     if reference:
@@ -602,7 +604,7 @@ def render_note(result, marker):
             ticket_id = str(case.get('ticket') or '')
             status = str(case.get('status') or ('Em andamento' if case.get('active') else 'Concluído'))
             title = str(case.get('title') or 'Sem assunto')[:240]
-            label = f'#{ticket_id} — {status} — {title}'
+            label = f'#{ticket_id} — {status} — {title}' + (' (mesma empresa)' if case.get('same_company') else '')
             if ticket_id.isdigit():
                 lines.append('<li><a href="' + html.escape(TICKET_UI_BASE + '/' + ticket_id, quote=True) +
                              '">' + html.escape(label) + '</a></li>')

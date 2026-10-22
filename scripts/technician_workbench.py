@@ -164,8 +164,90 @@ def company_similar_cases(conn, tenant, company_id: str, query: str,
     return applicable[:min(max(limit, 1), 20)]
 
 
-def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3):
-    """Find documented resolutions across the tenant, independent of customer."""
+_RESOLUTION_TAIL = re.compile(
+    r'(obrigad[oa] por entrar em contato|voc[eê]\s*j[aá]\s*assistiu|>\s*veja como acessar|'
+    r'd[uú]vidas,? (?:estamos|fico|ficamos)|valida[cç][aã]o de backup|(?:^|\n)\s*__)', re.I)
+_RESOLUTION_HEAD = re.compile(
+    r'(?:a[cç][oõ]es realizadas para resolu[cç][aã]o|resolu[cç][aã]o(?:/resultado observado)?)\s*:\s*(.+)', re.I | re.S)
+_RESOLUTION_ACTION = re.compile(
+    r'\b(?:relac|vincul|ctrl|cadastr|configur|corrig|alter[aeo]|de ?/ ?para|tipo [pf]\b|inclu|preench|habilit|marc[aoq]|ajust)')
+_RESOLUTION_WEAK = re.compile(r'manobra|paliativ|encaminhad|setor de desenvolvimento|nao respondeu|inatividade')
+PROJECT_TICKET = re.compile(r'^\s*(?:dev|mel|dsm|dsc)\b|\s-\s*dev\s*-', re.I)
+ERROR_SIGNATURES = (
+    (re.compile(r'produto\s*\(\s*\d+\s*\)\s*sku\s*\(\s*\d+\s*\)\s*\[\s*id\s*anymarket\s*\]'),
+     ['%Sku (%) [id AnyMarket]%']),
+    (re.compile(r'carrier\s*["“][^"”]{2,80}["”]\s*nao integrad'), ['%Carrier "%" n_o integrad%']),
+    (re.compile(r'\(codigo do integrador\)[^\n]{0,200}\(descricao\)\s*nao integrad'),
+     ['%(c_digo do integrador)%n_o integrad%']),
+)
+
+
+def extract_resolution(case):
+    """Return the documented fix, also when it was written in the opening post."""
+    def clean(text):
+        text = str(text or '')
+        tail = _RESOLUTION_TAIL.search(text)
+        text = text[:tail.start()] if tail else text
+        text = re.sub(r'^(?:\s*resolu[cç][aã]o\s*:\s*)+', '', text.strip(' \r\n\t-:'), flags=re.I)
+        return text.strip(' \r\n\t-:')
+
+    def useful(text, minimum):
+        value = knowledge_access.normalize(text)
+        return len(text) >= minimum and _RESOLUTION_ACTION.search(value) and not _RESOLUTION_WEAK.search(value)
+
+    own = clean(case.get('solution_statement'))
+    if useful(own, 40):
+        return own[:1500]
+    for field in ('technical_narrative', 'problem_statement'):
+        found = _RESOLUTION_HEAD.search(str(case.get(field) or ''))
+        if found and useful(clean(found.group(1)), 20):
+            return clean(found.group(1))[:1500]
+    return ''
+
+
+def error_signature_patterns(query):
+    text = knowledge_access.normalize(query)
+    return [pattern for regex, patterns in ERROR_SIGNATURES if regex.search(text) for pattern in patterns]
+
+
+def _signature_cases(conn, tenant, patterns, exclude_ticket_id, company_id, limit, query=''):
+    rows = conn.execute('''SELECT r.external_id,r.subject,r.status,r.base_status,r.problem_statement,
+        r.technical_narrative,r.solution_statement,r.quality_tier,r.hard_block_reason,
+        COALESCE(l.company_id=%s, false) AS same_company
+        FROM refined_tickets r LEFT JOIN movidesk_company_tickets l
+          ON l.tenant_id=r.tenant_id AND l.ticket_external_id=r.external_id
+        WHERE r.tenant_id=%s AND r.external_id::text<>%s
+          AND r.base_status IN ('Resolved','Closed') AND coalesce(r.hard_block_reason,'')=''
+          AND (r.problem_statement ILIKE ANY(%s) OR r.technical_narrative ILIKE ANY(%s))
+        ORDER BY same_company DESC, r.created_date DESC NULLS LAST LIMIT 80''',
+        (str(company_id or ''), tenant, str(exclude_ticket_id or ''), patterns, patterns)).fetchall()
+    result, seen = [], set()
+    for row in rows:
+        if row['external_id'] in seen or PROJECT_TICKET.search(str(row.get('subject') or '')):
+            continue
+        resolution = extract_resolution(row)
+        if not resolution:
+            continue
+        seen.add(row['external_id'])
+        result.append(dict(row, solution_statement=resolution, resolution_verified=True,
+                           is_active=False, match='error_signature'))
+    # Same company first, then the same product/order codes, then explicit Ctrl+R/Tipo procedures.
+    codes = set(re.findall(r'\b\d{5,}\b', str(query or '')))
+    def shared(row):
+        text = ' '.join(str(row.get(k) or '') for k in ('problem_statement', 'technical_narrative'))
+        return len(codes & set(re.findall(r'\b\d{5,}\b', text)))
+    result.sort(key=lambda r: (not r['same_company'], -shared(r),
+                               not re.search(r'ctrl|tipo [pf]\b', knowledge_access.normalize(r['solution_statement']))))
+    return result[:limit]
+
+
+def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3, company_id=None):
+    """Find documented resolutions: exact error signature first, same company before others."""
+    patterns = error_signature_patterns(query)
+    if patterns:
+        found = _signature_cases(conn, tenant, patterns, exclude_ticket_id, company_id, limit, query)
+        if found:
+            return found
     plan = knowledge_access.query_plan(query)
     if not plan['terms']:
         return []
@@ -176,16 +258,23 @@ def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3)
         problem_statement,technical_narrative,solution_statement,quality_tier,hard_block_reason,
         ts_rank_cd({vector},websearch_to_tsquery('portuguese',%s)) AS relevance
         FROM refined_tickets WHERE tenant_id=%s AND external_id::text<>%s
-        AND base_status IN ('Resolved','Closed') AND quality_tier IN ('GOLD','SILVER')
-        AND coalesce(hard_block_reason,'')='' AND length(trim(coalesce(solution_statement,'')))>=40
+        AND base_status IN ('Resolved','Closed') AND quality_tier IN ('GOLD','SILVER','REVIEW')
+        AND coalesce(hard_block_reason,'')=''
         AND {vector} @@ websearch_to_tsquery('portuguese',%s)
         ORDER BY relevance DESC,created_date DESC LIMIT 80''',
         (plan['fts'],tenant,str(exclude_ticket_id or ''),plan['fts'])).fetchall()
     result = []
     for row in rows:
-        source = company_case_source(row)
-        if source and knowledge_access.applicability(source, query)['applicable']:
-            result.append(dict(row, is_active=False))
+        if (row.get('base_status') not in ('Resolved', 'Closed') or row.get('hard_block_reason') or
+                PROJECT_TICKET.search(str(row.get('subject') or ''))):
+            continue
+        resolution = extract_resolution(row)
+        if not resolution:
+            continue
+        source = {'title': row.get('subject'), 'problem': row.get('problem_statement'),
+                  'diagnosis': row.get('technical_narrative'), 'solution': resolution}
+        if knowledge_access.applicability(source, query)['applicable']:
+            result.append(dict(row, solution_statement=resolution, resolution_verified=True, is_active=False))
             if len(result) >= limit:
                 break
     return result
@@ -279,8 +368,9 @@ def capability_evidence_cases(conn, tenant, query, exclude_ticket_id=None, limit
 def company_case_source(case):
     """Promote only a completed, documented company case to procedural evidence."""
     if (case.get("base_status") not in ("Resolved", "Closed") or
-            case.get("quality_tier") not in ("GOLD", "SILVER") or
-            case.get("hard_block_reason") or len((case.get("solution_statement") or "").strip()) < 40):
+            (case.get("quality_tier") not in ("GOLD", "SILVER") and not case.get("resolution_verified")) or
+            case.get("hard_block_reason") or len((case.get("solution_statement") or "").strip()) < 20 or
+            (len((case.get("solution_statement") or "").strip()) < 40 and not case.get("resolution_verified"))):
         return None
     return {"id": f"company-ticket-{case['external_id']}",
             "source_external_id": case["external_id"], "source_type": "PROBABLE_TICKET",
@@ -768,7 +858,13 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
                 'do serviço; não repita a triagem inteira. Se uma tentativa falhou, considere esse resultado '
                 'e peça apenas a evidência nova necessária. Se a base não sustentar o próximo ajuste, encaminhe '
                 'para análise técnica explicando o que já foi verificado e o que falta. '
-                'Não prometa imagens: elas são inseridas separadamente somente quando há material revisado.'
+                'Não prometa imagens: elas são inseridas separadamente somente quando há material revisado. '
+                'LINGUAGEM: escreva para um usuário comum do Master, não para um programador. Comece com "Olá!" e uma frase '
+                'simples explicando o que o erro significa e por que acontece. Use frases curtas, verbos diretos '
+                '(abra, aperte, confira, clique, salve) e os nomes que aparecem na tela. Evite jargão como log, payload, API, '
+                'UUID, endpoint, produto_id, cod_estoque, "identificador externo" ou "parametrização"; se um código do erro '
+                'precisar ser digitado, mostre o número exato e diga em qual campo ele vai. Termine dizendo o que deve '
+                'acontecer depois do ajuste e convide a enviar a nova mensagem se algo diferente aparecer.'
                 if audience == 'customer_draft' else
                 'Responda em português em até 130 palavras, sem saudação e sem repetir o erro completo.')
     voice = ('Você é técnico de suporte do ERP Master redigindo uma resposta diretamente ao cliente.'
@@ -867,7 +963,8 @@ def add_message(cid: uuid.UUID, body: NewMessage):
                 sources, cases, _scope = evidence_for_company(
                     conn, tenant, row["movidesk_company_id"], search_query, limit=20)
                 known_ids = {str(c.get("external_id")) for c in cases}
-                for extra_case in resolved_support_cases(conn, tenant, search_query):
+                for extra_case in resolved_support_cases(conn, tenant, search_query,
+                                                         company_id=row["movidesk_company_id"]):
                     if str(extra_case.get("external_id")) not in known_ids:
                         cases.append(extra_case)
                         known_ids.add(str(extra_case.get("external_id")))

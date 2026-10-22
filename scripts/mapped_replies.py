@@ -129,6 +129,53 @@ def carrier_target_code(query_or_turns):
     return ''
 
 
+ANYMARKET_PRODUCT_ITEM = re.compile(
+    r'produto\s*\(\s*(\d+)\s*\)\s*sku\s*\(\s*(\d+)\s*\)\s*\[\s*id\s*anymarket\s*\]\s*-?\s*'
+    r'\((.{2,160}?)\)\s*n[aã]o\s+integrad', re.I)
+ANYMARKET_ORDER = re.compile(r'baixa\s+do\s+pedido\s*["“]?(\d{4,})', re.I)
+
+
+def anymarket_product_items(query):
+    """Distinct Product/SKU pairs from the AnyMarket error, plus the latest order number."""
+    raw = str(query or '')
+    items = []
+    for match in ANYMARKET_PRODUCT_ITEM.finditer(raw):
+        item = (match[1], match[2], re.sub(r'\s+', ' ', match[3]).strip(' "“”'))
+        if item not in items:
+            items.append(item)
+    orders = ANYMARKET_ORDER.findall(raw)
+    return items, (orders[-1] if orders else '')
+
+
+def build_anymarket_product_reply(query):
+    """Plain-language steps: the customer reads this, not a developer."""
+    items, order = anymarket_product_items(query)
+    order_text = f' do pedido {order}' if order else ''
+    if len(items) == 1:
+        product, sku, name = items[0]
+        intro = (f'Olá! Pelo erro enviado, o produto "{name}"{order_text} ainda não está ligado corretamente '
+                 'ao cadastro dele no Master. Por isso o pedido não consegue entrar no Master.')
+        open_step = f'1. No Master, abra o cadastro do produto "{name}".'
+        codes = (f'   • {product} com o Tipo P (produto)\n'
+                 f'   • {sku} com o Tipo F (SKU / variação)')
+    else:
+        intro = (f'Olá! Pelo erro enviado, alguns produtos{order_text} ainda não estão ligados corretamente '
+                 'ao cadastro deles no Master. Por isso o pedido não consegue entrar no Master.')
+        open_step = '1. No Master, abra o cadastro de cada produto abaixo (um de cada vez).'
+        codes = '\n'.join(f'   • "{name}": {product} com o Tipo P (produto) e {sku} com o Tipo F (SKU / variação)'
+                          for product, sku, name in items) or \
+            '   • o código do Produto com o Tipo P e o código do Sku com o Tipo F, exatamente como aparecem no erro'
+    return (f'{intro}\n\nPara resolver:\n\n{open_step}\n'
+            '2. Com o produto aberto, aperte Ctrl+R. Vai abrir a tela Relação - Site.\n'
+            '3. Confira as linhas da AnyMarket. Elas precisam ter estes códigos no campo Código de fora:\n'
+            f'{codes}\n'
+            '   Se algum estiver faltando ou com um número diferente, corrija ou adicione a linha.\n'
+            '   Obs.: se o produto tiver grade (cor/tamanho), o Tipo P fica no produto principal e o Tipo F na variação que foi vendida.\n'
+            '4. Clique no ✔ verde para confirmar e salve a tela.\n'
+            '5. No sincronizador da AnyMarket, mande baixar o pedido novamente.\n\n'
+            'Pronto! O pedido deve entrar no Master normalmente. Se aparecer outra mensagem, é só nos enviar aqui.')
+
+
 def build_transportadora_reply(query, norm_text, facts):
     raw = str(query or '')
     quoted = list(re.finditer(
@@ -292,6 +339,25 @@ def match(query):
                 'resolution': 'Produto relacionado pelo Ctrl+R: produto_id em Código de fora e cod_estoque em Adicional; pedido integrado com sucesso.'}],
             'images': [
                 {'file': 'product-relation.png', 'caption': 'Relação - Site do produto: Código de fora, Adicional e Tipo. Os códigos do print são apenas exemplos.'},
+            ],
+        }
+    if anymarket_product_items(query)[0]:
+        reply_text = build_anymarket_product_reply(query)
+        return {
+            'id': 'reviewed-anymarket-product-relation-v1', 'source_type': 'REVIEWED_PROCEDURE',
+            'title': 'AnyMarket — produto/SKU não integrado — relação pelo Ctrl+R',
+            'problem': 'Produto ou SKU da AnyMarket sem relacionamento (Tipo P/F) no cadastro do Master',
+            'solution': reply_text, 'reviewed_reply': reply_text,
+            'applicable': True, 'answer_use': 'procedure_reference',
+            'quality_flags': [], 'applicability_reasons': [], 'reviewed_at': '2026-10-22',
+            'provenance': ('Procedimento conferido nos chamados resolvidos 102052, 107487 e 111056: '
+                           'relação pelo Ctrl+R com Produto no Tipo P e Sku no Tipo F.'),
+            'resolved_examples': [],
+            'images': [
+                {'file': 'product-relation.png', 'after_step': 3,
+                 'name': 'Janela Relação - Site (Ctrl+R)',
+                 'caption': ('Passos 2–3: na tela Relação - Site (Ctrl+R), confira a linha da AnyMarket, '
+                             'o Código de fora e o Tipo (P ou F). Os códigos do print são apenas exemplos.')},
             ],
         }
     from support_policy import evidence
