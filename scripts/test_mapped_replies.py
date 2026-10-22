@@ -10,6 +10,21 @@ from technician_workbench import build_reply, evidence_for_company
 
 
 class MappedReplyTests(unittest.TestCase):
+    def test_monthly_sales_margin_uses_reviewed_markup_report(self):
+        query = 'Agora eu preciso de um relatório que mostra a margem das minhas vendas do mês?'
+        source = mapped.match(query)
+        self.assertIsNotNone(source)
+        self.assertEqual(source['id'], 'reviewed-sales-margin-report-v1')
+        self.assertEqual(source['resolved_examples'][0]['ticket'], 108907)
+        for term in ('Gerenciamento de Markup de Vendas', 'Data de / Até',
+                     'Markup Monetário', 'Markup percentual'):
+            self.assertIn(term, source['reviewed_reply'])
+
+    def test_fastreport_margin_does_not_use_business_margin_report(self):
+        self.assertIsNone(mapped.match(
+            'No relatório FastReport FR3 a margem da etiqueta está cortada na impressora Zebra.'
+        ))
+
     def test_worker_carries_recipe_history_and_images_into_note(self):
         ticket = {'id': 131661, 'subject': 'Teste', 'clients': [], 'actions': [
             {'id': 10, 'type': 2, 'description': 'Forma de pagamento não integrada',

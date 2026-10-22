@@ -73,6 +73,16 @@ TRANSPORTADORA_REPLY = '''A mensagem indica que a transportadora recebida da Any
 
 Se o retorno não informar qual Carrier foi recebido, envie somente essa identificação da ocorrência antes de criar o relacionamento.'''
 
+SALES_MARGIN_REPORT_REPLY = '''Olá! Para consultar a margem das vendas do mês, utilize o relatório **Gerenciamento de Markup de Vendas**.
+
+1. Abra o relatório Gerenciamento de Markup de Vendas.
+2. Nos filtros **Data de / Até**, informe o primeiro e o último dia do mês desejado. Esse período considera a data de emissão da nota fiscal de venda.
+3. Execute a consulta. O relatório apresenta cada venda e permite analisar, entre outras informações, o total dos produtos, frete, comissões, custo dos produtos, custo fixo, **Markup Monetário** e **Markup percentual**.
+
+O Markup Monetário representa o resultado da venda depois de considerar os custos registrados, como custo dos produtos, comissões e fretes. O percentual exibido no rodapé é calculado sobre os totais do resultado filtrado, e não pela média dos percentuais das linhas.
+
+Se precisar analisar somente uma operação específica, você também pode usar os filtros de marketplace, produto, fabricante ou intervalo de vendas. Os valores dependem dos custos e das regras de comissão/frete cadastrados; por isso, confira essas configurações caso algum resultado pareça divergente.'''
+
 
 def carrier_mapping_failure(text):
     """Require a missing relation on the carrier itself, not another order field or API outage."""
@@ -247,6 +257,30 @@ def normalized(value):
 
 def match(query):
     text = normalized(query)
+    sales_margin_report = bool(
+        re.search(r'\b(?:relatorio|relatorios)\b', text) and
+        re.search(r'\b(?:margem|markup|lucro|rentabilidade)\b', text) and
+        re.search(r'\b(?:venda|vendas)\b', text) and
+        not re.search(r'\b(?:fr3|fastreport|etiqueta|bobina|impressora|zebra|argox)\b', text)
+    )
+    if sales_margin_report:
+        return {
+            'id': 'reviewed-sales-margin-report-v1', 'source_type': 'REVIEWED_PROCEDURE',
+            'title': 'Gerenciamento de Markup de Vendas',
+            'problem': 'Consulta da margem das vendas em um período',
+            'solution': SALES_MARGIN_REPORT_REPLY, 'reviewed_reply': SALES_MARGIN_REPORT_REPLY,
+            'applicable': True, 'answer_use': 'procedure_reference',
+            'quality_flags': [], 'applicability_reasons': [], 'reviewed_at': '2026-10-22',
+            'provenance': ('Procedimento consolidado do artigo oficial 450796, '
+                           'DEV - Relatório - Gerenciamento de Markup de Vendas, '
+                           'com o cenário de relatórios registrado no chamado 108907.'),
+            'resolved_examples': [{'ticket': 108907,
+                'title': 'SUP - DUV - Relatórios',
+                'status': 'Fechado — orientação de relatórios registrada', 'active': False,
+                'resolution': ('O atendimento relacionou a necessidade de vendas/custo e margem aos relatórios '
+                               'do Master e encaminhou o treinamento financeiro correspondente.')}],
+            'images': [],
+        }
     if re.search(r'\bduplicidade de nf[ -]?e\b[^\n.!?]{0,100}\bdiferenca na chave de acesso\b', text):
         return {
             'id': 'reviewed-duplicate-nfe-key-v1', 'source_type': 'REVIEWED_PROCEDURE',

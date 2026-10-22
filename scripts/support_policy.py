@@ -97,6 +97,10 @@ def investigation_reply(query, decision):
                 'aplicável para indicar as etapas com segurança. A tela e a operação informadas '
                 'precisam de conferência técnica; não é necessário apresentar uma mensagem de erro '
                 'para essa dúvida de uso.')
+    if facts['intent'] == 'report':
+        return ('Entendi o relatório solicitado, mas ainda não encontrei um procedimento aprovado '
+                'aplicável para indicar a tela e os filtros com segurança. Informe quais dados deseja '
+                'analisar e o período; não é necessário apresentar uma mensagem de erro para essa solicitação.')
     if facts['concrete_error']:
         return ('O retorno informado será usado na investigação. Ainda falta uma fonte aplicável '
                 'para orientar o ajuste com segurança. Em qual operação esse retorno aparece '

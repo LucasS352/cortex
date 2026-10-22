@@ -63,6 +63,14 @@ class SupportPolicyTests(unittest.TestCase):
         self.assertNotIn('Informe a mensagem',reply)
         self.assertNotIn('preciso do retorno',reply)
 
+    def test_report_without_approved_source_does_not_request_error_message(self):
+        from support_policy import investigation_reply
+        query='Preciso de um relatório de vendas por período'
+        reply=investigation_reply(query,decide(query,[]))
+        self.assertIn('relatório solicitado',reply)
+        self.assertIn('não é necessário apresentar uma mensagem de erro',reply)
+        self.assertNotIn('mensagem exibida',reply)
+
     def test_model_navigation_without_source_is_blocked(self):
         with patch('technician_workbench.llm_client.generate', return_value={
             'ok': True, 'text': 'Abra a aba Inventada e pressione Ctrl+R.'}):
