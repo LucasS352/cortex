@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-from knowledge_access import query_plan,rank_rows,quality,search,assessment,applicability
+from knowledge_access import query_plan,rank_rows,quality,search,assessment,applicability,report_topic_match
 from tech_evidence import detail
 
 
@@ -37,6 +37,30 @@ class AccessTests(unittest.TestCase):
         self.assertIn('markup', plan['expanded_terms'])
         self.assertNotIn('agora', plan['terms'])
         self.assertNotIn('mes', plan['terms'])
+        self.assertTrue(plan['report'])
+
+    def test_generic_greeting_is_not_a_report_intent(self):
+        self.assertFalse(query_plan('Olá, preciso de ajuda')['report'])
+
+    def test_report_ranking_prefers_official_usage_article_over_error_article(self):
+        rows = [
+            {'id': 1, 'title': 'DEV - ERR - Relatório de vendas',
+             'solution': 'Descrição suficientemente longa sobre divergência no relatório de vendas.',
+             'source_type': 'OFFICIAL_KB', 'lexical_rank': 1},
+            {'id': 2, 'title': 'Relatório de vendas por produto',
+             'solution': 'Descrição suficientemente longa com filtros e colunas do relatório de vendas.',
+             'source_type': 'OFFICIAL_KB', 'lexical_rank': 1},
+        ]
+        ranked = rank_rows(rows, query_plan('relatório de vendas por produto'))
+        self.assertEqual(ranked[0]['id'], 2)
+
+    def test_report_catalog_matches_business_name_not_printing_margin(self):
+        self.assertTrue(report_topic_match(
+            query_plan('relatório da margem das vendas'), 'Gerenciamento de Markup de Vendas'))
+        self.assertTrue(report_topic_match(
+            query_plan('vendas por produto'), 'Como utilizar o relatório de estatística de vendas'))
+        self.assertFalse(report_topic_match(
+            query_plan('margem da etiqueta FR3'), 'Gerenciamento de Markup de Vendas'))
 
     def test_markup_article_is_applicable_to_sales_margin_request(self):
         source = {

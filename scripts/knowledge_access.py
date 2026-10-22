@@ -45,6 +45,10 @@ def normalize(s):
 
 def query_plan(query):
     text=normalize(query)
+    report = bool(re.search(
+        r'\b(?:relatorio|relatorios|indicador|indicadores|markup|cmv|rentabilidade|curva abc|estatistica de vendas)\b|'
+        r'\bmargem\b.{0,50}\b(?:venda|vendas|lucro|produto|produtos)\b|'
+        r'\b(?:venda|vendas|lucro|produto|produtos)\b.{0,50}\bmargem\b', text))
     product_creation = bool(re.search(r'\b(?:criar|cadastrar|cadastro)\b.{0,35}\bprodutos?\b', text))
     identifiers=sorted(set(re.findall(r'\b[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\b',text)))
     # Opaque IDs can recur across different causes. Keep them separate from
@@ -75,7 +79,29 @@ def query_plan(query):
     protocol=re.fullmatch(r'#?(\d{1,9})',query.strip())
     return dict(query=query,product_creation=product_creation,objects=objects,codes=sorted(set(codes)),identifiers=identifiers,signatures=signatures,terms=words,expanded_terms=expansions,
                 fts=fts,protocol=int(protocol[1]) if protocol else None,
-                howto=bool(re.search(r'\b(como|onde|criar|cadastrar|configurar|procedimento|passo a passo)\b',text)))
+                howto=bool(re.search(r'\b(como|onde|criar|cadastrar|configurar|procedimento|passo a passo)\b',text)),
+                report=report)
+
+
+def report_topic_match(plan, title):
+    """Match the requested business report to its official catalog name."""
+    query = normalize(plan.get('query') or '')
+    title = normalize(title)
+    if re.search(r'\b(?:fr3|fastreport|etiqueta|bobina|impressora|zebra|argox)\b', query):
+        return False
+    rules = (
+        (bool(re.search(r'\b(?:margem|markup|rentabilidade|lucro)\b', query)),
+         r'\b(?:markup|margem|rentabilidade)\b'),
+        (bool('vendas por produto' in query or 'estatistica de vendas' in query),
+         r'\bestatistica\b.*\bvendas\b|\bvendas\b.*\bproduto\b'),
+        ('projecao' in query and 'compra' in query, r'\bprojecao\b.*\bcompr'),
+        ('curva abc' in query, r'\bcurva abc\b'),
+        ('estoque' in query, r'\b(?:posicao de estoque|estoque)\b'),
+        ('frete' in query, r'\bestatistica\b.*\bfrete\b|\bfrete\b'),
+        ('gerencial' in query, r'\brelatorio gerencial\b'),
+    )
+    active = [pattern for condition, pattern in rules if condition]
+    return bool(active and any(re.search(pattern, title) for pattern in active))
 
 
 def family(row):
@@ -255,6 +281,12 @@ def rank_rows(rows,plan,module='TODOS',top_k=5):
         q=quality(r)
         score+=3 if q['evidence_status']=='official_document' else 0
         score-=8 if q['answer_use']=='investigation_only' else 0
+        if plan.get('report'):
+            score += 18 if r.get('source_type') == 'OFFICIAL_KB' else 0
+            if report_topic_match(plan, title):
+                score += 55 if r.get('source_type') == 'OFFICIAL_KB' else 12
+            score -= 25 if re.search(r'\bdev\s*-\s*(?:err|mel|mod)\b', title) else 0
+            score -= 5 if r.get('source_type') in ('VALIDATED_TICKET', 'PROBABLE_TICKET') else 0
         score+=4 if module!='TODOS' and normalize(module) in normalize(' '.join(r.get('modules') or [])) else 0
         r.update(q)
         r.update(retrieval_score=round(score,4),matched_objects=objects,matched_codes=codes,matched_terms=matched,
@@ -322,10 +354,11 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
              ORDER BY lexical_rank DESC,id DESC LIMIT 100""",(plan['fts'],plan['fts'])).fetchall()
         # Dedicated official-document lane prevents repetitive tickets from
         # crowding short manuals/videos out of the candidate budget.
+        official_limit = 200 if plan.get('report') else 60
         rows+=conn.execute(f"""SELECT *,ts_rank_cd({title_expr},websearch_to_tsquery('portuguese',%s)) AS lexical_rank
              FROM ticket_knowledge_nodes WHERE source_type IN ('OFFICIAL_KB','MANUAL')
              AND {title_expr} @@ websearch_to_tsquery('portuguese',%s)
-             ORDER BY lexical_rank DESC,id DESC LIMIT 60""",(plan['fts'],plan['fts'])).fetchall()
+             ORDER BY lexical_rank DESC,id DESC LIMIT {official_limit}""",(plan['fts'],plan['fts'])).fetchall()
         rows+=conn.execute(f"""SELECT *,ts_rank_cd({expr},websearch_to_tsquery('portuguese',%s)) AS lexical_rank
              FROM ticket_knowledge_nodes WHERE {expr} @@ websearch_to_tsquery('portuguese',%s)
              ORDER BY lexical_rank DESC,id DESC LIMIT 100""",(plan['fts'],plan['fts'])).fetchall()
@@ -379,6 +412,12 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
             if not article:
                 row['quality_flags'].append('original_not_linked');row['answer_use']='investigation_only'
             else:
+                # The node keeps a compact embedding excerpt, but generation
+                # needs the complete official article (filters and caveats are
+                # often documented after the first 2,000 characters).
+                full_text = (article['content_text'] or '').strip()
+                if len(full_text) > len((row.get('solution') or '').strip()):
+                    row['solution'] = full_text[:12000]
                 # Preserve tutorials as structured evidence even without a transcript.
                 import html
                 original = html.unescape(article['content_html'] or '')
@@ -391,6 +430,11 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
                 row['evidence_status']='video_reference_without_transcript'
     for row in ranked:
         gate=applicability(row,query)
+        if (plan.get('report') and row.get('source_type') == 'OFFICIAL_KB'
+                and row.get('videos') and report_topic_match(plan, row.get('title') or '')):
+            reasons = [reason for reason in gate['applicability_reasons']
+                       if reason != 'insufficient_subject_overlap']
+            gate = {**gate, 'applicability_reasons': reasons, 'applicable': not reasons}
         row.update(gate)
         if any(reason!='integration_context_mismatch' for reason in gate['applicability_reasons']):
             row['answer_use']='investigation_only'

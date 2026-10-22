@@ -46,6 +46,18 @@ class TriageRouterTest(unittest.TestCase):
         self.assertNotIn('reports', result['modules'])
         self.assertEqual(specialist['id'], 'fr3_logistics')
 
+    def test_reports_specialist_keeps_official_sources_with_portuguese_modules(self):
+        from triage_router import resolve_specialist, filter_by_specialist
+        specialist, route_info = resolve_specialist(
+            'Relatório', 'Qual relatório mostra vendas por produto no período?'
+        )
+        sources = [
+            {'id': 1, 'title': 'Estatística de vendas', 'modules': ['Vendas']},
+            {'id': 2, 'title': 'Projeção de compras', 'modules': ['Compras']},
+        ]
+        filtered = filter_by_specialist(sources, specialist, route_info)
+        self.assertEqual([source['id'] for source in filtered], [1, 2])
+
     def test_resolve_specialist_selects_configured_subagent_and_filters_domain(self):
         from triage_router import resolve_specialist, filter_by_specialist
         spec_fiscal, route_fiscal = resolve_specialist('Erro ao transmitir NF-e', 'Rejeição 694 da SEFAZ no CFOP')

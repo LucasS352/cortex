@@ -55,6 +55,21 @@ class SupportPolicyTests(unittest.TestCase):
         self.assertFalse(result['can_propose_procedure'])
         self.assertIsNone(result['procedure'])
 
+    def test_applicable_official_report_document_can_answer_report_request(self):
+        source = {'id': 203, 'source_type': 'OFFICIAL_KB', 'applicable': True,
+                  'answer_use': 'procedure_reference', 'evidence_status': 'official_document',
+                  'title': 'Gerenciamento de Markup de Vendas'}
+        result = decide('Preciso de um relatório da margem das vendas', [source])
+        self.assertEqual(result['state'], 'PROCEDIMENTO_CONFIRMADO')
+        self.assertTrue(result['can_propose_procedure'])
+
+    def test_official_document_does_not_bypass_review_outside_reports(self):
+        source = {'id': 204, 'source_type': 'OFFICIAL_KB', 'applicable': True,
+                  'answer_use': 'procedure_reference', 'evidence_status': 'official_document',
+                  'title': 'Alteração fiscal'}
+        result = decide('Preciso alterar a tributação deste produto', [source])
+        self.assertFalse(result['can_propose_procedure'])
+
     def test_howto_without_approved_source_does_not_require_an_error(self):
         from support_policy import investigation_reply
         query='Como consultar vendas por produto?'

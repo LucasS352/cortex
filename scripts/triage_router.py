@@ -38,6 +38,20 @@ def _has_signal(text: str, term: str) -> bool:
     return term in text
 
 
+def _canonical_module(value: str) -> str:
+    """Normalize stored Portuguese labels and internal module keys."""
+    text = curation.normalize(str(value or '')).strip()
+    aliases = {
+        'produto': 'products', 'produtos': 'products', 'produtos e estoque': 'products', 'estoque': 'products',
+        'fiscal': 'fiscal', 'fiscal e notas': 'fiscal', 'integracao': 'integrations', 'integracoes': 'integrations',
+        'venda': 'sales', 'vendas': 'sales', 'vendas e pedidos': 'sales', 'pedido': 'sales', 'pedidos': 'sales',
+        'financeiro': 'finance', 'logistica': 'logistics', 'compra': 'purchases', 'compras': 'purchases',
+        'cadastro': 'registration', 'cadastros': 'registration', 'producao': 'production',
+        'infraestrutura': 'infrastructure', 'relatorio': 'reports', 'relatorios': 'reports',
+    }
+    return aliases.get(text, text)
+
+
 def route(subject: str, problem: str) -> dict:
     text = curation.normalize(f"{subject} {problem}")
     matches = {key: [term for term in terms if _has_signal(text, term)] for key, terms in SIGNALS.items()}
@@ -157,7 +171,8 @@ def filter_by_specialist(items: list[dict], specialist: dict | None, route_info:
             str(item.get(k) or "")
             for k in ("problem", "problem_statement", "diagnosis", "technical_narrative", "solution", "solution_statement")
         )
-        item_modules = set(item.get("modules") or route(title, body).get("modules") or [])
+        raw_modules = item.get("modules") or route(title, body).get("modules") or []
+        item_modules = {_canonical_module(module) for module in raw_modules}
         item_modules.discard("unclassified")
         if not item_modules:
             neutral.append(item)

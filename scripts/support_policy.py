@@ -36,15 +36,19 @@ def evidence(text):
             'integrations': [i for i in ('anymarket','mercado livre','tray','skyhub','shopee','vtex') if i in value],
             'mapping_failure': mapping_failure, 'attempt_already_failed': attempts,
             'concrete_error': concrete,
-            'intent': 'error' if concrete else 'howto' if plan['howto'] else 'report'}
+            'intent': 'error' if concrete else 'howto' if plan['howto'] else 'report' if plan.get('report') else 'inquiry'}
 
 
 def decide(query, sources, cases=()):
     facts = evidence(query)
     primary = sources[0] if sources else {}
     usable = bool(primary.get('applicable') and primary.get('answer_use') != 'investigation_only')
+    official_report = bool(
+        usable and facts['intent'] == 'report' and primary.get('source_type') == 'OFFICIAL_KB'
+        and primary.get('evidence_status') == 'official_document'
+    )
     trusted = usable and (primary.get('evidence_status') == 'human_approved_procedure' or
-                          primary.get('source_type') == 'REVIEWED_PROCEDURE')
+                          primary.get('source_type') == 'REVIEWED_PROCEDURE' or official_report)
     state = 'PROCEDIMENTO_CONFIRMADO' if trusted else 'INVESTIGAR'
     reasons = []
     if primary.get('context_conflict') or any('conflict' in r for r in primary.get('quality_flags', [])):
