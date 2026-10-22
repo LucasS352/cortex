@@ -32,7 +32,7 @@ def intake(question, contextual_query, history):
     if (mapped_replies.match(contextual_query) or concrete_evidence(contextual_query)
             or has_explicit_mapping_evidence(contextual_query)):
         return None
-    symptom = re.search(r'\b(pedido|venda)\b.{0,100}\bnao (?:caiu|cai|chegou|apareceu|desceu|desce|baixou|integrou|foi integrado)', text)
+    symptom = re.search(r'\b(pedido|venda)\b.{0,100}\bnao (?:esta )?(?:caiu|cai|entrou|chegou|apareceu|desceu|desce|baixou|integrou|integrando|integra|foi integrado)', text)
     if not symptom:
         return None
     # An already attempted intake needs targeted investigation, not the same recipe.

@@ -49,19 +49,26 @@ def decide(query, sources, cases=()):
     )
     trusted = usable and (primary.get('evidence_status') == 'human_approved_procedure' or
                           primary.get('source_type') == 'REVIEWED_PROCEDURE' or official_report)
-    state = 'PROCEDIMENTO_CONFIRMADO' if trusted else 'INVESTIGAR'
+    draft = bool(usable and not trusted and primary.get('source_type') in
+                 ('OFFICIAL_KB', 'MANUAL', 'VALIDATED_TICKET', 'PROBABLE_TICKET')
+                 and primary.get('evidence_status') in
+                 ('official_document', 'manual_requires_original_check', 'historical_case_unverified',
+                  'documented_resolved_case'))
+    state = 'PROCEDIMENTO_CONFIRMADO' if trusted else 'RASCUNHO_SUPERVISIONADO' if draft else 'INVESTIGAR'
     reasons = []
     if primary.get('context_conflict') or any('conflict' in r for r in primary.get('quality_flags', [])):
-        state, usable, trusted = 'ENCAMINHAR', False, False
+        state, usable, trusted, draft = 'ENCAMINHAR', False, False, False
         reasons.append('conflicting_evidence')
     if facts['attempt_already_failed']:
         state = 'ENCAMINHAR'
-        usable, trusted = False, False
+        usable, trusted, draft = False, False, False
         reasons.append('attempt_failed_requires_review_of_next_step')
     if not sources:
         reasons.append('no_applicable_procedure')
     elif not usable:
         reasons.extend(primary.get('applicability_reasons') or ['primary_evidence_incomplete'])
+    elif draft:
+        reasons.append('source_requires_technician_review_before_use')
     elif not trusted:
         reasons.append('historical_or_manual_reference_requires_confirmation')
     pending = []
@@ -74,7 +81,8 @@ def decide(query, sources, cases=()):
             pending.append('integrador_utilizado')
     return {'schema_version': 1, 'state': state,
             'confidence': 'ALTA' if trusted else 'MEDIA' if usable else 'BAIXA',
-            'can_propose_procedure': trusted, 'reasons': reasons, 'evidence': facts,
+            'can_propose_procedure': trusted, 'can_draft_from_evidence': draft,
+            'reasons': reasons, 'evidence': facts,
             'procedure': {'id': primary.get('source_id') or primary.get('id'),
                           'version': (primary.get('metadata') or {}).get('version_no') or
                                      (primary.get('id') if primary.get('source_type') == 'REVIEWED_PROCEDURE' else None),
@@ -120,7 +128,9 @@ def response_violations(reply, primary=None):
     if re.search(r'\b(?:DELETE\s+FROM|DROP\s+TABLE|TRUNCATE|UPDATE\s+\w+\s+SET|ALTER\s+TABLE|GRANT)\b', reply, re.I):
         flags.append('database_mutation')
     supported = bool(primary and primary.get('applicable') and primary.get('answer_use') != 'investigation_only'
-        and (primary.get('evidence_status') == 'human_approved_procedure' or primary.get('source_type') == 'REVIEWED_PROCEDURE'))
+        and (primary.get('evidence_status') in ('human_approved_procedure', 'official_document',
+             'manual_requires_original_check', 'historical_case_unverified', 'documented_resolved_case')
+             or primary.get('source_type') == 'REVIEWED_PROCEDURE'))
     if not supported and re.search(
         r'ctrl\s*\+\s*\w|\b(?:acesse|abra|selecione|clique|altere|marque|desmarque)\b.{0,70}'
         r'\b(?:menu|aba|campo|botao|cadastro|parametro)\b|\w\s*[→>]\s*\w', normalize(reply)):

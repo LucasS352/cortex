@@ -376,8 +376,21 @@ def company_case_source(case):
             "source_external_id": case["external_id"], "source_type": "PROBABLE_TICKET",
             "title": case.get("subject"), "problem": case.get("problem_statement"),
             "diagnosis": case.get("technical_narrative"), "solution": case.get("solution_statement"),
-            "applicable": True, "answer_use": "supporting_reference", "quality_flags": [],
+            "applicable": True, "answer_use": "supporting_reference",
+            "evidence_status": "documented_resolved_case", "quality_flags": [],
             "applicability_reasons": []}
+
+
+def cases_for_selected_evidence(cases, primary):
+    """Show only cases tied to the selected resolution or its exact error signature."""
+    source_ticket = str((primary or {}).get('source_external_id') or '')
+    title = knowledge_access.normalize((primary or {}).get('title') or '')
+    rejection = re.search(r'\brejeicao\s*(\d{3,4})\b', title)
+    return [case for case in cases if
+            str(case.get('external_id') or '') == source_ticket or
+            case.get('match') == 'error_signature' or
+            (rejection and re.search(r'\brejeicao\s*' + rejection.group(1) + r'\b',
+                                     knowledge_access.normalize(case.get('subject') or '')))]
 
 
 def evidence_for_company(conn, tenant, company_id: str, query: str,
@@ -394,7 +407,11 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
     if reviewed:
         return [reviewed], cases, "reviewed_procedure"
     local_source = next((source for case in cases if (source := company_case_source(case))), None)
-    documents = knowledge_access.search(conn, query, top_k=5)
+    documents = [source for source in knowledge_access.search(conn, query, top_k=12)
+                 if not exclude_ticket_id or
+                 str(source.get('source_external_id') or '') != str(exclude_ticket_id)]
+    documents.sort(key=lambda source: not (source.get('applicable') and
+                                            source.get('answer_use') != 'investigation_only'))
     if local_source:
         return [local_source] + documents, cases, "company_history_with_documents"
     return documents, cases, "general_knowledge"
@@ -605,6 +622,7 @@ def get_conversation(cid: uuid.UUID):
 
 def source_cards(rows):
     return [{"node_id": r["id"], "ticket_id": r.get("source_external_id"), "title": r.get("title"),
+             "url": r.get('source_url') or (r.get('metadata') or {}).get('source_url'),
              "source_type": r.get("source_type"), "answer_use": r.get("answer_use"),
              "applicable": r.get("applicable"), "quality_flags": r.get("quality_flags") or [],
              "source_id": r.get('source_id'), "version": (r.get('metadata') or {}).get('version_no'),
@@ -772,10 +790,11 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
     sources = list(sources or [])
     cases = triage_router.filter_by_specialist(list(cases or []), specialist, route_info)
 
+    primary = sources[0] if sources else None
+    cases = cases_for_selected_evidence(cases, primary)
     decision = decide(active_query, sources, cases)
     if spec_meta:
         decision = {**decision, 'specialist': spec_meta}
-    primary = sources[0] if sources else None
     source_risks = [flag for flag in response_violations(str((primary or {}).get('solution') or ''), primary)
                     if flag == 'database_mutation']
     if source_risks:
@@ -791,7 +810,7 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
     if reviewed and primary and primary.get('id') == reviewed['id']:
         return reviewed['reviewed_reply'], {
             'used': True, 'mode': 'reviewed_procedure', 'model': None, 'decision': decision, 'specialist': spec_meta}
-    grounded = decision['can_propose_procedure']
+    grounded = decision['can_propose_procedure'] or decision.get('can_draft_from_evidence', False)
     if (audience == 'customer_draft' and primary and primary.get('applicable')
             and primary.get('evidence_status') == 'video_reference_without_transcript'
             and primary.get('videos')):
@@ -815,8 +834,7 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
         grounded or
         any(not c.get('is_active') and not c.get('hard_block_reason') and c.get('solution_statement') for c in cases)
     )
-    # The first hit remains the only possible procedural reference. Weaker hits
-    # may help formulate a question, but must never silently replace it.
+    # Only the selected applicable source may supply operational steps.
     source_text = "\n".join(f"{label}: {str(primary.get(field) or '')[:3500]}" for label, field in
                             (("Cenário", "problem"), ("Diagnóstico", "diagnosis"), ("Procedimento", "solution"))) if grounded else ""
     leads = [{"title": s.get("title"), "ticket": s.get("source_external_id"),
@@ -880,6 +898,7 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
                    f"Diretrizes do Especialista:\n{specialist.get('prompt', '')}\n"
                    if specialist else "")
     prompt = f"""{voice}
+O texto é um rascunho para revisão do técnico. Fonte oficial, manual ou chamado resolvido documentado pode embasar uma orientação específica mesmo sem curadoria prévia. Nesse caso, apresente-a como orientação a conferir, nunca como procedimento aprovado ou diagnóstico confirmado. O técnico verifica a fonte original e decide se aprova antes de enviar.
 {spec_header}A mensagem ATUAL define o problema em análise; o assunto inicial do atendimento e mensagens antigas são contexto, não uma ordem para continuar o tema anterior. Se o interlocutor mudou de assunto, investigue o novo problema.
 Identifique o que o interlocutor já informou (erro, tela/processo, ação e resultado). Não peça novamente esses dados. Quando faltar algo decisivo, peça apenas o dado específico que falta e explique por quê. Faça no máximo duas perguntas objetivas.
 Se o texto do erro já foi informado e faltar somente um código, pergunte apenas qual código o acompanha, se houver. Não exija um código que pode não aparecer.
@@ -919,10 +938,9 @@ Evidências internas de existência/capacidade, úteis para responder sem invent
         if grounded:
             return source_fallback(primary, same_company_case), {"used": False, "error": result["error"], "specialist": spec_meta}
         return investigation_reply(question, decision), {"used": False, "error": result["error"], 'decision': decision, "specialist": spec_meta}
-    guardrail_source = (
-        {'applicable': True, 'answer_use': 'procedure_reference', 'evidence_status': 'human_approved_procedure'}
-        if has_resolved_reference else primary
-    )
+    guardrail_source = primary if grounded else (
+        {'applicable': True, 'answer_use': 'procedure_reference', 'evidence_status': 'documented_resolved_case'}
+        if has_resolved_reference else primary)
     violations = response_violations(result['text'], guardrail_source)
     if violations:
         decision = {**decision, 'state': 'ENCAMINHAR', 'confidence': 'BAIXA',
@@ -931,7 +949,8 @@ Evidências internas de existência/capacidade, úteis para responder sem invent
         return investigation_reply(question, decision), {'used': True, 'model': llm_client.MODEL,
             'mode': 'guardrail', 'decision': decision, 'blocked_output_reasons': violations, 'specialist': spec_meta}
     return result["text"], {"used": True, "model": llm_client.MODEL,
-                            "mode": "grounded" if grounded else "investigation",
+                            "mode": "grounded" if decision['can_propose_procedure'] else
+                                    "supervised_draft" if grounded else "investigation",
                             'decision': decision, 'specialist': spec_meta}
 
 
@@ -963,11 +982,19 @@ def add_message(cid: uuid.UUID, body: NewMessage):
                 sources, cases, _scope = evidence_for_company(
                     conn, tenant, row["movidesk_company_id"], search_query, limit=20)
                 known_ids = {str(c.get("external_id")) for c in cases}
-                for extra_case in resolved_support_cases(conn, tenant, search_query,
-                                                         company_id=row["movidesk_company_id"]):
+                need_history = not any(s.get('applicable') and s.get('answer_use') != 'investigation_only'
+                                       for s in sources)
+                for extra_case in (resolved_support_cases(conn, tenant, search_query,
+                                                          company_id=row["movidesk_company_id"])
+                                   if need_history else []):
                     if str(extra_case.get("external_id")) not in known_ids:
                         cases.append(extra_case)
                         known_ids.add(str(extra_case.get("external_id")))
+                if not any(s.get('applicable') and s.get('answer_use') != 'investigation_only' for s in sources):
+                    documented = next((company_case_source(case) for case in cases
+                                       if company_case_source(case)), None)
+                    if documented:
+                        sources = [documented] + sources
                 capability_leads = capability_evidence_cases(conn, tenant, search_query)
             history = "\n".join(f"{m['role']}: {m['content'][:800]}" for m in active_history)
             reply, model = build_reply({**row, "company_name": prof["company_name"]}, history, prof["facts"], envs,
@@ -975,7 +1002,8 @@ def add_message(cid: uuid.UUID, body: NewMessage):
         # Only show evidence actually used for the answer. Other search hits may
         # mention the same words while addressing a different procedure.
         cards = source_cards(sources[:1]) if (not confirmed and sources and
-                (model.get('decision') or {}).get('can_propose_procedure', True) and
+                ((model.get('decision') or {}).get('can_propose_procedure') or
+                 (model.get('decision') or {}).get('can_draft_from_evidence')) and
                 sources[0].get("applicable") and sources[0].get("answer_use") != "investigation_only") else []
         with connection() as conn:
             saved_message = conn.execute("""INSERT INTO technician_conversation_messages(conversation_id,role,content,sources)

@@ -47,6 +47,17 @@ class WorkbenchUnitTests(unittest.TestCase):
         self.assertEqual(sources, [general_source])
         self.assertTrue(cases[0]['is_active'])
 
+    @patch('technician_workbench.knowledge_access.approved_procedures', return_value=[])
+    def test_current_ticket_is_excluded_and_applicable_document_moves_first(self, approved):
+        rows = [{'id': 1, 'source_external_id': 132176, 'applicable': True,
+                 'answer_use': 'supporting_reference'},
+                {'id': 2, 'applicable': False, 'answer_use': 'investigation_only'},
+                {'id': 3, 'applicable': True, 'answer_use': 'procedure_reference'}]
+        with patch('technician_workbench.knowledge_access.search', return_value=rows):
+            sources, _, _ = evidence_for_company(Mock(), 'tenant', '', 'produto sem relação',
+                                                 exclude_ticket_id=132176)
+        self.assertEqual([source['id'] for source in sources], [3, 2])
+
     def test_search_carries_a_short_followup_but_not_a_new_issue(self):
         recent = [{'role': 'assistant', 'content': 'Confira o cadastro.'},
                   {'role': 'technician', 'content': 'Rejeição de inscrição estadual ao emitir a NF-e'}]

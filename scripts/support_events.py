@@ -11,7 +11,7 @@ import sqlite3
 import time
 
 STORE = Path(__file__).parent/'output/support_quality.sqlite3'
-STATES = {'PROCEDIMENTO_CONFIRMADO','INVESTIGAR','ENCAMINHAR'}
+STATES = {'PROCEDIMENTO_CONFIRMADO','RASCUNHO_SUPERVISIONADO','INVESTIGAR','ENCAMINHAR'}
 
 
 def record(event_id, channel, decision, company_id=None):
@@ -49,7 +49,7 @@ def snapshot():
             companies = [dict(r) for r in db.execute('''SELECT company_id,state,count(*) events FROM support_events
                 WHERE company_id IS NOT NULL GROUP BY 1,2 HAVING count(*)>1 ORDER BY events DESC LIMIT 20''')]
             terms = [dict(r) for r in db.execute("""SELECT j.value term,count(*) events FROM support_events e,
-                json_each(e.terms) j WHERE e.state IN ('INVESTIGAR','ENCAMINHAR')
+                json_each(e.terms) j WHERE e.state IN ('RASCUNHO_SUPERVISIONADO','INVESTIGAR','ENCAMINHAR')
                 GROUP BY j.value ORDER BY events DESC LIMIT 30""")]
         return {'status':'available','total':sum(s['events'] for s in states),'states':states,
                 'investigation_terms':terms,'procedures':procedures,'companies':companies}

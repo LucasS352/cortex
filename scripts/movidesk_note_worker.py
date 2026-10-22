@@ -346,6 +346,7 @@ def generate_note(ticket, settings, api):
     from technician_workbench import (connection, build_reply, evidence_for_company, environment_card,
                                       environment_rows, active_issue_messages, search_context_query,
                                       resolved_support_cases, capability_evidence_cases, company_case_source)
+    from technician_workbench import cases_for_selected_evidence
     from tech_evidence import ensure_single_tenant
     from conversation_outcome import classify_outcome, RESOLVED_REPLY, ACKNOWLEDGED_REPLY
 
@@ -390,7 +391,7 @@ def generate_note(ticket, settings, api):
     org_id, org_name, _ = organization(ticket.get('clients'))
     from support_triage import intake
     triage = intake(question, query, active_history)
-    if triage and not org_id:
+    if triage:
         triage['attachments'].extend(attachment_notices)
         triage['decision'] = decide(query, [])
         return triage
@@ -415,7 +416,9 @@ def generate_note(ticket, settings, api):
                 conn, tenant, org_id, query, exclude_ticket_id=ticket.get('id'))
         elif not reviewed:
             import knowledge_access
-            sources = knowledge_access.search(conn, query, top_k=5)
+            sources = knowledge_access.search(conn, query, top_k=12)
+            sources.sort(key=lambda source: not (source.get('applicable') and
+                source.get('answer_use') != 'investigation_only'))
         import knowledge_access
         approved = knowledge_access.approved_procedures(conn, query)
         if approved:
@@ -431,27 +434,28 @@ def generate_note(ticket, settings, api):
         # History attached to a solution must describe a completed procedure.
         cases = [case for case in cases if company_case_source(case)]
         known = {str(case['external_id']) for case in cases}
-        for case in resolved_support_cases(conn, tenant, query, ticket.get('id'), company_id=org_id):
+        need_history = not any(s.get('applicable') and s.get('answer_use') != 'investigation_only'
+                               for s in sources)
+        for case in (resolved_support_cases(conn, tenant, query, ticket.get('id'), company_id=org_id)
+                     if need_history else []):
             if str(case['external_id']) not in known:
                 cases.append(case)
                 known.add(str(case['external_id']))
+        if not any(s.get('applicable') and s.get('answer_use') != 'investigation_only' for s in sources):
+            documented = next((company_case_source(case) for case in cases
+                               if company_case_source(case)), None)
+            if documented:
+                sources = [documented] + sources
     import triage_router
     specialist, route_info = triage_router.resolve_specialist(str(ticket.get('subject') or ''), str(query))
     sources = triage_router.filter_by_specialist(sources, specialist, route_info)
     cases = triage_router.filter_by_specialist(cases, specialist, route_info)
     decision = decide(query, sources, company_cases)
-    if triage and not decision['can_propose_procedure']:
-        triage.update(decision=decision, similar_tickets=[
-            {'ticket': c['external_id'], 'title': c.get('subject'),
-             'status': c.get('status') or c.get('base_status'),
-             'active': bool(c.get('is_active')), 'resolution': None}
-            for c in company_cases[:3]])
-        triage['attachments'].extend(attachment_notices)
-        return triage
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in active_history)
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
            'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
-    active_company = [c for c in company_cases if c.get('is_active')]
+    cases = cases_for_selected_evidence(cases, sources[0] if sources else None)
+    active_company = []
     active_ids = {str(c.get('external_id')) for c in active_company}
     cases_for_reply = active_company + [c for c in cases if str(c.get('external_id')) not in active_ids]
     reply, meta = build_reply(row, context, facts, envs, sources, question, cases_for_reply,
@@ -460,7 +464,7 @@ def generate_note(ticket, settings, api):
     decision = meta.get('decision') or decision
     if not meta.get('used'):
         raise RetryJob('Gemini indisponível; nenhuma nota de contingência publicada')
-    reference = sources[:1] if decision['can_propose_procedure'] and sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
+    reference = sources[:1] if (decision['can_propose_procedure'] or decision.get('can_draft_from_evidence')) and sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
     tutorials = [s for s in sources[:5] if s.get('applicable') and s.get('videos')]
     similar = [{'ticket': case.get('external_id'), 'title': case.get('subject'),
                 'status': case.get('status') or case.get('base_status'),
@@ -482,7 +486,8 @@ def generate_note(ticket, settings, api):
     open_cases = [{'ticket': c['external_id'], 'title': c.get('subject'),
                    'status': c.get('status') or c.get('base_status'),
                    'active': True, 'resolution': None}
-                  for c in company_cases if c.get('is_active')
+                  for c in company_cases if c.get('is_active') and
+                  c.get('match') == 'error_signature'
                   and str(c['external_id']) not in existing_ids]
     similar = open_cases[:2] + similar
     # Capability observations are useful to the reviewing technician even when
@@ -624,6 +629,8 @@ def render_note(result, marker):
     if decision:
         lines.append('<p><strong>Decisão interna:</strong> ' + html.escape(str(decision.get('state', ''))) +
                      ' · Evidência: ' + html.escape(str(decision.get('confidence', ''))) + '</p>')
+        if decision.get('can_draft_from_evidence'):
+            lines.append('<p><strong>Revisão necessária:</strong> confira a fonte e a aplicabilidade no ambiente do cliente antes de enviar. Registre na curadoria o resultado confirmado.</p>')
         if decision.get('procedure'):
             lines.append('<p><strong>Procedimento e versão:</strong> ' +
                          html.escape(json.dumps(decision['procedure'], ensure_ascii=False, default=str)) + '</p>')

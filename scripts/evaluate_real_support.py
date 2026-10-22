@@ -420,7 +420,7 @@ def summary(results):
             'without_approved_procedure':rate(sum(not (r.get('response',{}).get('decision') or {}).get('can_propose_procedure') for r in eligible),len(eligible)),
             'mean_latency_ms':round(sum(r['latency_ms'] for r in results)/max(1,len(results)))},
         'decision_states':{state:rate(sum((r.get('response',{}).get('decision') or {}).get('state')==state for r in eligible),len(eligible))
-            for state in ('PROCEDIMENTO_CONFIRMADO','INVESTIGAR','ENCAMINHAR')},
+            for state in ('PROCEDIMENTO_CONFIRMADO','RASCUNHO_SUPERVISIONADO','INVESTIGAR','ENCAMINHAR')},
         'automated_review_observations':{
             'flagged_hallucinations':rate(sum(r['automated_review']['scores']['hallucinations']==0 for r in judged),len(judged)),
             'safe_in_reviewer_assessment':rate(sum(r['automated_review']['scores']['safety']==2 for r in judged),len(judged)),
