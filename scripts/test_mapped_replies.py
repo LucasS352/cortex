@@ -251,6 +251,31 @@ class MappedReplyTests(unittest.TestCase):
                       'data:image/svg+xml;base64,PHN2Zz4='):
             self.assertEqual(mapped.safe_image_data(value), '')
 
+    def test_anymarket_carrier_reply_includes_ctrl_r_image_and_no_duplicate_caption(self):
+        for query in (
+            'cara como faço pra relacionar a transportadora, esta dando um erro no pedido da anymarket.',
+            'estou com erro de transportadora dentro da anymarket, como faço para relacionar a transportadora ??',
+            'Carrier retornado pela plataforma: FedEx.O pedido não foi integrado porque não existe relacionamento da transportadora no ERP Master.',
+        ):
+            with self.subTest(query=query):
+                source = mapped.match(query)
+                self.assertIsNotNone(source)
+                self.assertEqual(source['id'], 'reviewed-anymarket-carrier-relation-v1')
+                images, notices = mapped.note_images(source)
+                self.assertEqual(len(images), 1)
+                self.assertFalse(notices)
+                note = render_note({'reply': source['reviewed_reply'], 'images': images}, 'marker')
+                self.assertIn('Ctrl+R', note)
+                self.assertIn('Janela Relação - Site (Ctrl+R)', note)
+                self.assertEqual(note.count(images[0]['caption']), 2)  # once in alt="", once in <small>
+
+    def test_image_without_distinct_name_does_not_duplicate_caption_in_html(self):
+        source = mapped.match('Forma de pagamento não integrada')
+        images, _ = mapped.note_images(source)
+        note = render_note({'reply': source['reviewed_reply'], 'images': images}, 'marker')
+        self.assertNotIn('<p><strong>' + html.escape(images[0]['caption']) + '</strong></p>', note)
+
 
 if __name__ == '__main__':
     unittest.main()
+

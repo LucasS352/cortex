@@ -203,11 +203,13 @@ def match(query):
                 {'file': 'product-relation.png', 'caption': 'Relação - Site do produto: Código de fora, Adicional e Tipo. Os códigos do print são apenas exemplos.'},
             ],
         }
+    from support_policy import evidence
+    facts = evidence(query)
     transportadora_anymarket = (
-        re.search(r'\banymarket\b', text) and
-        re.search(r'\b(?:transportadora|metodo de envio|frete)\b', text) and
-        (re.search(r'\bcarrier\b', text) or
-         re.search(r'\b(?:nao )?(?:vinculad[ao]|relacionad[ao]|associad[ao])\b|\bde[ -]?para\b|\brelacionamento\b', text))
+        (re.search(r'\banymarket\b', text) or
+         (re.search(r'\bcarrier\b', text) and not facts['integrations'])) and
+        re.search(r'\b(?:transportadora|metodo de envio|frete|carrier)\b', text) and
+        facts['mapping_failure'] and not facts['attempt_already_failed']
     )
     if transportadora_anymarket:
         return {
@@ -219,7 +221,13 @@ def match(query):
             'quality_flags': [], 'applicability_reasons': [], 'reviewed_at': '2026-10-21',
             'provenance': ('Procedimento conferido no catálogo oficial do Master: Cadastros > Outros > '
                            'Transportadoras; Relação - Site pelo atalho Ctrl+R. O Carrier vem do retorno da AnyMarket.'),
-            'resolved_examples': [], 'images': [],
+            'resolved_examples': [],
+            'images': [
+                {'file': 'anymarket-carrier-relation.png', 'after_step': 3,
+                 'name': 'Janela Relação - Site (Ctrl+R)',
+                 'caption': ('Passos 2–3: em Relação - Site (Ctrl+R), selecione AnyMarket e informe o Carrier '
+                             'do pedido em Código de fora. Os valores do print são exemplos.')},
+            ],
         }
     # Do not apply this recipe to generic missing orders or orders already
     # integrated without payment (ANY_PAGAMENTO_STATUS is a different issue).

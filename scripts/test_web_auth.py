@@ -37,6 +37,9 @@ class WebAuthTests(unittest.TestCase):
         self.assertEqual(page.status_code, 303)
         self.assertEqual(page.headers["location"], "/login")
         self.assertEqual(self.client.get("/tech-assets/admin-console.js").status_code, 401)
+        for path in ('/api/treinamento/staging','/api/treinamento/metricas-suporte',
+                     '/api/treinamento/staging/unknown/imagens/0'):
+            self.assertEqual(self.client.get(path).status_code,401)
 
     def test_technician_editor_is_public_but_data_requires_pin(self):
         page = self.client.get('/treinamento/tecnico')

@@ -37,6 +37,12 @@ class TrainingDatabaseTests(unittest.TestCase):
                 self.assertEqual(cand['ticket_external_id'],example_ticket_id)
                 self.assertIsNone(cand['source_action_id'])
                 self.assertEqual(cand['status'],'pending')
+                kt.request_revision(cand['id'],'curador','Detalhar a validação do resultado')
+                returned = kt.get_candidate(cand['id'])
+                self.assertEqual(returned['status'],'pending')
+                self.assertIn('review_request',returned['extraction'])
+                self.assertEqual(conn.execute('SELECT count(*) n FROM cortex_kb.audit WHERE entity_id=%s AND action=%s',
+                    (cand['id'],'revision:requested')).fetchone()['n'],1)
                 content={**extraction,'module_key':'qa_training','subtopic_key':'general','expected_result':'Cadastro validado'}
                 item=kt.approve(cand['id'],'new',content,'curador','Procedimento validado')
                 node=dict(conn.execute('SELECT * FROM ticket_knowledge_nodes WHERE source_id=%s',(f"canon:{item['id']}",)).fetchone())
@@ -44,6 +50,9 @@ class TrainingDatabaseTests(unittest.TestCase):
                 ka.canonical_reference(conn,node)
                 self.assertEqual(node['answer_use'],'procedure_reference')
                 self.assertTrue(ka.approved_procedures(conn,'Cadastro de teste incorreto'))
+                recovered = ka.search(conn,'Cadastro de teste incorreto',maintain_index=False)
+                self.assertEqual(recovered[0]['source_id'],f"canon:{item['id']}")
+                self.assertEqual(recovered[0]['metadata']['approved_by'],'curador')
                 kt.revise_item(item['id'],content,'curador','Revisão de teste')
                 ka.canonical_reference(conn,node)
                 self.assertEqual(node['answer_use'],'investigation_only')
@@ -62,6 +71,41 @@ class TrainingDatabaseTests(unittest.TestCase):
                 ka.canonical_reference(conn,release_node)
                 self.assertEqual(release_node['answer_use'],'procedure_reference')
                 self.assertTrue(ka.approved_procedures(conn,'pedido não importado versão 16/08/2026'))
+        finally:
+            conn.rollback()
+            conn.close()
+
+    def test_staging_approval_is_idempotent_and_revision_preserves_history(self):
+        import knowledge_staging as staging
+        conn = kt.connect()
+        @contextmanager
+        def shared():
+            yield conn
+        try:
+            conn.execute(kt.MIGRATION.read_text(encoding='utf-8'))
+            card = {'sha256':'a'*64,'card_id':'qa:isolated-staging','source_images':[],
+                    'source_manual':None,'evidence':[{'type':'analyst','ref':'Validação transacional de teste'}]}
+            content = {'title':'Procedimento único de homologação QA staging',
+                'module_key':'registration','subtopic_key':'general','symptom':'Conferência isolada do cadastro QA staging',
+                'root_cause':'Configuração de teste isolado para verificar a publicação.',
+                'procedure':'1. Conferir o cadastro de homologação.\n2. Validar o resultado do teste.',
+                'images':[],'applicability':{}}
+            with patch.object(kt,'connect',shared), patch.object(kt,'_schema_ready',True), \
+                 patch.object(staging,'detail',return_value=card):
+                result = staging.approve('qa-staging-card','a'*64,content,'curador','Validado em teste transacional')
+                duplicate = staging.approve('qa-staging-card','a'*64,content,'curador','Repetição da aprovação')
+                self.assertEqual(result['id'],duplicate['id'])
+                self.assertTrue(duplicate['already_imported'])
+                node = conn.execute('SELECT metadata FROM ticket_knowledge_nodes WHERE source_id=%s',
+                                    ('canon:'+str(result['id']),)).fetchone()
+                self.assertEqual(node['metadata']['approved_by'],'curador')
+                self.assertTrue(node['metadata']['source_references'])
+                card['sha256']='b'*64
+                revised = staging.approve('qa-staging-card','b'*64,content,'curador','Revisão de homologação',result['id'])
+                self.assertEqual(revised['version'],2)
+                versions=conn.execute('SELECT version_no,status FROM cortex_kb.versions WHERE item_id=%s ORDER BY version_no',
+                                      (result['id'],)).fetchall()
+                self.assertEqual([v['status'] for v in versions],['superseded','published'])
         finally:
             conn.rollback()
             conn.close()

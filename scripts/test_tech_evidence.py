@@ -62,7 +62,8 @@ class EvidenceTests(unittest.TestCase):
         conn.execute.return_value.fetchall.side_effect = [[{"id": "tenant"}], [{"id": "tenant"}],
             [{"id": i, "source_external_id": i, "title": "tickets", "lexical_rank": 0.2} for i in range(6)], [], [], [], []]
         with patch('knowledge_access.knowledge_index.ensure_coverage'), \
-                patch('knowledge_access.curation.ensure_schema'):
+                patch('knowledge_access.curation.ensure_schema'), \
+                patch('knowledge_access.approved_procedures',return_value=[]):
             result = retrieve(conn, "'; DROP TABLE tickets;--")
         calls = [call.args for call in conn.execute.call_args_list]
         self.assertTrue(all("DROP TABLE" not in sql for sql, *_ in calls))

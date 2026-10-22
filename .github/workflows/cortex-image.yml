@@ -32,6 +32,7 @@ jobs:
           pip install -r requirements-deploy.txt
           PYTHONPATH=scripts python -m unittest test_prepare_portainer_env test_web_auth test_movidesk_webhook test_movidesk_note_worker test_pilot_settings test_agent_control test_ticket_dashboard test_ticket_trends test_knowledge_access test_technician_workbench test_sync_current_tickets test_training_workflow test_tutorial_evidence -v
           python -m unittest discover -s scripts -p test_deployment_config.py -v
+          PYTHONPATH=scripts python -m unittest test_support_policy test_support_triage test_support_regressions test_real_support_evaluation test_knowledge_staging test_support_events test_evidence_policy test_ticket_simulator test_support_audit_privacy -v
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:

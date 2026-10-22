@@ -23,14 +23,8 @@ def has_explicit_mapping_evidence(text):
     otherwise the intake response masks the very evidence needed to find the
     correct procedure.
     """
-    value = mapped_replies.normalized(text)
-    carrier = bool(re.search(r'\bcarrier\b', value))
-    transportadora = bool(re.search(r'\btransportadora\b|\bmetodo de envio\b|\bfrete\b', value))
-    mapping = bool(re.search(r'\b(?:nao )?(?:vinculad[ao]|relacionad[ao]|associad[ao])\b|'
-                             r'\bde[ -]?para\b|\brelacionamento\b', value))
-    payment = bool(re.search(r'\bforma de pagamento\b', value))
-    product = bool(re.search(r'\bproduto\b|\bsku\b', value))
-    return (transportadora and (carrier or mapping)) or (carrier and mapping) or (payment and mapping) or (product and mapping)
+    from support_policy import evidence
+    return evidence(text)['concrete_error']
 
 
 def intake(question, contextual_query, history):

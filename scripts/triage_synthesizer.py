@@ -2,6 +2,7 @@
 from html import escape
 import re
 from knowledge_access import applicability, assessment, quality
+from support_policy import decide, response_violations
 
 
 class TriageSynthesizer:
@@ -22,6 +23,9 @@ class TriageSynthesizer:
             item.update(applicability(row, query))
             sources.append(item)
         decision = assessment(sources)
+        support_decision = decide(query, sources)
+        if sources and response_violations(str(sources[0].get('solution') or ''), sources[0]):
+            decision['can_support_procedure'] = False
         first_name = escape((requester_name or 'Cliente').split()[0])
         steps, shortcuts, screen = [], [], ''
         if not decision['can_support_procedure']:
@@ -43,12 +47,13 @@ class TriageSynthesizer:
                 shortcuts = source.get('shortcut_keys') or []
             else:
                 reply = 'Localizei um histórico relacionado. O procedimento precisa de revisão técnica antes de ser aplicado ao seu ambiente.'
-        confidence = 'Não estimada'
+        confidence = support_decision['confidence']
         steps_html = ''.join(f'<li>{escape(s)}</li>' for s in steps)
         client_html = f'<p>Olá, {first_name}!</p><p>{escape(reply)}</p>' + (f'<ol>{steps_html}</ol>' if steps else '')
-        internal_html = f'<p>{escape(diagnosis)}</p><p>Confiança diagnóstica: não estimada.</p>'
+        internal_html = f'<p>{escape(diagnosis)}</p><p>Força da evidência: {escape(confidence)} · {escape(support_decision["state"])}</p>'
         if steps:
             internal_html += f'<ol>{steps_html}</ol>'
         return dict(diagnosis=diagnosis, procedure_steps=steps, screen_path=screen, shortcuts=shortcuts,
                     confidence=confidence, internal_action_html=internal_html,
-                    client_ready_response=client_html, needs_human=True, evidence_assessment=decision)
+                    client_ready_response=client_html, needs_human=True, evidence_assessment=decision,
+                    support_decision=support_decision)

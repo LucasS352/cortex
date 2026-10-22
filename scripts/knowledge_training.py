@@ -381,6 +381,7 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
                 raise RuntimeError('Já existe revisão aberta de outra resposta deste ticket. Conclua ou rejeite antes de selecionar outra.')
             if proposal:
                 extraction = dict(existing.get('extraction') or {})
+                extraction.pop('review_request', None)
                 extraction.update(title=proposal['title'], procedure=proposal['procedure'],
                                   customer_answer=proposal['answer'], images=proposal.get('images') or [],
                                   confidence='HUMAN_PROPOSAL')
@@ -393,6 +394,8 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
                 existing.update(extraction=extraction, quality_checks=checks,
                                 suggested_module=module_key or existing['suggested_module'],
                                 extractor='technician_proposal')
+                audit(conn, 'candidate', open_['id'], 'technician:revised', actor,
+                      'Proposta reenviada para curadoria', after={'extraction': extraction})
             return existing
         ticket, actions = load_ticket(conn, external_id)
         if action_id:
@@ -594,6 +597,7 @@ def _publish(conn, item_id, embedding_cache=None):
     version = conn.execute('SELECT * FROM cortex_kb.versions WHERE id=%s', (item['current_version_id'],)).fetchone()
     refs = [r['external_ref'] for r in conn.execute(
         "SELECT external_ref FROM cortex_kb.sources WHERE item_id=%s AND source_type='ticket' ORDER BY id", (item_id,))]
+    source_refs = conn.execute('SELECT source_type,external_ref,version_id FROM cortex_kb.sources WHERE item_id=%s ORDER BY id', (item_id,)).fetchall()
     text = document_text(item, version)
     vector = embedding_cache
     app = version['applicability'] or {}
@@ -605,9 +609,11 @@ def _publish(conn, item_id, embedding_cache=None):
         modules=[taxonomy.MODULE_NAMES.get(item['module_key'], item['module_key'])], detected_error_codes=version['error_messages'],
         version_reference=(app.get('master_version') or None), tier='KB', confidence='HIGH',
         validation_score=100, final_score=100, source_authority=100,
-        validation_evidence=[f'ticket:{r}' for r in refs][:50],
+        validation_evidence=[f"{r['source_type']}:{r['external_ref']}" for r in source_refs][:50],
         metadata=Jsonb({'canonical_item_id': item_id, 'version_no': version['version_no'],
-                        'applicability': app, 'approved_by': version['approved_by'], 'subtopic': item['subtopic_key'],
+                        'applicability': app, 'approved_by': version['approved_by'],
+                        'approved_at': str(version['approved_at']), 'subtopic': item['subtopic_key'],
+                        'source_references': source_refs,
                         'images': version.get('images') or [], 'prerequisites': version.get('prerequisites')}),
         embedding=('[' + ','.join(map(str, vector)) + ']') if vector else None,
         embedding_generated=bool(vector), embedding_model=GEMINI_EMBEDDING_MODEL.split('/')[-1][:50])
@@ -687,6 +693,28 @@ def _cached_vector(conn, item_id):
     row = conn.execute("SELECT embedding::text AS v FROM ticket_knowledge_nodes WHERE source_id=%s AND embedding IS NOT NULL",
                        (f'canon:{item_id}',)).fetchone()
     return json.loads(row['v']) if row else None
+
+
+def request_revision(candidate_id, actor, reason):
+    if len((reason or '').strip()) < 5:
+        raise ValueError('Informe o ajuste solicitado ao técnico.')
+    ensure_schema()
+    with connect() as conn:
+        cand = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s FOR UPDATE', (candidate_id,)).fetchone()
+        if not cand or cand['status'] not in ('pending', 'conflict'):
+            raise RuntimeError('Esta sugestão já foi decidida.')
+        request = {'actor': actor, 'reason': sanitize(reason)}
+        conn.execute("UPDATE cortex_kb.candidates SET extraction=extraction || %s WHERE id=%s",
+                     (Jsonb({'review_request': request}), candidate_id))
+        audit(conn, 'candidate', candidate_id, 'revision:requested', actor, reason, before=dict(cand), after=request)
+    return request
+
+
+def revision_requests(ticket_id):
+    with connect() as conn:
+        return conn.execute("""SELECT id,extraction->'review_request' request FROM cortex_kb.candidates
+            WHERE ticket_external_id=%s AND status IN ('pending','conflict')
+            AND extraction ? 'review_request'""", (ticket_id,)).fetchall()
 
 
 def reject(candidate_id, actor, reason):

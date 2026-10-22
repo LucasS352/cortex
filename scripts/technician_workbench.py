@@ -169,7 +169,9 @@ def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3)
     plan = knowledge_access.query_plan(query)
     if not plan['terms']:
         return []
-    vector = "to_tsvector('portuguese',concat_ws(' ',subject,problem_statement,technical_narrative,solution_statement))"
+    vector = """to_tsvector('portuguese',coalesce(subject,'') || ' ' ||
+        coalesce(problem_statement,'') || ' ' || coalesce(technical_narrative,'') ||
+        ' ' || coalesce(solution_statement,''))"""
     rows = conn.execute(f'''SELECT external_id,subject,status,base_status,
         problem_statement,technical_narrative,solution_statement,quality_tier,hard_block_reason,
         ts_rank_cd({vector},websearch_to_tsquery('portuguese',%s)) AS relevance
@@ -514,24 +516,58 @@ def get_conversation(cid: uuid.UUID):
 def source_cards(rows):
     return [{"node_id": r["id"], "ticket_id": r.get("source_external_id"), "title": r.get("title"),
              "source_type": r.get("source_type"), "answer_use": r.get("answer_use"),
-             "applicable": r.get("applicable"), "quality_flags": r.get("quality_flags") or []}
+             "applicable": r.get("applicable"), "quality_flags": r.get("quality_flags") or [],
+             "source_id": r.get('source_id'), "version": (r.get('metadata') or {}).get('version_no'),
+             "approved_by": (r.get('metadata') or {}).get('approved_by'),
+             "approved_at": (r.get('metadata') or {}).get('approved_at'), "provenance": r.get('provenance')}
             for r in rows]
 
 
 def search_context_query(question, recent_messages):
     """Carry the last technical report into a short follow-up, never across a new issue."""
     normalized = knowledge_access.normalize(question)
-    if (re.search(r'\b(agora|outro|outra|novo|nova|mudando de assunto)\b', normalized) or
-        (re.search(r'\berro\b', normalized) and
-         not re.search(r'\b(mesmo|esse|essa|ainda|continua)\b', normalized))):
-        return question[:3500]
-    follow_up = (len(knowledge_access.query_plan(question)["terms"]) <= 3 or
-                 bool(re.search(r'\b(verifiquei|olhei|testei|continua|ainda|mesmo|isso|esse|essa)\b', normalized)))
-    if not follow_up:
+    if re.search(r'\b(agora|outro|outra|novo|nova|mudando de assunto)\b', normalized):
         return question[:3500]
     previous = next((m["content"] for m in recent_messages
                      if m["role"] == "technician" and m["content"].strip()), "")
-    return (previous[-2200:] + "\n" + question)[:3500] if previous else question[:3500]
+    if not previous:
+        return question[:3500]
+    from support_policy import evidence
+    curr_ev = evidence(question)
+    prev_ev = evidence(previous)
+    no_entity_conflict = not (curr_ev["entities"] and prev_ev["entities"] and
+                              not (set(curr_ev["entities"]) & set(prev_ev["entities"])))
+    no_integration_conflict = not (curr_ev["integrations"] and prev_ev["integrations"] and
+                                   not (set(curr_ev["integrations"]) & set(prev_ev["integrations"])))
+    generic_terms = {"erro", "problema", "sistema", "master", "erp", "pedido", "venda"}
+    curr_terms = set(knowledge_access.query_plan(question)["terms"]) - generic_terms
+    prev_terms = set(knowledge_access.query_plan(previous)["terms"]) - generic_terms
+    shared_domain = bool(no_entity_conflict and no_integration_conflict and (
+        (set(curr_ev["entities"]) & set(prev_ev["entities"])) or
+        (set(curr_ev["integrations"]) & set(prev_ev["integrations"])) or
+        (curr_terms & prev_terms)
+    ))
+    assistant_raw = next((m["content"] for m in recent_messages
+                          if m["role"] == "assistant" and m["content"].strip()), "")
+    assistant_norm = knowledge_access.normalize(assistant_raw)
+    assistant_asked = bool(assistant_raw and (
+        "?" in assistant_raw or
+        re.search(r'\b(informe|envie|copie|cole|qual|quais|poderia)\b', assistant_norm)
+    ))
+    diagnostic_followup = bool(no_entity_conflict and no_integration_conflict and (
+        curr_ev["concrete_error"] or curr_ev["mapping_failure"] or
+        re.search(r'\b(carrier|ocorrencia|retorno|rejeicao|codigo|mensagem|log)\b', normalized)
+    ) and (shared_domain or prev_ev["integrations"] or assistant_asked))
+    if (re.search(r'\berro\b', normalized) and
+            not re.search(r'\b(mesmo|esse|essa|ainda|continua)\b', normalized) and
+            not shared_domain and not diagnostic_followup):
+        return question[:3500]
+    follow_up = (len(knowledge_access.query_plan(question)["terms"]) <= 3 or
+                 bool(re.search(r'\b(verifiquei|olhei|testei|continua|ainda|mesmo|isso|esse|essa)\b', normalized)) or
+                 shared_domain or diagnostic_followup)
+    if not follow_up:
+        return question[:3500]
+    return (previous[-2200:] + "\n" + question)[:3500]
 
 
 def source_fallback(primary, company_case=False):
@@ -553,14 +589,25 @@ def source_fallback(primary, company_case=False):
             "Abra a fonte abaixo e confira a condição antes de orientar o cliente.")
 
 
-def build_reply(row, history, facts, envs, sources, question, cases=(), audience='technician', capability_leads=()):
+def build_reply(row, history, facts, envs, sources, question, cases=(), audience='technician', capability_leads=(), decision_query=None):
+    from support_policy import decide, investigation_reply, response_violations
+    decision = decide(decision_query or question, sources, cases)
     primary = sources[0] if sources else None
+    source_risks = [flag for flag in response_violations(str((primary or {}).get('solution') or ''), primary)
+                    if flag == 'database_mutation']
+    if source_risks:
+        decision = {**decision, 'state': 'ENCAMINHAR', 'confidence': 'BAIXA',
+                    'can_propose_procedure': False, 'procedure': None,
+                    'reasons': decision['reasons'] + source_risks}
+    if decision['state'] == 'ENCAMINHAR':
+        return investigation_reply(question, decision), {
+            'used': True, 'mode': 'escalation', 'decision': decision, 'model': None}
     # Only a recipe selected by current-context retrieval can bypass generation.
     # Return the repository-reviewed text, never a reply injected by source data.
-    reviewed = mapped_replies.match(question)
+    reviewed = mapped_replies.match(decision_query or question)
     if reviewed and primary and primary.get('id') == reviewed['id']:
-        return reviewed['reviewed_reply'], {'used': True, 'mode': 'reviewed_procedure', 'model': None}
-    grounded = bool(primary and primary.get("applicable") and primary.get("answer_use") != "investigation_only")
+        return reviewed['reviewed_reply'], {'used': True, 'mode': 'reviewed_procedure', 'model': None, 'decision': decision}
+    grounded = decision['can_propose_procedure']
     if (audience == 'customer_draft' and primary and primary.get('applicable')
             and primary.get('evidence_status') == 'video_reference_without_transcript'
             and primary.get('videos')):
@@ -578,7 +625,7 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
             parts.append(primary['solution'])
         if primary.get('result'):
             parts.append('Resultado esperado: ' + primary['result'])
-        return '\n\n'.join(parts), {'used': True, 'mode': 'human_approved_procedure', 'model': None}
+        return '\n\n'.join(parts), {'used': True, 'mode': 'human_approved_procedure', 'model': None, 'decision': decision}
     # The first hit remains the only possible procedural reference. Weaker hits
     # may help formulate a question, but must never silently replace it.
     source_text = "\n".join(f"{label}: {str(primary.get(field) or '')[:3500]}" for label, field in
@@ -635,7 +682,7 @@ Identifique o que o interlocutor já informou (erro, tela/processo, ação e res
 Se o texto do erro já foi informado e faltar somente um código, pergunte apenas qual código o acompanha, se houver. Não exija um código que pode não aparecer.
 Se houver fonte principal aplicável, comece pelo achado mais relevante e proponha um teste concreto. Se o erro exato e a correção constam nela, diga qual condição verificar, o ajuste condicional e como validar o resultado.
 Preserve os passos operacionais documentados: caminho da tela, registro a selecionar, atalho, campo, valor de origem e confirmação. Não substitua um procedimento concreto por "verifique as configurações de integração". Nunca copie códigos, IDs ou seleções de exemplo como valores do pedido atual. Se faltar o código de relacionamento, peça somente esse dado; o UUID do erro não é automaticamente o código a cadastrar.
-Quando o erro indicar ausência de relação ou de/para entre um cadastro do Master e um site/integrador, considere o padrão operacional confirmado: abrir o cadastro correspondente, selecionar o registro do Master e usar Ctrl+R para acessar Relação - Site. Só informe campos e valores específicos que estejam documentados para aquela entidade; se faltarem, peça o identificador externo mostrado na ocorrência.
+Quando o erro indicar ausência de relação ou de/para, use somente o procedimento documentado para a entidade e integração da fonte principal. Atalhos e campos de outra entidade não comprovam o procedimento atual.
 Antes de recomendar mudar uma configuração, confirme que a forma de operação desejada pelo cliente coincide com a referência. Encontrar o mesmo valor de campo ou o mesmo sintoma não comprova sozinho que a alteração é apropriada.
 Se NÃO houver fonte aplicável, ainda ajude a investigar: interprete o relato, apresente uma hipótese explicitamente como hipótese, proponha uma verificação segura e peça a evidência mínima necessária. Não repita a frase genérica de que não encontrou procedimento.
 Sem fonte aplicável, não sugira caminhos de menu, abas, atalhos ou campos do Master por conhecimento genérico. Para uma pergunta de como fazer, explique a falta de procedimento validado e peça somente a tela ou contexto necessário. Um vídeo sem transcrição pode ser indicado como referência, mas não autoriza inventar seus passos.
@@ -668,10 +715,15 @@ Evidências internas de existência/capacidade, úteis para responder sem invent
     if not result["ok"]:
         if grounded:
             return source_fallback(primary, same_company_case), {"used": False, "error": result["error"]}
-        return ("Entendi o relato, mas não consegui consultar o assistente agora. "
-                "Para avançar sem presumir a causa, envie somente o código ou texto completo da rejeição, se houver; "
-                "vou considerar a tela e a ação que você já informou."), {"used": False, "error": result["error"]}
-    return result["text"], {"used": True, "model": llm_client.MODEL, "mode": "grounded" if grounded else "investigation"}
+        return investigation_reply(question, decision), {"used": False, "error": result["error"], 'decision': decision}
+    violations = response_violations(result['text'], primary)
+    if violations:
+        decision = {**decision, 'state': 'ENCAMINHAR', 'confidence': 'BAIXA',
+                    'can_propose_procedure': False, 'procedure': None,
+                    'reasons': decision['reasons'] + violations}
+        return investigation_reply(question, decision), {'used': True, 'model': llm_client.MODEL,
+            'mode': 'guardrail', 'decision': decision, 'blocked_output_reasons': violations}
+    return result["text"], {"used": True, "model": llm_client.MODEL, "mode": "grounded" if grounded else "investigation", 'decision': decision}
 
 
 @router.post("/conversations/{cid}/messages")
@@ -703,16 +755,19 @@ def add_message(cid: uuid.UUID, body: NewMessage):
                 capability_leads = capability_evidence_cases(conn, tenant, search_query)
             history = "\n".join(f"{m['role']}: {m['content'][:800]}" for m in reversed(existing))
             reply, model = build_reply({**row, "company_name": prof["company_name"]}, history, prof["facts"], envs,
-                                       sources, question, cases, capability_leads=capability_leads)
+                                       sources, question, cases, capability_leads=capability_leads, decision_query=search_query)
         # Only show evidence actually used for the answer. Other search hits may
         # mention the same words while addressing a different procedure.
         cards = source_cards(sources[:1]) if (not confirmed and sources and
+                (model.get('decision') or {}).get('can_propose_procedure', True) and
                 sources[0].get("applicable") and sources[0].get("answer_use") != "investigation_only") else []
         with connection() as conn:
-            conn.execute("""INSERT INTO technician_conversation_messages(conversation_id,role,content,sources)
-                VALUES(%s,'assistant',%s,%s)""", (cid, reply, psycopg.types.json.Jsonb(cards)))
+            saved_message = conn.execute("""INSERT INTO technician_conversation_messages(conversation_id,role,content,sources)
+                VALUES(%s,'assistant',%s,%s) RETURNING id""", (cid, reply, psycopg.types.json.Jsonb(cards))).fetchone()
             conn.execute("UPDATE technician_conversations SET updated_at=now() WHERE id=%s", (cid,))
-        return {"reply": reply, "sources": cards, "model": model}
+        import support_events
+        support_events.record('workbench:' + str(saved_message['id']), 'workbench', model.get('decision'), row['movidesk_company_id'])
+        return {"reply": reply, "sources": cards, "model": model, 'decision': model.get('decision')}
     except HTTPException:
         raise
     except (psycopg.Error, ValueError) as exc:

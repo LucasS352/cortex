@@ -107,7 +107,7 @@ class WorkbenchUnitTests(unittest.TestCase):
         self.assertIn('temos esse modelo no ERP Master',prompt)
         self.assertIn('Não responda que a funcionalidade é desconhecida',prompt)
 
-    def test_usable_source_gets_sufficient_output_budget_and_grounded_fallback(self):
+    def test_historical_case_is_internal_support_without_procedural_fallback(self):
         source = {'id': 30897, 'source_external_id': 131549, 'source_type': 'PROBABLE_TICKET',
                   'title': 'Erro ao emitir etiqueta', 'applicable': True,
                   'answer_use': 'supporting_reference', 'problem': 'Nenhuma venda selecionada',
@@ -120,10 +120,12 @@ class WorkbenchUnitTests(unittest.TestCase):
             'ok': False, 'error': 'Resposta incompleta.', 'text': ''}) as generate:
             reply, meta = build_reply(row, '', [], [], [source], 'Erro ao emitir etiqueta', cases)
         self.assertEqual(generate.call_args.kwargs['max_tokens'], 4096)
-        self.assertIn('Número do chamado Movidesk para citar: 131549', generate.call_args.args[0])
+        self.assertIn('Fonte principal aplicável: nenhuma', generate.call_args.args[0])
+        self.assertIn("'ticket': 131549", generate.call_args.args[0])
         self.assertNotIn('30897', generate.call_args.args[0])
-        self.assertIn('Gerado pelo Site', reply)
-        self.assertIn('mesma empresa', reply)
+        self.assertNotIn('Gerado pelo Site', reply)
+        self.assertNotIn('O campo Gerado pelo Site foi alterado', generate.call_args.args[0])
+        self.assertFalse(meta['decision']['can_propose_procedure'])
         self.assertFalse(meta['used'])
 
     def test_environment_only_shows_active_connection(self):
@@ -150,7 +152,7 @@ class WorkbenchDatabaseTests(unittest.TestCase):
         with patch('technician_workbench.llm_client.generate', return_value={
             'ok': False, 'error': 'Indisponível', 'text': ''}):
             reply, meta = build_reply({}, '', [], [], [], 'erro de etiqueta', cases)
-        self.assertIn('código ou texto completo', reply)
+        self.assertIn('retorno apresentado', reply)
         self.assertFalse(meta['used'])
 
     def test_company_fact_versioning_and_secret_filter(self):

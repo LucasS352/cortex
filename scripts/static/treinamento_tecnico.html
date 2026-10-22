@@ -121,6 +121,11 @@ function displayContext(result){
   $('#questionSelect').innerHTML=data.questions.map(q=>`<option value="${esc(q.action_id)}">Nota ${esc(q.action_id)} · ${esc(q.created_at||'')} · ${esc(q.text.slice(0,90))}</option>`).join('');
   $('#answerSelect').innerHTML=data.answers.map(a=>`<option value="${esc(a.action_id)}" ${a===selected?'selected':''}>Ação ${esc(a.action_id)} · ${esc(a.created_at||'')}</option>`).join('');
   $('#questionSelect').onchange=showQuestion; $('#answerSelect').onchange=showAnswer; showAnswer();
+  if (data.revision_requests?.length) {
+    const notice = document.createElement('div'); notice.className = 'card';
+    notice.textContent = 'Ajustes solicitados pela curadoria: ' + data.revision_requests.map(r => r.request.reason).join(' · ');
+    $('#app').prepend(notice);
+  }
   $('#files').onchange=e=>{files=[...e.target.files].slice(0,5).map(file=>({file,name:file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim()}));if(e.target.files.length>5)fail('Serão utilizadas somente as cinco primeiras imagens.');renderImages();};
   $('#loading').hidden=true; $('#access').hidden=true; $('#app').hidden=false; $('#footer').hidden=false;
 }

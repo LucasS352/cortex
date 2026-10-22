@@ -186,6 +186,8 @@ def _search(query: str, allowed_sources: set[str], context: str = "") -> tuple[l
                         "source_external_id": r.get("source_external_id"),
                         "source_url": r.get("source_url") or (r.get("metadata") or {}).get("source_url"),
                         "source_type": r.get("source_type"), "tier": r.get("tier"),
+                        "source_id": r.get('source_id'), 'metadata': r.get('metadata') or {},
+                        'evidence_status': r.get('evidence_status'), 'applicable': r.get('applicable', not conflict),
                         "answer_use": q.get("answer_use"), "matched_terms": r.get("matched_terms", [])[:8],
                         "matched_identifiers": r.get("matched_identifiers", []),
                         "matched_signatures": r.get("matched_signatures", []),
@@ -332,8 +334,10 @@ def simulate(subject: str, client_name: str, messages: list[dict], settings: dic
 
     has_proc = len(primary.get("solution") or primary.get("excerpt") or "") >= 60 if primary else False
     has_match = (primary.get("exact_match") if evidence else (len(primary.get("matched_terms", [])) >= 2 and has_proc)) if primary else False
-    supported = bool(primary and has_match and primary.get("answer_use") != "investigation_only")
-    conflict = bool(supported and primary.get("context_conflict"))
+    from support_policy import decide, investigation_reply, response_violations
+    support_decision = decide(query if sources else latest, sources)
+    supported = bool(primary and has_match and support_decision['can_propose_procedure'])
+    conflict = bool(primary and primary.get('answer_use') != 'investigation_only' and primary.get("context_conflict"))
     trace.append({"step": "Aplicabilidade", "result":
                   "Log correspondente; integrador divergente, confirmar antes de orientar alterações" if conflict else
                   "Referência compatível; causa ainda depende de validação no cliente" if supported else
@@ -347,21 +351,13 @@ def simulate(subject: str, client_name: str, messages: list[dict], settings: dic
     elif not supported or conflict:
         if conflict and primary.get("reviewed_summary"):
             reply = (
-                "Localizei um histórico com a mesma mensagem técnica. Nesse atendimento, "
-                f"{primary['diagnosis']}\n\n"
-                f"O procedimento registrado foi: {primary['solution']}\n\n"
-                f"Esse registro se refere a **{', '.join(primary['source_integrators'])}**, "
+                f"A referência se refere a **{', '.join(primary['source_integrators'])}**, "
                 f"enquanto você informou **{', '.join(primary['expected_integrators'])}**. "
-                "Antes de aplicar esse procedimento, confirme o integrador exibido na coluna **Integração** "
-                "da ocorrência. Essa diferença precisa ser conferida para orientar o ajuste correto."
+                "Essa diferença precisa de revisão técnica antes de orientar um ajuste."
             )
             origin = "validacao_contexto"
         else:
-            reply = (
-                "Recebi a mensagem informada. As referências encontradas ainda não sustentam uma correção "
-                "para este caso. É necessária a análise de um técnico para confirmar a causa antes de "
-                "orientar alterações no cadastro."
-            )
+            reply = investigation_reply(latest, support_decision)
             origin = "triagem_tecnica"
     else:
         # One applicable procedure per answer. Other retrieval hits remain
@@ -416,6 +412,11 @@ Resposta ao cliente:"""
                 "Não foi possível preparar uma resposta automática validada nesta tentativa."
             )
             origin = "triagem_tecnica"
+    violations = response_violations(reply, primary) if not playbook else []
+    if violations:
+        support_decision = {**support_decision,'state':'ENCAMINHAR','can_propose_procedure':False,
+                            'confidence':'BAIXA','procedure':None,'reasons':support_decision['reasons']+violations}
+        reply, origin = investigation_reply(latest,support_decision), 'triagem_tecnica'
     if primary and origin in ('modelo', 'base_conhecimento'):
         for image_url in primary.get('images', [])[:4]:
             if image_url not in reply:
@@ -463,6 +464,7 @@ Resposta ao cliente:"""
 
     return {
         "reply": reply, "origin": origin, "meta": meta, "stage": stage, "stage_label": stage_label,
+        'decision': support_decision,
         "suggested_replies": suggested_replies,
         "needs_human": origin in ("sem_resposta", "triagem_tecnica", "validacao_contexto") or route.get("needs_review", False) and origin != "playbook",
         "handoff_reason": ("Integrador da fonte difere do informado" if conflict else

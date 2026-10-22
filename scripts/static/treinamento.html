@@ -75,6 +75,8 @@
       <button data-tab="reviews">Avaliações dos técnicos</button>
       <button data-tab="suggestions">Tickets sugeridos</button>
       <button data-tab="items">Base canônica</button>
+      <button data-tab="staging">Importação em prévia</button>
+      <button data-tab="metrics">Qualidade do suporte</button>
       <button data-tab="releases">Versões do Master</button>
       <button data-tab="deprecated">Inativos</button>
     </div>
@@ -158,7 +160,27 @@ async function renderList() {
   const q = $('#q'); if (q) q.onkeydown = (e) => { if (e.key === 'Enter') { state.q = q.value; renderList(); } };
   list.innerHTML = '<div class="empty">Carregando…</div>';
   try {
-    if (state.tab === 'queue') {
+    if (state.tab === 'staging') {
+      const rows = await api('/staging'); state.staging = rows;
+      list.innerHTML = rows.length ? rows.filter(r => !state.module || r.content.module_key === state.module).map(r =>
+        `<div class="row"><div class="grow"><div class="title">${esc(r.content.title)}</div><div class="meta">${esc(r.card_id)} · Prévia aguardando aprovação administrativa</div></div><button class="primary" data-stage="${esc(r.id)}">Revisar importação</button></div>`).join('') : '<div class="empty">Nenhum pacote de importação disponível.</div>';
+      list.querySelectorAll('[data-stage]').forEach(b => b.onclick = () => openStaging(b.dataset.stage));
+    } else if (state.tab === 'metrics') {
+      const data = await api('/metricas-suporte');
+      const table = (rows, headers, values) => rows.length ? `<table style="width:100%;text-align:left"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${values(r).map(v=>`<td>${esc(v ?? '—')}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p>Sem registros neste período.</p>';
+      const reviews = data.answer_reviews;
+      list.innerHTML = `<div class="panel"><h3>Avaliações humanas</h3><p>${reviews.total} avaliações · ${reviews.approved} aprovadas · ${reviews.corrected ?? '—'} corrigidas · ${reviews.rejected} rejeitadas</p></div>
+        <div class="panel"><h3>Prazo médio até aprovação</h3><p>${data.approval_time.mean_seconds == null ? 'Sem aprovações registradas' : Math.round(data.approval_time.mean_seconds/60)+' minutos'} · ${data.approval_time.decided} decisões</p></div>
+        <div class="panel"><h3>Fontes anexadas no assistente</h3><p>${data.evidence_coverage.assistant_messages} respostas · ${data.evidence_coverage.messages_without_attached_source} sem fonte anexada</p></div>
+        <div class="panel"><h3>Cobertura por módulo</h3>${table(data.module_coverage,['Módulo','Procedimentos ativos'],r=>[modLabel(r.module_key),r.active_procedures])}</div>
+        <div class="panel"><h3>Procedimentos citados</h3>${table(data.procedure_citations,['Procedimento','Versão','Citações'],r=>[r.title,r.version,r.citations])}</div>
+        <div class="panel"><h3>Versões com avaliações negativas</h3>${table(data.negative_procedures,['Procedimento','Versão','Avaliações negativas'],r=>[r.title,r.version_id,r.negative_reviews])}</div>
+        <div class="panel"><h3>Recorrência no assistente</h3>${table(data.company_recurrence,['Empresa','Atendimentos'],r=>[r.movidesk_company_id,r.conversations])}</div>` +
+        `<div class="panel"><h3>Decisões operacionais desde esta versão</h3>${table(data.operational.states,['Decisão','Ocorrências'],r=>[r.state,r.events])}</div>
+        <div class="panel"><h3>Termos que exigiram investigação</h3>${table(data.operational.investigation_terms,['Termo técnico','Ocorrências'],r=>[r.term,r.events])}</div>
+        <div class="panel"><h3>Procedimentos usados nas notas e no assistente</h3>${table(data.operational.procedures,['Fonte','Versão','Usos'],r=>[r.source_id,r.source_version,r.events])}</div>` +
+        `<div class="panel"><h3>Limites destas métricas</h3>${data.limitations.map(v => `<p>${esc(v)}</p>`).join('')}</div>`;
+    } else if (state.tab === 'queue') {
       const rows = await api(`/candidatos?${m}`);
       list.innerHTML = rows.length ? rows.map(r => {
         const ok = r.quality_checks.filter(c => c.ok).length;
@@ -275,10 +297,10 @@ $('#transformBtn').onclick = () => {
 function moduleOptions(sel) { return state.taxonomy.map(m => `<option value="${m.key}" ${m.key === sel ? 'selected' : ''}>${esc(m.label)}</option>`).join(''); }
 function subOptions(mod, sel) { return ((state.taxonomy.find(m => m.key === mod) || {}).subtopics || []).map(([k, l]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(l)}</option>`).join(''); }
 
-function contentForm(c) {
+function contentForm(c, onlySelected = false) {
   const a = c.applicability || {};
   const ownUploads = new Set((c.images || []).map(x => x.file));
-  const availableImages = state.images.filter(image => !/^[0-9a-f]{32}\.png$/.test(image.file) || ownUploads.has(image.file));
+  const availableImages = state.images.filter(image => onlySelected ? ownUploads.has(image.file) : !/^[0-9a-f]{32}\.png$/.test(image.file) || ownUploads.has(image.file));
   return `
     <label>Título do procedimento</label><input type="text" id="f_title" value="${esc(c.title)}">
     <div class="grid2"><div><label>Módulo</label><select id="f_module">${moduleOptions(c.module_key)}</select></div>
@@ -314,6 +336,25 @@ function readForm() {
       valid_from: $('#a_from').value.trim() || null, valid_until: $('#a_until').value.trim() || null } };
 }
 
+function openStaging(id) {
+  const card = state.staging.find(c => c.id === id); if (!card) return;
+  const dlg = $('#dlg');
+  dlg.innerHTML = `<div class="dlg-head"><h2>Revisar importação · ${esc(card.content.title)}</h2><button id="stageClose">Fechar</button></div>
+    <div class="dlg-body"><div>${contentForm(card.content,true)}</div><div class="panel"><h3>Origem e evidências</h3><p>${esc(card.source_manual || 'Material revisado do projeto')}</p>${card.evidence.map(e=>`<p>${esc(e.type)}: ${esc(e.ref)}</p>`).join('')}${card.source_images.map((image,i)=>`<figure style="margin:12px 0"><img src="${API}/staging/${card.id}/imagens/${i}" alt="${esc(image.name)}" style="max-width:100%"><figcaption>${esc(image.name)} · após o passo ${esc(image.after_step)}<br>${esc(image.caption)}</figcaption></figure>`).join('')}<p>Confirme causa, aplicabilidade, pré-requisitos e resultado. A aprovação publica uma nova versão e fica registrada na auditoria.</p><label>ID de procedimento existente (opcional)</label><input id="stageTarget" type="number" min="1"></div></div>
+    <div class="dlg-foot"><input id="stageReason" type="text" placeholder="Motivo da aprovação"><button class="primary" id="stagePublish">Aprovar e publicar</button></div>`;
+  bindForm(); $('#stageClose').onclick = () => dlg.close();
+  $('#stagePublish').onclick = async (event) => {
+    const button = event.currentTarget, reason = $('#stageReason').value.trim();
+    if (reason.length < 5) return toast('Informe o motivo da aprovação.');
+    button.disabled = true;
+    try {
+      await api(`/staging/${id}/aprovar`, {method:'POST', body:{sha256:card.sha256,content:readForm(),reason,target_item_id:Number($('#stageTarget').value)||null}});
+      dlg.close(); toast('Importação aprovada e auditada.'); refresh();
+    } catch (error) { toast(error.message); button.disabled = false; }
+  };
+  dlg.showModal();
+}
+
 async function openCandidate(id) {
   const c = await api(`/candidatos/${id}`); const x = c.extraction;
   const content = { ...x, module_key: c.suggested_module, subtopic_key: c.suggested_subtopic };
@@ -341,6 +382,7 @@ async function openCandidate(id) {
       <select id="target" style="width:auto"><option value="">— procedimento existente —</option>
         ${related.map(r => `<option value="${r.item_id}">${esc(r.title)} (${REL[r.relation][1]})</option>`).join('')}</select>
       <button class="danger" data-act="reject">Rejeitar</button>
+      <button data-act="return">Devolver para ajuste</button>
       <button data-act="attach" title="O ticket vira mais uma evidência, sem mudar o procedimento">Anexar como evidência</button>
       <button data-act="revise" title="Gera nova versão; a anterior fica no histórico">Nova versão</button>
       <button class="primary" data-act="new">Publicar como novo</button>
@@ -353,8 +395,9 @@ async function openCandidate(id) {
     b.disabled = true;
     try {
       if (act === 'reject') await api(`/candidatos/${id}/rejeitar`, { method: 'POST', body: { reason } });
+      else if (act === 'return') await api(`/candidatos/${id}/devolver`, { method: 'POST', body: { reason } });
       else await api(`/candidatos/${id}/aprovar`, { method: 'POST', body: { decision: act, reason, target_item_id: target, content: act === 'attach' ? null : readForm() } });
-      dlg.close(); toast(act === 'reject' ? 'Sugestão rejeitada.' : 'Publicado — já disponível para a IA.'); refresh();
+      dlg.close(); toast(act === 'reject' ? 'Sugestão rejeitada.' : act === 'return' ? 'Ajuste solicitado ao técnico.' : 'Publicado — já disponível para a IA.'); refresh();
     } catch (e) { toast(e.message); b.disabled = false; }
   });
 }

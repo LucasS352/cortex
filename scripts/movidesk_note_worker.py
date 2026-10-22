@@ -381,12 +381,14 @@ def generate_note(ticket, settings, api):
         attachment_notices.append('Há outros anexos pendentes de leitura pelo técnico.')
     question += '\n' + '\n'.join(attachment_notices) if attachment_notices else ''
     query = search_context_query(question, list(reversed(messages[:-1])))
+    from support_policy import decide
+    org_id, org_name, _ = organization(ticket.get('clients'))
     from support_triage import intake
     triage = intake(question, query, messages[:-1])
-    if triage:
+    if triage and not org_id:
         triage['attachments'].extend(attachment_notices)
+        triage['decision'] = decide(query, [])
         return triage
-    org_id, org_name, _ = organization(ticket.get('clients'))
     with connection() as conn:
         tenant = ensure_single_tenant(conn)
         # These optional profiles can be absent on an older restored database.
@@ -428,14 +430,24 @@ def generate_note(ticket, settings, api):
             if str(case['external_id']) not in known:
                 cases.append(case)
                 known.add(str(case['external_id']))
+    decision = decide(query, sources, company_cases)
+    if triage and not decision['can_propose_procedure']:
+        triage.update(decision=decision, similar_tickets=[
+            {'ticket': c['external_id'], 'title': c.get('subject'),
+             'status': c.get('status') or c.get('base_status'),
+             'active': bool(c.get('is_active')), 'resolution': None}
+            for c in company_cases[:3]])
+        triage['attachments'].extend(attachment_notices)
+        return triage
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in messages[:-1])
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
            'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
     reply, meta = build_reply(row, context, facts, envs, sources, question, company_cases,
-                              audience='customer_draft', capability_leads=capability_leads)
+                              audience='customer_draft', capability_leads=capability_leads, decision_query=query)
+    decision = meta.get('decision') or decision
     if not meta.get('used'):
         raise RetryJob('Gemini indisponível; nenhuma nota de contingência publicada')
-    reference = sources[:1] if sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
+    reference = sources[:1] if decision['can_propose_procedure'] and sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
     tutorials = [s for s in sources[:5] if s.get('applicable') and s.get('videos')]
     similar = [{'ticket': case.get('external_id'), 'title': case.get('subject'),
                 'status': case.get('status') or case.get('base_status'),
@@ -449,8 +461,15 @@ def generate_note(ticket, settings, api):
         existing_ids = {str(case['ticket']) for case in similar} | {str(ticket['id'])}
         similar.extend(case for case in reference[0].get('resolved_examples', [])
                        if str(case['ticket']) not in existing_ids)
-    else:
-        similar = []
+    # Open cases from this company remain recurrence signals, even when no
+    # complete procedure exists. Never expose another company's active ticket.
+    existing_ids = {str(c.get('ticket')) for c in similar} | {str(ticket['id'])}
+    open_cases = [{'ticket': c['external_id'], 'title': c.get('subject'),
+                   'status': c.get('status') or c.get('base_status'),
+                   'active': True, 'resolution': None}
+                  for c in company_cases if c.get('is_active')
+                  and str(c['external_id']) not in existing_ids]
+    similar = open_cases[:2] + similar
     # Capability observations are useful to the reviewing technician even when
     # they are not complete enough to be published as a validated procedure.
     # Keep this distinction explicit: they appear as related tickets without a
@@ -468,13 +487,18 @@ def generate_note(ticket, settings, api):
     return {'reply': reply,
             'sources': [{'ticket': s.get('source_external_id') if s.get('source_type') in
                          ('VALIDATED_TICKET', 'PROBABLE_TICKET') else None,
+                         'node_id': s.get('id'), 'source_id': s.get('source_id'),
+                         'version': (s.get('metadata') or {}).get('version_no'),
+                         'approved_by': (s.get('metadata') or {}).get('approved_by'),
+                         'approved_at': (s.get('metadata') or {}).get('approved_at') or s.get('reviewed_at'),
                          'title': s.get('title'), 'url': s.get('source_url') or (s.get('metadata') or {}).get('source_url'),
                          'provenance': s.get('provenance')} for s in reference + [s for s in tutorials if s not in reference]],
             'videos': [video for source in tutorials for video in source['videos']],
             'similar_tickets': similar, 'evidence_scope': evidence_scope,
+            'decision': decision,
             'mode': meta.get('mode'), 'attachments': attachment_notices + media_notices, 'images': images,
-            'history_notice': ('Foram localizados menos de três chamados resolvidos com procedimento aplicável.'
-                               if reference and len(similar) < 3 else
+            'history_notice': ('Nenhum chamado resolvido qualificado foi encontrado para apoiar este procedimento.'
+                               if reference and not any(not c.get('active') and c.get('resolution') for c in similar) else
                                'Tutorial localizado na base; vídeo sem transcrição validada para gerar passos escritos.' if tutorials and not reference else
                                'Há evidências internas da funcionalidade, mas ainda não existe um procedimento completo aprovado.'
                                if capability_leads and not reference else
@@ -504,14 +528,17 @@ def render_note(result, marker):
         image_src = mapped_replies.safe_image_data(item.get('data_url')) or url
         if not image_src:
             return ''
-        name = html.escape(item.get('name') or 'Imagem de apoio')
-        caption = html.escape(item.get('caption') or 'Tela de referência do procedimento')
+        raw_name = (item.get('name') or '').strip()
+        raw_caption = (item.get('caption') or 'Tela de referência do procedimento').strip()
+        caption = html.escape(raw_caption)
         safe_src = html.escape(image_src, quote=True)
         image = '<img src="' + safe_src + '" alt="' + caption + \
                 '" width="900" style="max-width:100%;height:auto">'
         if url:
             image = '<a href="' + html.escape(url, quote=True) + '">' + image + '</a>'
-        return '<p><strong>' + name + '</strong></p><p>' + image + '</p><p><small>' + caption + '</small></p>'
+        header = ('<p><strong>' + html.escape(raw_name) + '</strong></p>'
+                  if raw_name and raw_name != raw_caption else '')
+        return header + '<p>' + image + '</p><p><small>' + caption + '</small></p>'
 
     images = result.get('images') or []
     answer_images = [item for item in images if item.get('placement') == 'answer']
@@ -575,6 +602,16 @@ def render_note(result, marker):
         lines.append('</ul>')
     if result.get('history_notice'):
         lines.append('<p><strong>Observação interna:</strong> ' + html.escape(result['history_notice']) + '</p>')
+    decision = result.get('decision') or {}
+    if decision:
+        lines.append('<p><strong>Decisão interna:</strong> ' + html.escape(str(decision.get('state', ''))) +
+                     ' · Evidência: ' + html.escape(str(decision.get('confidence', ''))) + '</p>')
+        if decision.get('procedure'):
+            lines.append('<p><strong>Procedimento e versão:</strong> ' +
+                         html.escape(json.dumps(decision['procedure'], ensure_ascii=False, default=str)) + '</p>')
+        if decision.get('pending_evidence'):
+            lines.append('<p><strong>Evidência pendente:</strong> ' +
+                         html.escape(', '.join(decision['pending_evidence'])) + '</p>')
     remaining_images = [item for item in images if item.get('placement') != 'answer' and not item.get('after_step')]
     if remaining_images:
         lines.append('<p><strong>Imagens do procedimento:</strong></p>')
@@ -679,6 +716,10 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
             raise RetryJob('Modelo não gerou texto completo')
         result['feedback_ticket'] = ticket['id']
         content = render_note(result, marker)
+        import support_events
+        from agent_control import organization
+        support_events.record(marker, 'movidesk_' + settings.mode, result.get('decision'),
+                              organization(ticket.get('clients'))[0])
         with _connect() as db:
             db.execute('INSERT OR IGNORE INTO internal_note_outbox VALUES (?,?,?,?,?,?,?,?)',
                        (key, ticket['id'], source_action, marker, content, 'prepared', time.time(), time.time()))

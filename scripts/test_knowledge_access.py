@@ -12,6 +12,17 @@ class AccessTests(unittest.TestCase):
             helper = patch(target)
             helper.start()
             self.addCleanup(helper.stop)
+        approved = patch('knowledge_access.approved_procedures', return_value=[])
+        approved.start()
+        self.addCleanup(approved.stop)
+
+    def test_current_approved_lane_precedes_historical_search(self):
+        connection = MagicMock()
+        connection.execute.return_value.fetchall.return_value = [{'id':'tenant'}]
+        approved = {'id':2,'source_id':'canon:2','metadata':{'version_no':3}}
+        with patch('knowledge_access.approved_procedures',return_value=[approved]):
+            self.assertEqual(search(connection,'Forma de pagamento não integrada'),[approved])
+        self.assertEqual(connection.execute.call_count,1)
 
     def test_conversational_noise_and_common_typo_do_not_hide_fiscal_subject(self):
         plan = query_plan('erro de inscrição estadual do destinatio invalida ta dando isso ao tentar emitir a nota')

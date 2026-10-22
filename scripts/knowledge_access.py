@@ -272,6 +272,9 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
     plan=query_plan(query)
     top_k=max(1,min(int(top_k),50))
     if not plan['terms'] and not plan['objects'] and not plan['codes'] and plan['protocol'] is None: return []
+    approved = approved_procedures(conn, query)
+    if approved:
+        return approved[:top_k]
     rows=[]
     # Broad OR search can exhaust the candidate budget with recent tickets.
     # Reserve a title lane requiring every meaningful concept for how-to queries.
@@ -394,6 +397,12 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
 def assessment(rows):
     if not rows:
         return dict(status='insufficient_evidence',message='Nenhuma fonte correspondente encontrada. Solicitar mensagem completa, tela e versão; registrar lacuna.',can_support_procedure=False)
+    from support_policy import decide
+    policy = decide('', rows)
+    if not policy['can_propose_procedure']:
+        return dict(status='references_require_validation',
+                    message='Históricos e documentos sem aprovação aplicável são apoio à investigação; não autorizam passos operacionais.',
+                    can_support_procedure=False,support_decision=policy)
     usable=[r for r in rows if r.get('answer_use')!='investigation_only' and r.get('applicable') is not False]
     if rows[0].get('answer_use')=='investigation_only' or rows[0].get('applicable') is False:
         return dict(status='primary_source_incomplete',

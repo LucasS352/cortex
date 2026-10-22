@@ -87,6 +87,12 @@ class SignatureTests(unittest.TestCase):
 
 
 class SimulationTests(unittest.TestCase):
+    def approved_source(self):
+        source = self.source()
+        source.update(context_conflict=False, applicable=True, evidence_status='human_approved_procedure',
+                      source_type='OFFICIAL_KB',source_id='canon:qa',metadata={'version_no':1})
+        return source
+
     def source(self, **overrides):
         row = access.rank_rows([historical_row()], access.query_plan(LOG))[0]
         row.update(overrides)
@@ -107,7 +113,7 @@ class SimulationTests(unittest.TestCase):
         self.assertIn('Loja Integrada', search.call_args.args[0])
         self.assertEqual(result['origin'], 'validacao_contexto')
         self.assertTrue(result['needs_human'])
-        self.assertIn('230 caracteres', result['reply'])
+        self.assertNotIn(SOLUTION, result['reply'])
         self.assertIn('UAPPI/WELL', result['reply'])
         self.assertIn('LOJA INTEGRADA', result['reply'])
         self.assertNotIn('fabricante', result['reply'])
@@ -136,9 +142,16 @@ class SimulationTests(unittest.TestCase):
         self.assertEqual(result['origin'], 'triagem_tecnica')
         generate.assert_not_called()
 
-    def test_timeout_uses_only_reviewed_summary_with_qualified_language(self):
+    def test_timeout_does_not_promote_historical_review_to_canonical_procedure(self):
         source = self.source()
         source['context_conflict'] = False
+        result, _, generate = self.run_sim([source])
+        self.assertEqual(result['origin'],'triagem_tecnica')
+        self.assertNotIn(SOLUTION,result['reply'])
+        generate.assert_not_called()
+
+    def test_timeout_can_preserve_an_approved_procedure(self):
+        source = self.approved_source()
         result, _, generate = self.run_sim([source])
         self.assertEqual(result['origin'], 'base_conhecimento')
         self.assertIn('histórico', result['reply'])
@@ -147,7 +160,7 @@ class SimulationTests(unittest.TestCase):
         generate.assert_called_once()
 
     def test_supported_response_includes_selected_source_image_when_model_omits_it(self):
-        source = self.source()
+        source = self.approved_source()
         source.update(context_conflict=False,
                       images=['/manual_media/apoio/cadastro-produtos-precos.png'],
                       image_labels={'/manual_media/apoio/cadastro-produtos-precos.png': 'Exemplo ilustrativo; valores de outro cadastro'})
@@ -186,7 +199,7 @@ class SimulationTests(unittest.TestCase):
         generate.assert_not_called()
 
     def test_secondary_text_does_not_enter_model_prompt(self):
-        first = self.source()
+        first = self.approved_source()
         first.update(context_conflict=False)
         second = self.source()
         second.update(id=9, context_conflict=False, answer_use='investigation_only',
@@ -195,7 +208,7 @@ class SimulationTests(unittest.TestCase):
         self.assertNotIn('OTHER_PROCEDURE', generate.call_args.args[0])
 
     def test_followup_confirmation_keeps_log_and_updates_integrator(self):
-        source = self.source()
+        source = self.approved_source()
         source['context_conflict'] = False
         with patch.object(sim, '_search', return_value=([source], {'query':LOG,'ms':1,'error':''})) as search, \
              patch.object(sim.llm_client, 'generate', return_value={'ok':False,'error':'timeout','latency_ms':12}):

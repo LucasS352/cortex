@@ -161,6 +161,39 @@ def overview():
     return _guard(kt.overview)
 
 
+@router.get('/metricas-suporte')
+def support_quality_metrics():
+    from support_metrics import snapshot
+    return _guard(snapshot)
+
+
+@router.get('/staging')
+def staging_cards():
+    import knowledge_staging
+    return _guard(knowledge_staging.previews)
+
+
+@router.get('/staging/{card_id}/imagens/{index}')
+def staging_image(card_id: str, index: int):
+    from fastapi.responses import FileResponse
+    import knowledge_staging
+    return FileResponse(_guard(knowledge_staging.image_path, card_id, index), media_type='image/png')
+
+
+class StagingApproval(BaseModel):
+    sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
+    content: Content
+    reason: str = Field(min_length=5, max_length=2000)
+    target_item_id: int | None = Field(default=None, ge=1)
+
+
+@router.post('/staging/{card_id}/aprovar')
+def approve_staging(card_id: str, body: StagingApproval, request: Request):
+    import knowledge_staging
+    return _guard(knowledge_staging.approve, card_id, body.sha256, _content(body.content),
+                  actor(request), body.reason, body.target_item_id)
+
+
 @router.get('/sugestoes')
 def suggestions(module: str | None = None, limit: int = Query(30, ge=1, le=100)):
     return _guard(kt.suggest_tickets, limit=limit, module=module)
@@ -193,6 +226,11 @@ def approve(candidate_id: int, body: Decision, request: Request):
 @router.post('/candidatos/{candidate_id}/rejeitar')
 def reject(candidate_id: int, body: Reason, request: Request):
     _guard(kt.reject, candidate_id, actor(request), body.reason)
+
+
+@router.post('/candidatos/{candidate_id}/devolver')
+def return_for_revision(candidate_id: int, body: Reason, request: Request):
+    return _guard(kt.request_revision, candidate_id, actor(request), body.reason)
     return {'ok': True}
 
 
@@ -297,6 +335,7 @@ def technician_context(ticket_id: int, request: Request,
                        technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
     name = _technician_name(technician_pin, request)
     context = _guard(kt.ticket_answers, ticket_id)
+    context['revision_requests'] = _guard(kt.revision_requests, ticket_id)
     return {'technician': name, 'context': context,
             'taxonomy': [module for module in _guard(kt.taxonomy_options) if module['key'] != 'unclassified']}
 

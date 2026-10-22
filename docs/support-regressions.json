@@ -1,0 +1,16 @@
+[
+  {"id":"anymarket-carrier","domain":"integrations","question":"AnyMarket: Carrier FedEx não relacionado à transportadora no Master","recipe":"reviewed-anymarket-carrier-relation-v1","state":"PROCEDIMENTO_CONFIRMADO","forbidden":"Ocorrências de integrações"},
+  {"id":"carrier-without-failure","domain":"integrations","question":"AnyMarket Carrier FedEx transportadora demora para entregar","recipe":null,"state":"INVESTIGAR"},
+  {"id":"carrier-tried","domain":"integrations","question":"AnyMarket transportadora sem relacionamento. Já relacionei e não resolveu","recipe":null,"state":"ENCAMINHAR"},
+  {"id":"payment","domain":"integrations","question":"Forma de pagamento Shopee PayLater não configurada","recipe":"reviewed-payment-relation-v1","state":"PROCEDIMENTO_CONFIRMADO"},
+  {"id":"payment-tried","domain":"integrations","question":"Forma de pagamento não integrada. Já cadastrei e continua igual","recipe":null,"state":"ENCAMINHAR"},
+  {"id":"ie-invalid","domain":"fiscal","question":"IE do destinatário inválida","recipe":"reviewed-state-registration-v1","state":"PROCEDIMENTO_CONFIRMADO"},
+  {"id":"duplicate-539","domain":"fiscal","question":"Rejeição 539: Duplicidade de NF-e com diferença na Chave de Acesso","recipe":"reviewed-duplicate-nfe-key-v1","state":"PROCEDIMENTO_CONFIRMADO"},
+  {"id":"cfop-unknown","domain":"fiscal","question":"CFOP incompatível na operação de devolução","recipe":null,"state":"INVESTIGAR"},
+  {"id":"difal-unknown","domain":"fiscal","question":"Rejeição de DIFAL na nota fiscal","recipe":null,"state":"INVESTIGAR"},
+  {"id":"api-unauthorized","domain":"api","question":"HTTP 401 Unauthorized na Tray","recipe":null,"state":"INVESTIGAR"},
+  {"id":"inventory-missing-proof","domain":"products","question":"Saldo de estoque divergente","recipe":null,"state":"INVESTIGAR"},
+  {"id":"sales-missing-proof","domain":"sales","question":"Como consultar vendas por produto?","recipe":null,"state":"INVESTIGAR"},
+  {"id":"finance-missing-proof","domain":"finance","question":"Como conciliar um boleto?","recipe":null,"state":"INVESTIGAR"},
+  {"id":"unknown-object","domain":"infrastructure","question":"ORA-99999 SFT_OBJETO_NAO_DOCUMENTADO","recipe":null,"state":"INVESTIGAR"}
+]

@@ -117,8 +117,7 @@ class GroundedRAGSkill(BaseSkill):
         evidence_assessment = assessment(candidates[:top_k])
         # Inapplicable histories remain in retrieval diagnostics, not in the
         # procedural context sent to the dialogue model.
-        usable = [r for r in candidates if r.get('applicable') is not False
-                  and r.get('answer_use')!='investigation_only'] if evidence_assessment['can_support_procedure'] else []
+        usable = candidates[:1] if evidence_assessment['can_support_procedure'] else []
         top_ranked = self.reranker.rerank(usable, state, top_k=top_k)
         context_text = self.reranker.format_for_llm(top_ranked)
         if not evidence_assessment["can_support_procedure"]:
