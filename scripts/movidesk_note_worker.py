@@ -444,7 +444,7 @@ def generate_note(ticket, settings, api):
         need_history = not any(s.get('applicable') and s.get('answer_use') != 'investigation_only'
                                for s in sources)
         for case in (resolved_support_cases(conn, tenant, query, ticket.get('id'), company_id=org_id)
-                     if need_history else []):
+                     if (need_history or len(cases) < 3) else []):
             if str(case['external_id']) not in known:
                 cases.append(case)
                 known.add(str(case['external_id']))
@@ -487,6 +487,23 @@ def generate_note(ticket, settings, api):
                                                     case.get('resolution_verified')) else None,
                 'same_company': bool(case.get('same_company'))}
                for case in cases_for_note[:5]]
+    existing_similar_ids = {str(c.get('ticket')) for c in similar} | {str(ticket.get('id') or '')}
+    for src in sources:
+        ext_id = src.get('source_external_id')
+        if (ext_id and str(ext_id).isdigit() and str(ext_id) not in existing_similar_ids and
+                src.get('applicable') and src.get('answer_use') != 'investigation_only' and
+                src.get('source_type') in ('VALIDATED_TICKET', 'PROBABLE_TICKET')):
+            similar.append({
+                'ticket': int(ext_id),
+                'title': src.get('title') or f'Chamado #{ext_id}',
+                'status': 'Resolvido',
+                'active': False,
+                'resolution': (src.get('solution') or '').strip() or None,
+                'same_company': str(src.get('id') or '').startswith('company-ticket-'),
+            })
+            existing_similar_ids.add(str(ext_id))
+            if len(similar) >= 5:
+                break
     images, media_notices = [], []
     if reference:
         images, media_notices = mapped_replies.note_images(reference[0])

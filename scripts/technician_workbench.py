@@ -1179,7 +1179,7 @@ def add_message(cid: uuid.UUID, body: NewMessage):
                                        for s in sources)
                 for extra_case in (resolved_support_cases(conn, tenant, search_query,
                                                           company_id=row["movidesk_company_id"])
-                                   if need_history else []):
+                                   if (need_history or len(cases) < 3) else []):
                     if str(extra_case.get("external_id")) not in known_ids:
                         cases.append(extra_case)
                         known_ids.add(str(extra_case.get("external_id")))

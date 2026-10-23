@@ -259,3 +259,8 @@ html[data-theme] .topbar{border-bottom-color:var(--ui-border)}
 .webhook-event small{opacity:.8}
 .logout-link{color:inherit;text-decoration:none;font-size:12px;font-weight:700;padding:7px 9px;border-radius:8px;border:1px solid var(--line,#b6c9d9)}
 .logout-link:hover{background:rgba(77,133,185,.13)}
+html[data-theme] body.training-page .sync-strip{display:none!important}
+html[data-theme] body.training-page .page-head{margin-bottom:14px}
+html[data-theme] body.training-page #view-training{height:calc(100vh - 148px)!important;min-height:760px}
+html[data-theme] body.training-page #training-frame{border-radius:0!important;background:transparent!important}
+
