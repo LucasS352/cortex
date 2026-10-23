@@ -152,14 +152,23 @@ def company_similar_cases(conn, tenant, company_id: str, query: str,
           {search_clause}
         ORDER BY {"relevance DESC," if fts else ""} r.created_date DESC LIMIT %s""", parameters).fetchall()
     applicable = []
+    has_diag_anchors = bool(plan and (plan["codes"] or plan["objects"] or plan["identifiers"] or plan["signatures"]))
     for item in rows:
+        if PROJECT_TICKET.search(str(item.get("subject") or "")):
+            continue
         gate = knowledge_access.applicability(
             {"title": item["subject"], "problem": item["problem_statement"],
-             "diagnosis": item["technical_narrative"], "solution": item["solution_statement"]}, query)
+             "diagnosis": item["technical_narrative"] if has_diag_anchors else "",
+             "solution": item["solution_statement"]}, query)
         if gate["applicable"]:
             case = dict(item)
             case["applicability_reasons"] = gate["applicability_reasons"]
             case["is_active"] = case.get("base_status") not in ("Resolved", "Closed")
+            if not case["is_active"] and not _is_hard_blocked(case) and len((case.get("solution_statement") or "").strip()) < 40:
+                res = extract_resolution(case)
+                if res:
+                    case["solution_statement"] = res
+                    case["resolution_verified"] = True
             applicable.append(case)
     return applicable[:min(max(limit, 1), 20)]
 
@@ -168,9 +177,11 @@ _RESOLUTION_TAIL = re.compile(
     r'(obrigad[oa] por entrar em contato|voc[eê]\s*j[aá]\s*assistiu|>\s*veja como acessar|'
     r'd[uú]vidas,? (?:estamos|fico|ficamos)|valida[cç][aã]o de backup|(?:^|\n)\s*__)', re.I)
 _RESOLUTION_HEAD = re.compile(
-    r'(?:a[cç][oõ]es realizadas para resolu[cç][aã]o|resolu[cç][aã]o(?:/resultado observado)?)\s*:\s*(.+)', re.I | re.S)
+    r'(?:a[cç][oõ]es realizadas para resolu[cç][aã]o|resolu[cç][aã]o(?:/resultado observado)?|para registro do atendimento[,:\s]+)\s*:?\s*(.+)', re.I | re.S)
 _RESOLUTION_ACTION = re.compile(
     r'\b(?:relac|vincul|ctrl|cadastr|configur|corrig|alter[aeo]|de ?/ ?para|tipo [pf]\b|inclu|preench|habilit|marc[aoq]|ajust|abr[ae]|acess|selecion|filtr|pesquis|export|visualiz)')
+_RESOLUTION_OPENING_ACTION = re.compile(
+    r'\b(?:relac|vincul|ctrl|cadastr|configur|corrig|alter[aeo]|de ?/ ?para|tipo [pf]\b|inclu|preench|habilit|marc[aoq]|desmarc|ajust|abr[ae]|acess|selecion|filtr|pesquis|export|visualiz|orientad|mostr|explic|clique|clicar|menu|aba|botao|opcoes|opcao|tela|caminho|passo|tutorial|video|youtu|parametro|campo|flag|coluna|relatorio|emitir|emissao|gerar|cancelar|lancar|importar|reprocess|sincroniz)')
 _RESOLUTION_WEAK = re.compile(r'manobra|paliativ|encaminhad|setor de desenvolvimento|nao respondeu|inatividade')
 PROJECT_TICKET = re.compile(r'^\s*(?:dev|mel|dsm|dsc)\b|\s-\s*dev\s*-', re.I)
 ERROR_SIGNATURES = (
@@ -182,6 +193,15 @@ ERROR_SIGNATURES = (
 )
 
 
+def _is_hard_blocked(case):
+    reason = str(case.get('hard_block_reason') or '').strip()
+    if not reason:
+        return False
+    if reason == 'ZERO_AGENT_REPLY' and extract_resolution(case):
+        return False
+    return True
+
+
 def extract_resolution(case):
     """Return the documented fix, also when it was written in the opening post."""
     def clean(text):
@@ -191,16 +211,16 @@ def extract_resolution(case):
         text = re.sub(r'^(?:\s*resolu[cç][aã]o\s*:\s*)+', '', text.strip(' \r\n\t-:'), flags=re.I)
         return text.strip(' \r\n\t-:')
 
-    def useful(text, minimum):
+    def useful(text, minimum, pattern=_RESOLUTION_ACTION):
         value = knowledge_access.normalize(text)
-        return len(text) >= minimum and _RESOLUTION_ACTION.search(value) and not _RESOLUTION_WEAK.search(value)
+        return len(text) >= minimum and pattern.search(value) and not _RESOLUTION_WEAK.search(value)
 
     own = clean(case.get('solution_statement'))
-    if useful(own, 40):
+    if useful(own, 40, _RESOLUTION_ACTION):
         return own[:1500]
     for field in ('technical_narrative', 'problem_statement'):
         found = _RESOLUTION_HEAD.search(str(case.get(field) or ''))
-        if found and useful(clean(found.group(1)), 20):
+        if found and useful(clean(found.group(1)), 20, _RESOLUTION_OPENING_ACTION):
             return clean(found.group(1))[:1500]
     return ''
 
@@ -217,7 +237,7 @@ def _signature_cases(conn, tenant, patterns, exclude_ticket_id, company_id, limi
         FROM refined_tickets r LEFT JOIN movidesk_company_tickets l
           ON l.tenant_id=r.tenant_id AND l.ticket_external_id=r.external_id
         WHERE r.tenant_id=%s AND r.external_id::text<>%s
-          AND r.base_status IN ('Resolved','Closed') AND coalesce(r.hard_block_reason,'')=''
+          AND r.base_status IN ('Resolved','Closed') AND coalesce(r.hard_block_reason,'') IN ('','ZERO_AGENT_REPLY')
           AND (r.problem_statement ILIKE ANY(%s) OR r.technical_narrative ILIKE ANY(%s))
         ORDER BY same_company DESC, r.created_date DESC NULLS LAST LIMIT 80''',
         (str(company_id or ''), tenant, str(exclude_ticket_id or ''), patterns, patterns)).fetchall()
@@ -254,6 +274,9 @@ def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3,
     plan = knowledge_access.query_plan(query)
     if not plan['terms']:
         return []
+    fts_paired = plan.get('fts_paired') or plan['fts']
+    subj_vec = "to_tsvector('portuguese',coalesce(subject,''))"
+    node_vec = "to_tsvector('portuguese',coalesce(title,'') || ' ' || coalesce(problem,'') || ' ' || coalesce(solution,''))"
     vector = """to_tsvector('portuguese',coalesce(subject,'') || ' ' ||
         coalesce(problem_statement,'') || ' ' || coalesce(technical_narrative,'') ||
         ' ' || coalesce(solution_statement,''))"""
@@ -261,14 +284,19 @@ def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3,
         problem_statement,technical_narrative,solution_statement,quality_tier,hard_block_reason,
         ts_rank_cd({vector},websearch_to_tsquery('portuguese',%s)) AS relevance
         FROM refined_tickets WHERE tenant_id=%s AND external_id::text<>%s
-        AND base_status IN ('Resolved','Closed') AND quality_tier IN ('GOLD','SILVER','REVIEW')
-        AND coalesce(hard_block_reason,'')=''
-        AND {vector} @@ websearch_to_tsquery('portuguese',%s)
+        AND base_status IN ('Resolved','Closed') AND quality_tier IN ('GOLD','SILVER','REVIEW','IGNORE')
+        AND coalesce(hard_block_reason,'') IN ('','ZERO_AGENT_REPLY')
+        AND ({subj_vec} @@ websearch_to_tsquery('portuguese',%s)
+             OR external_id IN (
+                 SELECT source_external_id FROM ticket_knowledge_nodes
+                 WHERE source_external_id IS NOT NULL
+                   AND {node_vec} @@ websearch_to_tsquery('portuguese',%s)
+                 LIMIT 300))
         ORDER BY relevance DESC,created_date DESC LIMIT 80''',
-        (plan['fts'],tenant,str(exclude_ticket_id or ''),plan['fts'])).fetchall()
+        (fts_paired,tenant,str(exclude_ticket_id or ''),plan['fts'],fts_paired)).fetchall()
     result = []
     for row in rows:
-        if (row.get('base_status') not in ('Resolved', 'Closed') or row.get('hard_block_reason') or
+        if (row.get('base_status') not in ('Resolved', 'Closed') or _is_hard_blocked(row) or
                 PROJECT_TICKET.search(str(row.get('subject') or ''))):
             continue
         resolution = extract_resolution(row)
@@ -277,7 +305,8 @@ def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3,
         source = {'title': row.get('subject'), 'problem': row.get('problem_statement'),
                   'diagnosis': row.get('technical_narrative'), 'solution': resolution}
         if knowledge_access.applicability(source, query)['applicable']:
-            result.append(dict(row, solution_statement=resolution, resolution_verified=True, is_active=False))
+            result.append(dict(row, solution_statement=resolution, resolution_verified=True,
+                               is_active=False, match='resolved_support'))
             if len(result) >= limit:
                 break
     return result
@@ -308,7 +337,8 @@ def report_service_cases(conn, tenant, query, exclude_ticket_id=None, limit=3):
         if not gate['applicable']:
             continue
         text = knowledge_access.normalize(resolution)
-        if not re.search(r'\bvendas? por produtos?\b', text):
+        if not re.search(r'\bvendas? por produtos?\b', text) or not re.search(
+                r'\b(?:abra|acesse|selecione|filtre|filtrar|fica na tela)\b', text):
             continue
         position = re.search(r'\bvendas? por produtos?\b', text).start()
         score = (8 if position < 250 else 0) + (5 if 'mais opcoes' in text else 0)
@@ -483,7 +513,7 @@ def company_case_source(case):
     """Promote only a completed, documented company case to procedural evidence."""
     if (case.get("base_status") not in ("Resolved", "Closed") or
             (case.get("quality_tier") not in ("GOLD", "SILVER") and not case.get("resolution_verified")) or
-            case.get("hard_block_reason") or len((case.get("solution_statement") or "").strip()) < 20 or
+            _is_hard_blocked(case) or len((case.get("solution_statement") or "").strip()) < 20 or
             (len((case.get("solution_statement") or "").strip()) < 40 and not case.get("resolution_verified"))):
         return None
     return {"id": f"company-ticket-{case['external_id']}",
@@ -520,9 +550,9 @@ def cases_for_selected_evidence(cases, primary):
     title = knowledge_access.normalize((primary or {}).get('title') or '')
     rejection = re.search(r'\brejeicao\s*(\d{3,4})\b', title)
     return [case for case in cases if
-            str(case.get('external_id') or '') == source_ticket or
-            case.get('match') == 'error_signature' or
-            (case.get('match') == 'report_topic' and company_case_source(case)) or
+            (source_ticket and str(case.get('external_id') or '') == source_ticket) or
+            case.get('match') in ('error_signature', 'resolved_support', 'report_service') or
+            (primary and case.get('match') == 'report_topic' and company_case_source(case)) or
             (rejection and re.search(r'\brejeicao\s*' + rejection.group(1) + r'\b',
                                      knowledge_access.normalize(case.get('subject') or '')))]
 
@@ -570,6 +600,10 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
         documents.sort(key=lambda source: not (source.get('applicable') and
                                                 source.get('answer_use') != 'investigation_only'))
     if local_source:
+        has_official_doc = any(s.get('applicable') and s.get('answer_use') != 'investigation_only' and
+                               s.get('source_type') in ('OFFICIAL_KB', 'MANUAL', 'KB') for s in documents)
+        if has_official_doc and not _has_diagnostic_payload(query):
+            return documents + [local_source], cases, "company_history_with_documents"
         return [local_source] + documents, cases, "company_history_with_documents"
     return documents, cases, "general_knowledge"
 
@@ -989,7 +1023,7 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
             'used': True, 'mode': 'human_approved_procedure', 'model': None, 'decision': decision, 'specialist': spec_meta}
     has_resolved_reference = bool(
         grounded or
-        any(not c.get('is_active') and not c.get('hard_block_reason') and c.get('solution_statement') for c in cases)
+        any(not c.get('is_active') and not _is_hard_blocked(c) and c.get('solution_statement') for c in cases)
     )
     # Only the selected applicable source may supply operational steps.
     source_text = "\n".join(f"{label}: {str(primary.get(field) or '')[:3500]}" for label, field in
@@ -1011,7 +1045,7 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
                       "problem": str(case.get("problem_statement") or "")[:500],
                       "diagnosis": str(case.get("technical_narrative") or "")[:800] if not case.get("is_active") else "",
                       "resolution": str(case.get("solution_statement") or "")[:1200] if (
-                          not case.get("is_active") and not case.get("hard_block_reason") and
+                          not case.get("is_active") and not _is_hard_blocked(case) and
                           (case.get('quality_tier') in ('GOLD', 'SILVER') or case.get('resolution_verified'))) else ""}
                      for case in cases[:5]]
     capability_findings = [{"ticket": case.get("external_id"), "subject": case.get("subject"),

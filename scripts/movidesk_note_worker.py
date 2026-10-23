@@ -478,12 +478,13 @@ def generate_note(ticket, settings, api):
     noted = {str(case.get('external_id')) for case in cases_for_note}
     cases_for_note.extend(case for case in related_cases
                           if str(case.get('external_id')) not in noted)
+    from technician_workbench import _is_hard_blocked
     similar = [{'ticket': case.get('external_id'), 'title': case.get('subject'),
                 'status': case.get('status') or case.get('base_status'),
                 'active': bool(case.get('is_active')),
                 'resolution': case.get('solution_statement') if not case.get('is_active') and
-                    not case.get('hard_block_reason') and (case.get('quality_tier') in ('GOLD', 'SILVER') or
-                                                           case.get('resolution_verified')) else None,
+                    not _is_hard_blocked(case) and (case.get('quality_tier') in ('GOLD', 'SILVER', 'REVIEW') or
+                                                    case.get('resolution_verified')) else None,
                 'same_company': bool(case.get('same_company'))}
                for case in cases_for_note[:5]]
     images, media_notices = [], []

@@ -6,7 +6,7 @@ import knowledge_curation as curation
 import knowledge_index
 from collections import Counter
 
-STOP = set('a o os as de do da dos das e em um uma para por no na nos nas com como que eu meu meus minha minhas esta estou erro error problema fazer faco fica nao ao pelo pela mais esse essa tem la favor ajuda consigo preciso quero saber bom dia ola ocorre qual onde master erp sistema contexto mensagem atual integradores ver quantas quanto quantos quanta tive teve tinha ter isso estes estas aquele aquela aquilo consegue pode podemos poderia sobre alguem gente aqui ali assim gostaria informacao informacoes duvida dando tentando tentar tentando esta ta tao foi fui iria agora mostra mostrar mostrou foram mes mensal'.split())
+STOP = set('a o os as de do da dos das e em um uma para por no na nos nas com como que eu meu meus minha minhas esta estou erro error problema fazer faco fica nao ao pelo pela mais esse essa tem la favor ajuda consigo preciso quero saber bom dia ola ocorre qual onde master erp sistema contexto mensagem atual integradores ver quantas quanto quantos quanta tive teve tinha ter isso estes estas aquele aquela aquilo consegue pode podemos poderia sobre alguem gente aqui ali assim gostaria informacao informacoes duvida dando tentando tentar esta ta tao foi fui iria agora mostra mostrar mostrou foram mes mensal algum alguma alguns algumas possa posso podem puder boa tarde noite pessoal existe existem sabem queria precisava verificar ajudar chamado ticket cliente clientes empresa loja obrigado obrigada certo possivel tirar dar mas faz funciona acertar passo emitida emitido conseguimos gentileza'.split())
 DOMAIN_SPELLING = ('destinatario', 'remetente', 'inscricao', 'estadual', 'invalida', 'rejeicao',
                    'sincronizador', 'integracao', 'etiqueta', 'transportadora', 'fabricante')
 ALIASES = {
@@ -18,11 +18,52 @@ ALIASES = {
     'sincroniza': ('sincronizar','integracao','sincronizador'),
     'sincronizacao': ('sincronizacao','integracao','sincronizador'),
     'boleto': ('boleto','cnab','cobranca'),
+    'venda': ('venda','vendas'), 'vendas': ('vendas','venda'),
+    'produto': ('produto','produtos'), 'produtos': ('produtos','produto'),
+    'emitir': ('emitir','emissao','gerar'), 'gerar': ('gerar','emitir','emissao'),
+    'cancelar': ('cancelar','cancelamento'), 'cancelamento': ('cancelamento','cancelar'),
+    'lancar': ('lancar','lancamento'), 'lancamento': ('lancamento','lancar'),
+    'importar': ('importar','importacao','entrada'), 'importacao': ('importacao','importar','entrada'),
+    'exportar': ('exportar','exportacao'),
+    'devolucao': ('devolucao','devolver'),
+    'comissao': ('comissao','comissoes'),
+    'vendedor': ('vendedor','vendedores'),
     # Customers normally ask for "margem" while the Master screen and KB use
     # the product name "Markup". Keep both vocabularies in the same intent.
     'margem': ('margem','markup','mark-up','lucro'),
     'markup': ('markup','mark-up','margem','lucro'),
 }
+ACCENT_MAP = {
+    'relatorio': 'relatório', 'relatorios': 'relatórios',
+    'inventario': 'inventário', 'inventarios': 'inventários',
+    'destinatario': 'destinatário', 'bancario': 'bancário', 'bancaria': 'bancária',
+    'usuario': 'usuário', 'usuarios': 'usuários', 'unitario': 'unitário',
+    'tributario': 'tributário', 'tributaria': 'tributária', 'necessario': 'necessário',
+    'estatistica': 'estatística', 'analitico': 'analítico',
+    'codigo': 'código', 'codigos': 'códigos', 'numero': 'número', 'numeros': 'números',
+    'periodo': 'período', 'minimo': 'mínimo', 'maximo': 'máximo', 'liquido': 'líquido',
+    'conferencia': 'conferência', 'divergencia': 'divergência',
+    'ocorrencia': 'ocorrência', 'ocorrencias': 'ocorrências',
+    'transferencia': 'transferência', 'pendencia': 'pendência', 'referencia': 'referência',
+    'invalida': 'inválida', 'invalido': 'inválido', 'valida': 'válida', 'valido': 'válido',
+    'serie': 'série', 'especie': 'espécie',
+    'preco': 'preço', 'precos': 'preços', 'servico': 'serviço', 'servicos': 'serviços',
+    'endereco': 'endereço', 'orcamento': 'orçamento', 'lancamento': 'lançamento',
+    'lancar': 'lançar', 'balanco': 'balanço', 'cobranca': 'cobrança', 'diferenca': 'diferença',
+    'modulo': 'módulo', 'modulos': 'módulos', 'calculo': 'cálculo', 'vinculo': 'vínculo',
+    'titulo': 'título', 'titulos': 'títulos', 'credito': 'crédito', 'debito': 'débito',
+    'historico': 'histórico', 'parametro': 'parâmetro', 'parametros': 'parâmetros',
+    'automatico': 'automático', 'automatica': 'automática', 'eletronica': 'eletrônica',
+    'gondola': 'gôndola',
+    'comissao': 'comissão', 'comissoes': 'comissões',
+    'emissao': 'emissão', 'impressao': 'impressão', 'exclusao': 'exclusão',
+    'inclusao': 'inclusão', 'transmissao': 'transmissão', 'permissao': 'permissão',
+    'permissoes': 'permissões', 'versao': 'versão', 'conexao': 'conexão', 'padrao': 'padrão',
+    'rejeicao': 'rejeição', 'rejeicoes': 'rejeições',
+}
+BROAD_TERMS = {'produto', 'produtos', 'venda', 'vendas', 'nota', 'notas', 'fiscal', 'fiscais',
+               'pedido', 'pedidos', 'emitir', 'gerar', 'lancar', 'consultar', 'relatorio',
+               'relatorios', 'tela', 'compra', 'compras', 'estoque', 'financeiro'}
 GROUPS = {
     'Fiscal': ('fiscal','nf-e','nfe','nota_fiscal','nota fiscal','sefaz','danfe','cfop'),
     'Produtos e estoque': ('produto','estoque','grade','inventario'),
@@ -33,6 +74,7 @@ GROUPS = {
     'Produção': ('producao','materia prima'),
     'Cadastros': ('cadastro','cliente','fabricante'),
     'Logística': ('correios','sigep','transport','expedicao','frete'),
+    'Produção': ('producao','materia prima'),
     'Infraestrutura': ('firebird','sql','oracle','backup','servidor','instalacao'),
 }
 
@@ -41,6 +83,51 @@ VECTOR_INDEX_DIMENSIONS = 3072
 
 def normalize(s):
     return ''.join(c for c in unicodedata.normalize('NFKD',str(s or '').lower()) if not unicodedata.combining(c))
+
+
+def accent_variants(word):
+    out = [word]
+    if word in ACCENT_MAP:
+        out.append(ACCENT_MAP[word])
+    elif word.endswith('cao') and len(word) >= 5:
+        out.append(word[:-3] + 'ção')
+    elif word.endswith('coes') and len(word) >= 6:
+        out.append(word[:-4] + 'ções')
+    elif word.endswith('ao') and len(word) >= 5:
+        out.append(word[:-2] + 'ão')
+    elif word.endswith('oes') and len(word) >= 5:
+        out.append(word[:-3] + 'ões')
+    return list(dict.fromkeys(out))
+
+
+def _paired_fts(words):
+    import itertools
+    groups = []
+    for w in words[:8]:
+        syns = []
+        for a in ALIASES.get(w, (w,)):
+            for v in accent_variants(a):
+                if v not in syns:
+                    syns.append(v)
+        groups.append((w, syns[:4]))
+    if not groups:
+        return ''
+    if len(groups) == 1:
+        return ' OR '.join('"' + v + '"' for v in groups[0][1])
+    specific = [syns for w, syns in groups if w not in BROAD_TERMS]
+    broad = [syns for w, syns in groups if w in BROAD_TERMS]
+    pairs = []
+    if specific and broad:
+        for s in specific[:4]:
+            for b in broad[:4]:
+                pairs.extend(f'"{va}" "{vb}"' for va in s for vb in b)
+        if len(specific) >= 2:
+            for sa, sb in itertools.combinations(specific[:4], 2):
+                pairs.extend(f'"{va}" "{vb}"' for va in sa for vb in sb)
+    else:
+        for (_, sa), (_, sb) in itertools.combinations(groups[:5], 2):
+            pairs.extend(f'"{va}" "{vb}"' for va in sa for vb in sb)
+    return ' OR '.join(dict.fromkeys(pairs))
 
 
 def query_plan(query):
@@ -76,11 +163,13 @@ def query_plan(query):
         if word not in words: words.append(word)
         if len(words)>=18: break
     expansions=list(dict.fromkeys(a for w in words for a in ALIASES.get(w,(w,))))
+    fts_tokens=list(dict.fromkeys(v for w in expansions for v in accent_variants(w)))
     # Quoted OR operands parsed by PostgreSQL; all user text stays parameterized.
-    fts=' OR '.join('"'+w+'"' for w in expansions)
+    fts=' OR '.join('"'+w+'"' for w in fts_tokens)
+    fts_paired=_paired_fts(words) or fts
     protocol=re.fullmatch(r'#?(\d{1,9})',query.strip())
     return dict(query=query,product_creation=product_creation,objects=objects,codes=sorted(set(codes)),identifiers=identifiers,signatures=signatures,terms=words,expanded_terms=expansions,
-                fts=fts,protocol=int(protocol[1]) if protocol else None,
+                fts=fts,fts_paired=fts_paired,protocol=int(protocol[1]) if protocol else None,
                 howto=bool(re.search(r'\b(como|onde|criar|cadastrar|configurar|procedimento|passo a passo)\b',text)),
                 report=report)
 
@@ -94,10 +183,10 @@ def report_topic_match(plan, title):
     rules = (
         (bool(re.search(r'\b(?:margem|markup|rentabilidade|lucro)\b', query)),
          r'\b(?:markup|margem|rentabilidade)\b'),
-        ('vendas por produto' in query,
-         r'\bestatistica\b.*\bvendas\b|\bvendas\b.*\bproduto\b'),
-        ('estatistica de vendas' in query,
-         r'\bestatistica\b.*\bvendas\b'),
+        (bool(re.search(r'\bvendas? por produtos?\b', query)),
+         r'\bestatistica\b.*\bvendas?\b|\bvendas?\b.*\bprodutos?\b'),
+        (bool(re.search(r'\bestatisticas? de vendas?\b', query)),
+         r'\bestatistica\b.*\bvendas?\b'),
         ('projecao' in query and 'compra' in query, r'\bprojecao\b.*\bcompr'),
         ('curva abc' in query and 'produto' in query, r'\bcurva abc\b.*\bprodutos?\b'),
         ('curva abc' in query and 'produto' not in query, r'\bcurva abc\b'),
@@ -106,8 +195,8 @@ def report_topic_match(plan, title):
         ('frete' in query, r'\bestatistica\b.*\bfrete\b|\bfrete\b'),
         ('gerencial' in query, r'\brelatorio gerencial\b'),
         ('comissao' in query and 'vendedor' in query,
-         r'\b(?:relatorio|comissao)\b.*\bcomissao\b.*\bvendedor\b|\bcomissao\b.*\bvendedor\b'),
-        ('demonstrativo de venda analitico' in query or bool(re.search(r'\bdva\b', query)),
+         r'\bcomiss\w*\b.*\bvendedor\w*\b'),
+        (bool(re.search(r'\bdemonstrativo de vendas? analitico\b|\bdva\b', query)),
          r'\bdemonstrativo de vendas? analitico\b|\bdva\b'),
     )
     active = [pattern for condition, pattern in rules if condition]
@@ -169,7 +258,7 @@ def applicability(row, query, context=None):
     reasons=[]
     if plan['howto']:
         purpose = normalize(str(row.get('title') or '') + ' ' + str(row.get('problem') or ''))
-        for variants in (('importar','importacao'), ('exportar','exportacao'),
+        for variants in (('importar','importacao','entrada'), ('exportar','exportacao'),
                          ('cancelar','cancelamento'), ('transferencia','transferir'),
                          ('kit','kits'), ('grade','grades','variacao'), ('foto','fotos','imagem','imagens')):
             if any(re.search(r'\b'+term+r'\b', normalize(query)) for term in variants):
@@ -214,9 +303,12 @@ def applicability(row, query, context=None):
     if not diagnostic:
         terms=plan['terms']
         matched=[t for t in terms if t in compact or
+                 (len(t)>3 and (t+'s') in compact) or
                  (t.endswith('s') and len(t)>4 and t[:-1] in compact) or
+                 (t.endswith(('ao','oes')) and len(t)>5 and t[:-3] in compact) or
                  any(alias in compact for alias in ALIASES.get(t,()))]
-        if len(matched)<2 or len(matched)/max(1,len(terms))<0.6:
+        min_ratio = 0.5 if len(terms) >= 4 else 0.6
+        if (len(terms) == 1 and not matched) or (len(terms) >= 2 and len(matched) < 2) or (len(matched) < 3 and len(matched)/max(1,len(terms)) < min_ratio):
             reasons.append('insufficient_subject_overlap')
     return {'applicable':not reasons,'applicability_reasons':reasons,'context_conflict':conflict,
             'matched_signatures':signatures,'matched_identifiers':matched_identifiers,
@@ -364,19 +456,20 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
     else:
         expr="to_tsvector('portuguese', coalesce(title,'') || ' ' || coalesce(problem,'') || ' ' || coalesce(solution,''))"
         title_expr="to_tsvector('portuguese',coalesce(title,''))"
+        fts_paired = plan.get('fts_paired') or plan['fts']
         rows+=conn.execute(f"""SELECT *,ts_rank_cd({title_expr},websearch_to_tsquery('portuguese',%s)) AS lexical_rank
              FROM ticket_knowledge_nodes WHERE {title_expr} @@ websearch_to_tsquery('portuguese',%s)
-             ORDER BY lexical_rank DESC,id DESC LIMIT 100""",(plan['fts'],plan['fts'])).fetchall()
+             ORDER BY lexical_rank DESC,id DESC LIMIT 150""",(plan['fts'],plan['fts'])).fetchall()
         # Dedicated official-document lane prevents repetitive tickets from
         # crowding short manuals/videos out of the candidate budget.
-        official_limit = 200 if plan.get('report') else 60
+        official_limit = 200 if plan.get('report') else 80
         rows+=conn.execute(f"""SELECT *,ts_rank_cd({title_expr},websearch_to_tsquery('portuguese',%s)) AS lexical_rank
              FROM ticket_knowledge_nodes WHERE source_type IN ('OFFICIAL_KB','MANUAL')
-             AND {title_expr} @@ websearch_to_tsquery('portuguese',%s)
-             ORDER BY lexical_rank DESC,id DESC LIMIT {official_limit}""",(plan['fts'],plan['fts'])).fetchall()
+             AND ({title_expr} @@ websearch_to_tsquery('portuguese',%s) OR {expr} @@ websearch_to_tsquery('portuguese',%s))
+             ORDER BY lexical_rank DESC,id DESC LIMIT {official_limit}""",(plan['fts'],plan['fts'],fts_paired)).fetchall()
         rows+=conn.execute(f"""SELECT *,ts_rank_cd({expr},websearch_to_tsquery('portuguese',%s)) AS lexical_rank
              FROM ticket_knowledge_nodes WHERE {expr} @@ websearch_to_tsquery('portuguese',%s)
-             ORDER BY lexical_rank DESC,id DESC LIMIT 100""",(plan['fts'],plan['fts'])).fetchall()
+             ORDER BY lexical_rank DESC,id DESC LIMIT 150""",(fts_paired,fts_paired)).fetchall()
         if embedding and len(embedding) == VECTOR_INDEX_DIMENSIONS:
             vector='['+','.join(str(float(v)) for v in embedding)+']'
             rows.extend(conn.execute("""SELECT *,0.0 AS lexical_rank,
@@ -411,7 +504,7 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
         for row in ranked:
             if row.get('source_type') not in ('VALIDATED_TICKET','PROBABLE_TICKET'): continue
             original=current.get(row.get('source_external_id'))
-            if not original or original['base_status'] not in ('Closed','Resolved') or original['hard_block_reason'] or original['quality_tier'] not in ('GOLD','SILVER'):
+            if not original or original['base_status'] not in ('Closed','Resolved') or original['hard_block_reason'] or original['quality_tier'] not in ('GOLD','SILVER','REVIEW'):
                 row['answer_use']='investigation_only'
                 row['quality_flags'].append('historical_source_requires_review')
     kb_ids=[(r.get('metadata') or {}).get('external_id') for r in ranked if r.get('source_type')=='OFFICIAL_KB']
@@ -452,7 +545,7 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
     for row in ranked:
         gate=applicability(row,query)
         title = normalize(row.get('title') or '')
-        if (plan.get('report') and row.get('source_type') == 'OFFICIAL_KB'
+        if (plan.get('report') and row.get('source_type') in ('OFFICIAL_KB', 'MANUAL')
                 and not report_topic_match(plan, row.get('title') or '')
                 and any(report_topic_match(plan, name) for name in (
                     'Estatística de Vendas', 'Curva ABC de Produtos', 'Posição de Estoque',
@@ -460,7 +553,7 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
                     'Comissão por Vendedor', 'Demonstrativo de Venda Analítico'))):
             gate = {**gate, 'applicable': False,
                     'applicability_reasons': gate['applicability_reasons'] + ['requested_report_not_matched']}
-        if (plan.get('report') and plan.get('howto') and row.get('source_type') == 'OFFICIAL_KB'
+        if (plan.get('howto') and row.get('source_type') == 'OFFICIAL_KB'
                 and re.match(r'^(?:dev\s*-\s*(?:err|mel|mod)|err\s*-)', title)):
             row['quality_flags'].append('change_or_error_article_not_usage_guide')
             row['answer_use'] = 'investigation_only'
@@ -472,7 +565,7 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
                 solution))
             issue_ticket = bool(re.search(
                 r'\b(?:erro|divergencia|corrigir|problema|nao funciona|lentidao)\b', title))
-            if issue_ticket or not report_navigation or not report_topic_match(plan, solution):
+            if issue_ticket or not report_navigation or not report_topic_match(plan, title):
                 row['quality_flags'].append('historical_report_not_usage_guide')
                 row['answer_use'] = 'investigation_only'
         if (plan.get('report') and re.search(r'\bvendas? por produtos?\b', normalize(query))

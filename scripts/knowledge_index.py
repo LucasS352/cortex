@@ -18,6 +18,8 @@ def sync_missing():
     with psycopg.connect(POSTGRES_DSN, row_factory=dict_row, connect_timeout=5,
                          options='-c statement_timeout=30000') as conn:
         conn.execute("SELECT pg_advisory_xact_lock(734099)")
+        conn.execute("""CREATE INDEX IF NOT EXISTS idx_refined_subject_fts
+            ON refined_tickets USING gin (to_tsvector('portuguese', coalesce(subject, '')))""")
         tenants = conn.execute('SELECT id FROM tenants LIMIT 2').fetchall()
         if len(tenants) != 1:
             raise ValueError('Indexação exige corpus de uma única organização')
