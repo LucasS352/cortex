@@ -103,9 +103,7 @@ html[data-theme="light"] {
   --shadow-lg: 0 24px 56px rgba(15, 23, 42, 0.22);
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -115,7 +113,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Top Action Bar: seamlessly integrated into Admin Console */
 header.training-action-bar {
   background: var(--surface);
   color: var(--ink);
@@ -253,10 +250,9 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Workspace Layout */
 .wrap {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: 18px;
   min-height: calc(100vh - 96px);
   align-items: start;
@@ -288,7 +284,7 @@ aside h2 {
   padding: 9px 11px;
   border-radius: 10px;
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 13px;
   color: var(--ink);
   transition: background 0.14s ease, color 0.14s ease;
@@ -306,15 +302,37 @@ aside h2 {
   box-shadow: inset 3px 0 0 var(--accent-teal);
 }
 
-.mod small {
+.sub {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px 6px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
   color: var(--muted);
+  transition: all 0.14s ease;
+  margin-bottom: 2px;
+}
+
+.sub:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.sub.active {
+  background: var(--surface-3);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
+.mod small,
+.mod .pill,
+.sub .pill {
   font-weight: 600;
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
-  background: var(--surface-2);
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
 }
 
 main {
@@ -322,7 +340,6 @@ main {
   padding-bottom: 28px;
 }
 
-/* KPI Strip */
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
@@ -355,7 +372,6 @@ main {
   font-weight: 600;
 }
 
-/* Segmented Tabs */
 .tabs {
   display: inline-flex;
   gap: 6px;
@@ -390,32 +406,10 @@ main {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
 }
 
-/* Filter Toolbar */
-.toolbar {
-  display: flex;
-  gap: 10px;
+#toolbar {
   margin-bottom: 14px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 
-.toolbar input,
-.toolbar select {
-  padding: 8px 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-}
-
-.toolbar input[type=search] {
-  min-width: 280px;
-  flex: 1;
-}
-
-/* Cards & List Rows */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -446,11 +440,17 @@ main {
   margin-bottom: 0;
 }
 
-.row h3 {
+.row h3,
+.row .title {
   margin: 4px 0;
   font-size: 14.5px;
   font-weight: 700;
   color: var(--ink);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
 }
 
 .meta {
@@ -460,6 +460,18 @@ main {
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+}
+
+.score {
+  font-size: 13.5px;
+  font-weight: 800;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  text-align: center;
+  align-self: center;
+  font-family: 'JetBrains Mono', monospace;
 }
 
 .pill {
@@ -492,7 +504,12 @@ main {
   border-color: var(--bad-border);
 }
 
-/* Enterprise Curation Modal (<dialog id="dlg">) */
+.pill.info {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: var(--line);
+}
+
 dialog {
   border: 1px solid var(--line-strong);
   border-radius: 16px;
@@ -593,7 +610,6 @@ dialog::backdrop {
   flex-wrap: wrap;
 }
 
-/* Structured Form Sections inside Modal */
 .form-section {
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -639,6 +655,7 @@ label {
 
 input[type=text],
 input[type=number],
+input[type=search],
 textarea,
 select {
   width: 100%;
@@ -654,6 +671,7 @@ select {
 
 input[type=text]:focus,
 input[type=number]:focus,
+input[type=search]:focus,
 textarea:focus,
 select:focus {
   outline: none;
@@ -767,7 +785,7 @@ html[data-theme="dark"] .external-ticket-link {
   color: #8abfff;
 }
 
-#toast {
+.toast {
   position: fixed;
   bottom: 20px;
   right: 20px;
@@ -790,31 +808,15 @@ html[data-theme="dark"] .external-ticket-link {
   font-size: 13.5px;
 }
 
-.muted {
-  color: var(--muted);
-}
-
-a {
-  color: var(--brand);
-}
-
-html[data-theme="dark"] a {
-  color: #7ab3ff;
-}
+.muted { color: var(--muted); }
+a { color: var(--brand); }
+html[data-theme="dark"] a { color: #7ab3ff; }
 
 @media (max-width: 980px) {
-  .wrap {
-    grid-template-columns: 1fr;
-  }
-  aside#tree {
-    position: static;
-  }
-  .dlg-body {
-    grid-template-columns: 1fr;
-  }
-  .grid2 {
-    grid-template-columns: 1fr;
-  }
+  .wrap { grid-template-columns: 1fr; }
+  aside#tree { position: static; }
+  .dlg-body { grid-template-columns: 1fr; }
+  .grid2 { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -842,25 +844,26 @@ html[data-theme="dark"] a {
   <main>
     <div class="stats" id="stats"></div>
     <div class="tabs">
-      <button class="tab active" data-tab="candidates">Fila de aprovação</button>
-      <button class="tab" data-tab="staging">Importações em revisão</button>
-      <button class="tab" data-tab="suggestions">Tickets sugeridos</button>
-      <button class="tab" data-tab="items">Conhecimento ativo</button>
-      <button class="tab" data-tab="releases">Versões do Master</button>
-      <button class="tab" data-tab="conflicts">Conflitos e lacunas</button>
-      <button class="tab" data-tab="quality">Qualidade do suporte</button>
+      <button data-tab="queue" class="tab active">Fila de curadoria</button>
+      <button data-tab="reviews" class="tab">Avaliações dos técnicos</button>
+      <button data-tab="suggestions" class="tab">Tickets sugeridos</button>
+      <button data-tab="items" class="tab">Base canônica</button>
+      <button data-tab="staging" class="tab">Importação em prévia</button>
+      <button data-tab="metrics" class="tab">Qualidade do suporte</button>
+      <button data-tab="releases" class="tab">Versões do Master</button>
+      <button data-tab="deprecated" class="tab">Inativos</button>
     </div>
-    <div class="toolbar" id="toolbar"></div>
+    <div id="toolbar"></div>
     <div id="list" class="card"></div>
   </main>
 </div>
 
 <dialog id="dlg"></dialog>
-<div id="toast"></div>
+<div class="toast" id="toast"></div>
 
 <script>
 const API = '/api/treinamento';
-const state = { tab: 'candidates', module: null, subtopic: null, status: 'open', q: '', taxonomy: [], overview: null, images: [], staging: [], metrics: null, releases: [] };
+const state = { tab: 'queue', module: null, subtopic: null, q: '', taxonomy: [], overview: null, images: [], staging: [], releases: [] };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
@@ -874,169 +877,158 @@ async function api(path, opts = {}) {
   return data;
 }
 
-async function loadOverview() {
-  const [ov, staging, metrics] = await Promise.all([
-    api('/overview'),
-    api('/staging').catch(() => []),
-    api('/metricas-suporte').catch(() => null),
-  ]);
-  state.overview = ov; state.staging = staging; state.metrics = metrics;
-  const k = ov.kpis;
-  $('#stats').innerHTML = `
-    <div class="stat"><b>${k.active_items}</b><span>Procedimentos ativos na IA</span></div>
-    <div class="stat"><b>${k.pending_candidates}</b><span>Aguardando aprovação</span></div>
-    <div class="stat"><b>${staging.length}</b><span>Importações em revisão</span></div>
-    <div class="stat"><b>${k.conflict_candidates + k.open_conflicts}</b><span>Conflitos para arbitrar</span></div>
-    <div class="stat"><b>${k.active_releases || 0}</b><span>Avisos de versão ativos</span></div>
-    <div class="stat"><b>${k.positive_feedback} 👍 / ${k.negative_feedback} 👎</b><span>Avaliações dos técnicos</span></div>`;
-  const counts = Object.fromEntries(ov.modules.map(m => [m.module_key, m]));
-  $('#tree').innerHTML = `<h2>Módulos do Master</h2>
-    <div class="mod ${!state.module ? 'active' : ''}" data-mod=""><span>Todos os módulos</span><small>${k.active_items}</small></div>` +
-    ov.taxonomy.map(m => {
-      const c = counts[m.key] || { active: 0, pending: 0, conflicts: 0 };
-      const badge = c.conflicts ? `⚠️ ${c.conflicts}` : c.pending ? `${c.active} · +${c.pending}` : c.active;
-      return `<div class="mod ${state.module === m.key ? 'active' : ''}" data-mod="${m.key}"><span>${esc(m.label)}</span><small>${badge}</small></div>`;
-    }).join('');
-  $('#tree').querySelectorAll('.mod').forEach(el => el.onclick = () => { state.module = el.dataset.mod || null; state.subtopic = null; refresh(); });
+function modLabel(k) { return (state.taxonomy.find(m => m.key === k) || {}).label || k; }
+function subLabel(m, s) { return (((state.taxonomy.find(x => x.key === m) || {}).subtopics || []).find(x => x[0] === s) || [])[1] || s; }
+function scoreBadge(s) {
+  const c = s >= 75 ? ['#d1fadf','#05603a'] : s >= 55 ? ['#fef0c7','#93370d'] : ['#fee4e2','#912018'];
+  return `<div class="score" style="background:${c[0]};color:${c[1]}">${s}</div>`;
 }
 
-function renderToolbar() {
-  const tb = $('#toolbar');
-  if (state.tab === 'candidates') {
-    tb.innerHTML = `<select id="candStatus">
-      <option value="open" ${state.status==='open'?'selected':''}>Pendentes + Conflitos</option>
-      <option value="pending" ${state.status==='pending'?'selected':''}>Somente pendentes</option>
-      <option value="conflict" ${state.status==='conflict'?'selected':''}>Somente em conflito</option>
-      <option value="needs_revision" ${state.status==='needs_revision'?'selected':''}>Devolvidos para ajuste</option>
-      <option value="approved" ${state.status==='approved'?'selected':''}>Aprovados</option>
-      <option value="rejected" ${state.status==='rejected'?'selected':''}>Rejeitados</option></select>`;
-    $('#candStatus').onchange = (e) => { state.status = e.target.value; renderList(); };
-  } else if (state.tab === 'items') {
-    const subs = (state.taxonomy.find(m => m.key === state.module) || {}).subtopics || [];
-    tb.innerHTML = `<input type="search" id="q" placeholder="Buscar por título, sintoma, causa, erro ou procedimento…" value="${esc(state.q)}">
-      ${subs.length ? `<select id="sub"><option value="">Todos os subtópicos</option>${subs.map(([k,l]) => `<option value="${k}" ${state.subtopic===k?'selected':''}>${esc(l)}</option>`).join('')}</select>` : ''}
-      <select id="itStatus"><option value="active" ${state.status==='active'?'selected':''}>Ativos</option><option value="deprecated" ${state.status==='deprecated'?'selected':''}>Inativados</option><option value="all" ${state.status==='all'?'selected':''}>Todos</option></select>`;
-    $('#q').oninput = (e) => { state.q = e.target.value; clearTimeout(tb._t); tb._t = setTimeout(renderList, 250); };
-    if ($('#sub')) $('#sub').onchange = (e) => { state.subtopic = e.target.value || null; renderList(); };
-    $('#itStatus').onchange = (e) => { state.status = e.target.value; renderList(); };
-  } else if (state.tab === 'releases') {
-    tb.innerHTML = `<button class="primary" id="newReleaseBtn">+ Registrar versão / problema conhecido</button>
-      <span style="color:var(--muted);font-size:12px">Use para informar problemas ou mudanças de uma versão específica do Master diretamente à IA.</span>`;
-    $('#newReleaseBtn').onclick = () => openRelease();
-  } else tb.innerHTML = '';
+async function loadOverview() {
+  const o = await api('/overview');
+  state.overview = o;
+  const t = o.totals || {};
+  $('#stats').innerHTML = [
+    ['Procedimentos ativos na IA', t.active || 0],
+    ['Aguardando revisão', t.pending || 0],
+    ['Conflitos abertos', t.conflicts || 0],
+    ['Procedimentos inativados', t.deprecated || 0],
+    ['Sem vetor semântico', t.without_vector || 0]
+  ].map(([l, v]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
+
+  $('#tree').innerHTML = `<h2>Módulos do Master</h2><div class="mod ${!state.module ? 'active' : ''}" data-m=""><span>Todos os módulos</span><span class="pill">${t.active || 0}</span></div>` +
+    (o.modules || []).map(m => `
+      <div class="mod ${state.module === m.key && !state.subtopic ? 'active' : ''}" data-m="${m.key}" title="${esc(m.description)}">
+        <span>${esc(m.label)}</span>
+        <span>${m.pending ? `<span class="pill warn">${m.pending} fila</span> ` : ''}<span class="pill">${m.items}</span></span>
+      </div>
+      ${state.module === m.key ? (m.subtopics || []).map(s => `
+        <div class="sub ${state.subtopic === s.key ? 'active' : ''}" data-m="${m.key}" data-s="${s.key}">
+          <span>${esc(s.label)}</span><span class="pill">${s.items}</span>
+        </div>`).join('') : ''}`).join('');
 }
+
+$('#tree').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-m]'); if (!el) return;
+  state.module = el.dataset.m || null; state.subtopic = el.dataset.s || null;
+  refresh();
+});
+
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+  state.tab = b.dataset.tab;
+  refresh();
+});
 
 async function renderList() {
-  renderToolbar();
-  const box = $('#list'); box.innerHTML = '<div class="empty">Carregando…</div>';
-  const mod = state.module ? `module=${encodeURIComponent(state.module)}&` : '';
-  if (state.tab === 'candidates') {
-    const rows = await api(`/candidatos?${mod}status=${encodeURIComponent(state.status)}`);
-    box.innerHTML = rows.length ? rows.map(c => {
-      const checks = (c.quality_checks || []).filter(x => !x.ok).length;
-      const st = c.status === 'conflict'
-        ? '<span class="pill bad">Conflito</span>'
-        : c.status === 'needs_revision'
-          ? '<span class="pill bad">Devolvido ao técnico</span>'
-          : c.status === 'pending'
-            ? '<span class="pill warn">Pendente</span>'
-            : `<span class="pill ok">${esc(c.status)}</span>`;
-      const pair = c.source_question_action_id
-        ? ` · pergunta ${esc(c.source_question_action_id)} → ${c.source_answer_action_id ? 'resposta ' + esc(c.source_answer_action_id) : 'resposta redigida'}`
-        : c.source_action_id ? ` · ação ${esc(c.source_action_id)}` : '';
-      return `<div class="row"><div>
-        <div class="meta">${st} <span class="pill">${esc(c.suggested_module)}/${esc(c.suggested_subtopic)}</span>
-          <span>Ticket #${c.ticket_external_id}${pair}</span> · <span>Score ${c.usefulness_score}/100</span> · <span>Confiança ${esc(c.confidence)}</span>
-          ${checks ? `· <span class="pill warn">${checks} alerta(s) de qualidade</span>` : ''}</div>
-        <h3>${esc(c.extraction?.title || c.subject)}</h3>
-        <div class="meta">${esc((c.extraction?.symptom || '').slice(0, 180))}</div>
-      </div><button onclick="openCandidate(${c.id})">Revisar proposta</button></div>`;
-    }).join('') : '<div class="empty">Nenhuma sugestão nesta fila. Use “Transformar em conhecimento” ou a aba “Tickets sugeridos”.</div>';
-  } else if (state.tab === 'staging') {
-    const rows = state.staging.filter(c => !state.module || c.content.module_key === state.module);
-    box.innerHTML = rows.length ? rows.map(c => `<div class="row"><div>
-      <div class="meta"><span class="pill warn">Staging local</span>
-        <span class="pill">${esc(c.content.module_key)}/${esc(c.content.subtopic_key)}</span>
-        <span>${c.source_images.length} imagem(ns)</span> · <span>SHA ${esc(c.sha256.slice(0, 10))}</span></div>
-      <h3>${esc(c.content.title)}</h3>
-      <div class="meta">${esc(c.content.symptom.slice(0, 190))}</div>
-    </div><button class="primary" onclick="openStaging('${esc(c.id)}')">Revisar e publicar</button></div>`).join('')
-    : '<div class="empty">Nenhum card em staging para este filtro.</div>';
-  } else if (state.tab === 'suggestions') {
-    const rows = await api(`/sugestoes?${mod}limit=40`);
-    box.innerHTML = rows.length ? rows.map(s => `<div class="row"><div>
-      <div class="meta"><span class="pill ok">Potencial ${s.score}/100</span> <span class="pill">${esc(s.module_hint)}</span>
-        <span>Ticket #${s.external_id}</span> · <span>${esc(s.quality_tier || '')}</span>
-        ${s.signals.map(x => `<span class="pill">${esc(x.label)}</span>`).join('')}</div>
-      <h3>${esc(s.subject)}</h3>
-      <div class="meta">${esc(s.preview)}</div>
-    </div>${s.candidate_id ? `<button onclick="openCandidate(${s.candidate_id})">Abrir revisão (${esc(s.candidate_status)})</button>` : `<button class="primary" onclick="transform(${s.external_id}, false, this)">Transformar em conhecimento</button>`}</div>`).join('')
-    : '<div class="empty">Nenhum ticket elegível encontrado para este filtro.</div>';
-  } else if (state.tab === 'items') {
-    const st = ['active','deprecated','all'].includes(state.status) ? state.status : 'active';
-    const sub = state.subtopic ? `subtopic=${encodeURIComponent(state.subtopic)}&` : '';
-    const q = state.q ? `q=${encodeURIComponent(state.q)}&` : '';
-    const rows = await api(`/itens?${mod}${sub}${q}status=${st}`);
-    box.innerHTML = rows.length ? rows.map(i => `<div class="row"><div>
-      <div class="meta"><span class="pill ${i.status==='active'?'ok':'bad'}">${i.status==='active'?'Ativo na IA':'Inativo'}</span>
-        <span class="pill">${esc(i.module_key)}/${esc(i.subtopic_key)}</span>
-        <span>v${i.version_no}</span> · <span>${i.evidence_count} evidência(s)</span> · <span>👍 ${i.thumbs_up} / 👎 ${i.thumbs_down}</span>
-        ${i.open_conflicts ? `<span class="pill bad">${i.open_conflicts} conflito(s)</span>` : ''}
-        ${i.master_version ? `<span class="pill">Master ${esc(i.master_version)}</span>` : ''}</div>
-      <h3>${esc(i.title)}</h3>
-      <div class="meta">${esc((i.symptom || '').slice(0, 190))}</div>
-    </div><button onclick="openItem(${i.id})">Abrir procedimento</button></div>`).join('')
-    : '<div class="empty">Nenhum procedimento canônico encontrado.</div>';
-  } else if (state.tab === 'releases') {
-    const rows = await api(`/versoes-master?${mod}status=all`);
-    state.releases = rows;
-    const statusLabel = { active: ['bad', 'Problema ativo'], monitoring: ['warn', 'Em monitoramento'], fixed: ['ok', 'Corrigido'], inactive: ['', 'Inativo'] };
-    box.innerHTML = rows.length ? rows.map(r => {
-      const [cls, label] = statusLabel[r.status] || ['', r.status];
-      return `<div class="row"><div>
-        <div class="meta"><span class="pill ${cls}">${esc(label)}</span>
-          <span class="pill">Versão ${esc(r.version_label)}</span>
-          ${(r.modules || []).map(m => `<span class="pill">${esc(m)}</span>`).join('')}
-          <span>${(r.evidence || []).length} evidência(s)</span> · <span>Por ${esc(r.approved_by)} em ${fmt(r.updated_at)}</span></div>
-        <h3>${esc(r.title)}</h3>
-        <div class="meta">${esc((r.narrative || '').slice(0, 220))}</div>
-      </div><button onclick="openRelease(${JSON.stringify(r).replace(/"/g, '&quot;')})">Editar aviso</button></div>`;
-    }).join('') : '<div class="empty">Nenhuma versão ou problema conhecido registrado. Clique em “+ Registrar versão / problema conhecido”.</div>';
-  } else if (state.tab === 'quality') {
-    const m = state.metrics || await api('/metricas-suporte');
-    const c = m.counts || {};
-    box.innerHTML = `<div class="row"><div><h3>Decisões recentes do suporte com IA</h3>
-      <div class="meta"><span class="pill ok">Procedimento confirmado: ${c.PROCEDIMENTO_CONFIRMADO || 0}</span>
-        <span class="pill warn">Investigar: ${c.INVESTIGAR || 0}</span>
-        <span class="pill bad">Encaminhar: ${c.ENCAMINHAR || 0}</span>
-        <span class="pill">Total auditado: ${c.total || 0}</span></div></div></div>` +
-      ((m.top_gaps || []).length ? m.top_gaps.map(g => `<div class="row"><div>
-        <div class="meta"><span class="pill warn">${esc(g.state)}</span><span>${g.events} ocorrência(s)</span></div>
-        <h3>${esc(g.reason)}</h3></div></div>`).join('')
-      : '<div class="empty">Nenhuma lacuna recorrente registrada até o momento.</div>');
-  } else {
-    const gaps = (state.overview?.modules || []).filter(m => m.active === 0 || m.conflicts > 0);
-    const rows = await api(`/candidatos?${mod}status=conflict`);
-    box.innerHTML = `<div class="panel"><h3>Lacunas de cobertura por módulo</h3>${
-      gaps.length ? gaps.map(g => `<div class="check">📌 <b>${esc(g.label)}</b> — ${g.active} procedimento(s) ativo(s), ${g.pending} pendente(s), ${g.conflicts} conflito(s)</div>`).join('')
-      : '<div class="check">✅ Todos os módulos possuem cobertura inicial.</div>'}</div>` +
-      (rows.length ? rows.map(c => `<div class="row"><div><span class="pill bad">Conflito</span> <b>${esc(c.extraction?.title || c.subject)}</b>
-        <div class="meta">Ticket #${c.ticket_external_id} · ${esc(c.suggested_module)}</div></div>
-        <button onclick="openCandidate(${c.id})">Arbitrar</button></div>`).join('')
-      : '<div class="empty">Nenhum candidato em conflito no momento.</div>');
+  const list = $('#list'); const m = state.module ? `module=${encodeURIComponent(state.module)}` : '';
+  $('#toolbar').innerHTML = state.tab === 'releases'
+    ? `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span style="color:var(--muted)">Registre peculiaridades, regressões e correções por versão. O texto aprovado passa a orientar a IA imediatamente.</span><button class="primary" onclick="openRelease()">Novo aviso de versão</button></div>`
+    : (state.tab === 'items' || state.tab === 'deprecated')
+    ? `<div style="display:flex;gap:8px"><input type="search" id="q" placeholder="Buscar por título, erro ou procedimento…" value="${esc(state.q)}"></div>` : '';
+  const q = $('#q');
+  if (q) {
+    q.onkeydown = (e) => { if (e.key === 'Enter') { state.q = q.value.trim(); renderList(); } };
+    q.oninput = () => { clearTimeout(q._t); q._t = setTimeout(() => { state.q = q.value.trim(); renderList(); }, 350); };
+  }
+  list.innerHTML = '<div class="empty">Carregando…</div>';
+  try {
+    if (state.tab === 'staging') {
+      const rows = await api('/staging'); state.staging = rows;
+      list.innerHTML = rows.length ? rows.filter(r => !state.module || r.content.module_key === state.module).map(r =>
+        `<div class="row"><div class="grow"><div class="title">${esc(r.content.title)}</div><div class="meta">${esc(r.card_id)} · Prévia aguardando aprovação administrativa</div></div><button class="primary" data-stage="${esc(r.id)}">Revisar importação</button></div>`).join('') : '<div class="empty">Nenhum pacote de importação disponível.</div>';
+      list.querySelectorAll('[data-stage]').forEach(b => b.onclick = () => openStaging(b.dataset.stage));
+    } else if (state.tab === 'metrics') {
+      const data = await api('/metricas-suporte');
+      const table = (rows, headers, values) => rows.length ? `<table style="width:100%;text-align:left;border-collapse:collapse"><thead><tr style="border-bottom:1px solid var(--line)">${headers.map(h=>`<th style="padding:8px 6px">${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr style="border-bottom:1px solid var(--line)">${values(r).map(v=>`<td style="padding:8px 6px">${esc(v ?? '—')}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p class="muted">Sem registros neste período.</p>';
+      const reviews = data.answer_reviews || {};
+      const avgScoreText = reviews.average_score != null ? ` · Nota média (0–10): <b>${esc(reviews.average_score)}/10</b> (${reviews.scored_count || 0} com nota)` : '';
+      list.innerHTML = `<div class="panel"><h3>Avaliações humanas</h3><p>${reviews.total || 0} avaliações · ${reviews.approved || 0} aprovadas · ${reviews.corrected ?? '—'} corrigidas · ${reviews.rejected || 0} rejeitadas${avgScoreText}</p></div>
+        <div class="panel"><h3>Prazo médio até aprovação</h3><p>${data.approval_time?.mean_seconds == null ? 'Sem aprovações registradas' : Math.round(data.approval_time.mean_seconds/60)+' minutos'} · ${data.approval_time?.decided || 0} decisões</p></div>
+        <div class="panel"><h3>Fontes anexadas no assistente</h3><p>${data.evidence_coverage?.assistant_messages || 0} respostas · ${data.evidence_coverage?.messages_without_attached_source || 0} sem fonte anexada</p></div>
+        <div class="panel"><h3>Cobertura por módulo</h3>${table(data.module_coverage || [],['Módulo','Procedimentos ativos'],r=>[modLabel(r.module_key),r.active_procedures])}</div>
+        <div class="panel"><h3>Procedimentos citados</h3>${table(data.procedure_citations || [],['Procedimento','Versão','Citações'],r=>[r.title,r.version,r.citations])}</div>
+        <div class="panel"><h3>Versões com avaliações negativas</h3>${table(data.negative_procedures || [],['Procedimento','Versão','Avaliações negativas'],r=>[r.title,r.version_id,r.negative_reviews])}</div>
+        <div class="panel"><h3>Recorrência no assistente</h3>${table(data.company_recurrence || [],['Empresa','Atendimentos'],r=>[r.movidesk_company_id,r.conversations])}</div>` +
+        `<div class="panel"><h3>Decisões operacionais recentes</h3>${table(data.operational?.states || [],['Decisão','Ocorrências'],r=>[r.state,r.events])}</div>
+        <div class="panel"><h3>Termos que exigiram investigação</h3>${table(data.operational?.investigation_terms || [],['Termo técnico','Ocorrências'],r=>[r.term,r.events])}</div>
+        <div class="panel"><h3>Procedimentos usados nas notas e no assistente</h3>${table(data.operational?.procedures || [],['Fonte','Versão','Usos'],r=>[r.source_id,r.source_version,r.events])}</div>` +
+        `<div class="panel"><h3>Limites destas métricas</h3>${(data.limitations || []).map(v => `<p class="muted">${esc(v)}</p>`).join('')}</div>`;
+    } else if (state.tab === 'queue') {
+      const rows = await api(`/candidatos?${m}`);
+      list.innerHTML = rows.length ? rows.map(r => {
+        const ok = (r.quality_checks || []).filter(c => c.ok).length;
+        const rel = (r.similar_items || [])[0];
+        const st = r.status === 'conflict' ? '<span class="pill bad">Conflito com procedimento publicado</span>' :
+                   r.status === 'needs_revision' ? '<span class="pill bad">Devolvido ao técnico</span>' :
+                   r.status === 'pending' ? '<span class="pill warn">Pendente</span>' :
+                   `<span class="pill ok">${esc(r.status)}</span>`;
+        const pair = r.source_question_action_id
+          ? ` · pergunta ${esc(r.source_question_action_id)} → ${r.source_answer_action_id ? 'resposta ' + esc(r.source_answer_action_id) : 'resposta redigida'}`
+          : r.source_action_id ? ` · ação ${esc(r.source_action_id)}` : '';
+        return `<div class="row">${scoreBadge(r.usefulness_score)}
+          <div class="grow"><div class="meta">${st} <span class="pill">${esc(modLabel(r.suggested_module))} › ${esc(subLabel(r.suggested_module, r.suggested_subtopic))}</span>
+            <span>Ticket #${r.ticket_external_id}${pair}</span>
+            ${rel && r.status !== 'conflict' ? `<span class="pill ${REL[rel.relation][0]}">${REL[rel.relation][1]}: ${esc(rel.title)}</span>` : ''}
+            <span class="pill ${ok >= 5 ? 'ok' : 'warn'}">${ok}/${(r.quality_checks || []).length} verificações</span>
+            <span>${r.extractor === 'heuristic' ? 'Extração simplificada (IA indisponível)' : 'Extraído por IA'} · ${esc(r.created_by)} · ${fmt(r.created_at)}</span></div>
+            <div class="title">${esc(r.title)}</div>
+          </div>
+          <button class="primary" onclick="openCandidate(${r.id})">Revisar</button>
+        </div>`;
+      }).join('') : '<div class="empty">Nenhuma sugestão aguardando revisão. Use "Transformar em conhecimento" ou a aba Tickets sugeridos.</div>';
+    } else if (state.tab === 'reviews') {
+      const reviews = await api('/avaliacoes');
+      const rows = reviews.filter(r => !state.module || r.module_key === state.module);
+      list.innerHTML = rows.map(r => {
+        const scoreTag = r.score != null ? `<span class="pill ${r.score >= 7 ? 'ok' : r.score >= 4 ? 'warn' : 'bad'}">Nota ${r.score}/10</span> ` : '';
+        const draftTag = r.is_draft ? '<span class="pill info">Rascunho</span> ' : '';
+        return `<div class="row"><div class="grow"><div class="title">${r.rating > 0 ? 'Boa resposta' : 'Precisa melhorar'} · #${r.ticket_external_id} · ação ${esc(r.action_id)}</div><div class="meta">${scoreTag}${draftTag}${esc(modLabel(r.module_key))}${r.subtopic_key ? ' › ' + esc(subLabel(r.module_key, r.subtopic_key)) : ''} · ${esc(r.actor)} · ${fmt(r.updated_at)}${r.example_ticket_external_id ? ` · exemplo #${r.example_ticket_external_id}` : ''}${r.source_answer_action_id ? ` · nota importada #${esc(r.source_answer_action_id)}` : ''}</div><p style="margin:6px 0">${esc(r.comment)}</p></div>${r.candidate_id ? `<button onclick="openCandidate(${r.candidate_id})">Ver revisão</button>` : ''}</div>`;
+      }).join('') || '<div class="empty">Nenhuma avaliação neste filtro.</div>';
+    } else if (state.tab === 'suggestions') {
+      const rows = await api(`/sugestoes?${m}`);
+      list.innerHTML = rows.length ? rows.map(r => `<div class="row">${scoreBadge(r.score)}
+          <div class="grow"><div class="title">#${r.ticket_external_id} · ${esc(r.subject)}</div>
+          <div class="meta"><span class="pill">${esc(modLabel(r.module_key))}</span>
+            ${r.signals.map(s => `<span class="pill ${s.weight > 0 ? 'ok' : 'bad'}">${s.weight > 0 ? '+' : ''}${s.weight} ${esc(s.label)}</span>`).join('')}</div></div>
+          <button class="primary" onclick="transform(${r.ticket_external_id}, false, this)">Analisar</button></div>`).join('')
+        : '<div class="empty">Nenhum ticket resolvido elegível no momento.</div>';
+    } else if (state.tab === 'releases') {
+      const rows = await api('/versoes-master');
+      state.releases = rows;
+      const labels = {active:'Problema ativo',monitoring:'Em monitoramento',fixed:'Corrigido',inactive:'Inativo'};
+      list.innerHTML = rows.length ? rows.map(r => `<div class="row">
+        <div class="grow"><div class="title">Master ${esc(r.version_label)} · ${esc(r.title)}</div>
+        <div class="meta"><span class="pill ${r.status === 'active' ? 'bad' : r.status === 'fixed' ? 'ok' : 'warn'}">${labels[r.status] || r.status}</span>
+          ${(r.modules || []).map(m => `<span class="pill info">${esc(modLabel(m))}</span>`).join('')}
+          <span>${(r.evidence || []).length} evidência(s)</span><span>aprovado por ${esc(r.approved_by)} · ${fmt(r.updated_at)}</span></div>
+        <p style="margin:6px 0">${esc(r.narrative)}</p>${r.workaround ? `<p style="margin:4px 0"><b>Orientação:</b> ${esc(r.workaround)}</p>` : ''}</div>
+        <button onclick="openReleaseById(${Number(r.id)})">Editar</button></div>`).join('')
+        : '<div class="empty">Nenhuma peculiaridade de versão cadastrada.</div>';
+    } else {
+      const params = new URLSearchParams({ status: state.tab === 'items' ? 'active' : 'deprecated' });
+      if (state.module) params.set('module', state.module); if (state.subtopic) params.set('subtopic', state.subtopic);
+      if (state.q) params.set('q', state.q);
+      const rows = await api(`/itens?${params}`);
+      list.innerHTML = rows.length ? rows.map(r => `<div class="row">
+          <div class="grow"><div class="title">${esc(r.title)}</div>
+          <div class="meta"><span class="pill">${esc(modLabel(r.module_key))} › ${esc(subLabel(r.module_key, r.subtopic_key))}</span>
+            <span>v${r.version_no}</span><span>${r.sources} ticket(s) de evidência</span>
+            ${r.open_conflicts ? `<span class="pill bad">${r.open_conflicts} conflito(s)</span>` : ''}
+            <span>👍 ${r.feedback > 0 ? '+'+r.feedback : r.feedback}</span></div></div>
+          <button onclick="openItem(${r.id})">Abrir</button></div>`).join('')
+        : '<div class="empty">Nenhum procedimento canônico nesta listagem.</div>';
+    }
+  } catch(e) {
+    list.innerHTML = `<div class="empty" style="color:var(--bad)">Falha ao carregar lista: ${esc(e.message)}</div>`;
   }
 }
-
-document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
-  state.tab = b.dataset.tab;
-  state.status = state.tab === 'items' ? 'active' : 'open';
-  renderList();
-});
 
 function releaseEvidenceText(evidence) {
   return (evidence || []).map(item => `${item.kind || 'note'}:${item.value || ''}${item.label ? ' | ' + item.label : ''}`).join('\n');
 }
+
+function openReleaseById(id) { openRelease(state.releases.find(r => Number(r.id) === Number(id)) || {}); }
 
 function openRelease(r = {}) {
   const dlg = $('#dlg'); const selected = new Set(r.modules || []);
@@ -1395,6 +1387,7 @@ async function reviewTicket(ticket, marker = '') {
     $('#submitProposal').onclick = submit;
   } catch(e) { toast(e.message); }
 }
+
 $('#reviewAnswerBtn').onclick = () => { const ticket = Number($('#ticketInput').value); if (Number.isInteger(ticket) && ticket > 0) reviewTicket(ticket); else toast('Informe o número do ticket.'); };
 $('#modulesBtn').onclick = () => {
   dlg.innerHTML = `<div class="dlg-head"><div class="dlg-head-title"><span class="dlg-kicker">Taxonomia Canônica</span><h2>Gerenciar módulos</h2></div><div class="dlg-head-actions"><button id="closeModules">Fechar</button></div></div><div style="padding:20px 22px">
@@ -1410,7 +1403,22 @@ $('#modulesBtn').onclick = () => {
   $('#saveModule').onclick = async () => { try { state.taxonomy = await api('/taxonomia',{method:'POST',body:{key:$('#moduleKey').value,label:$('#moduleLabel').value,description:$('#moduleDescription').value}}); dlg.close(); await refresh(); toast('Módulo salvo.'); } catch(e) { toast(e.message); } };
   dlg.showModal();
 };
-(async () => { state.taxonomy = await api('/taxonomia'); state.images = await api('/imagens'); await refresh(); const p = new URLSearchParams(location.search); const ticket = Number(p.get('ticket')); if (Number.isInteger(ticket) && ticket > 0) { $('#ticketInput').value = ticket; await reviewTicket(ticket,p.get('marker') || ''); } })();
+
+(async () => {
+  try {
+    state.taxonomy = await api('/taxonomia');
+    state.images = await api('/imagens');
+    await refresh();
+    const p = new URLSearchParams(location.search);
+    const ticket = Number(p.get('ticket'));
+    if (Number.isInteger(ticket) && ticket > 0) {
+      $('#ticketInput').value = ticket;
+      await reviewTicket(ticket, p.get('marker') || '');
+    }
+  } catch(err) {
+    toast('Erro ao inicializar curadoria: ' + err.message);
+  }
+})();
 </script>
 </body>
 </html>
