@@ -1332,20 +1332,23 @@ def ticket_answers(ticket_id):
     }
 
 
-def ticket_technician_answers(ticket_id, allow_internal=True, refresh_live=False):
+def ticket_technician_answers(ticket_id, allow_internal=True, refresh_live=True):
     """Notas treináveis e pareamento provável: pergunta do cliente -> resposta humana seguinte."""
     ensure_schema()
     if refresh_live:
         try:
-            sync_ticket_from_movidesk(ticket_id)
+            refresh_live_ticket(ticket_id)
         except Exception:
             pass
     with connect() as conn:
         try:
             ticket, actions = load_ticket(conn, ticket_id)
         except LookupError:
-            sync_ticket_from_movidesk(ticket_id)
-            ticket, actions = load_ticket(conn, ticket_id)
+            try:
+                refresh_live_ticket(ticket_id)
+                ticket, actions = load_ticket(conn, ticket_id)
+            except Exception as exc:
+                raise LookupError(f'Chamado #{ticket_id} não encontrado: {exc}') from exc
     from movidesk_note_worker import plain, automatic_receipt_action
     ordered = sorted(actions, key=lambda a: (str(a.get('createdDate') or ''), int(a.get('id') or 0)))
     questions, answers, latest_question = [], [], None
@@ -1354,8 +1357,13 @@ def ticket_technician_answers(ticket_id, allow_internal=True, refresh_live=False
         r'encerrad[oa]\s+automaticamente\s+por\s+inatividade|evento\s+autom[aá]tico\s+do\s+sistema)',
         re.I
     )
+    sig_re = re.compile(
+        r'(?:<(?:div|p)[^>]*>\s*)*(?:<strong>)?\s*Obrigado por entrar em contato conosco por este canal de atendimento[\s\S]*$',
+        re.I
+    )
     for action in ordered:
         description = str(action.get('description') or '')
+        raw_html = str(action.get('htmlDescription') or description or '')
         if (action.get('id') is None or action.get('isDeleted') or
                 'CORTEX-AI-NOTE:' in description or automatic_receipt_action(action)):
             continue
@@ -1372,10 +1380,13 @@ def ticket_technician_answers(ticket_id, allow_internal=True, refresh_live=False
         if is_agent(action) and len(text) >= 20:
             if not is_public and not allow_internal:
                 continue
+            # Remove assinatura institucional repetitiva deixando a resolução e os passos
+            cleaned_html = sig_re.sub('', raw_html).strip() or raw_html
+            cleaned_text = sig_re.sub('', text).strip() or text
             answers.append({
                 'action_id': str(action['id']),
-                'text': text[:10000],
-                'html': _sanitize_rich_html(description)[:25000],
+                'text': cleaned_text[:10000],
+                'html': _sanitize_rich_html(cleaned_html)[:35000],
                 'created_at': action.get('createdDate'),
                 'suggested_question_action_id': latest_question,
                 'author': author_name,
@@ -1388,7 +1399,7 @@ def ticket_technician_answers(ticket_id, allow_internal=True, refresh_live=False
             questions.append({
                 'action_id': latest_question,
                 'text': text[:10000],
-                'html': _sanitize_rich_html(description)[:25000],
+                'html': _sanitize_rich_html(raw_html)[:25000],
                 'created_at': action.get('createdDate'),
                 'author': author_name,
             })

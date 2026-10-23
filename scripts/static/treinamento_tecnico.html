@@ -1068,6 +1068,22 @@ html, body {
   cursor: wait;
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.import-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.75s linear infinite;
+  vertical-align: middle;
+}
+
 /* Barra de Origem / Seletor de Nota Importada */
 .imported-source-bar {
   display: none;
@@ -2251,16 +2267,16 @@ $('#importLastAnswerBtn').addEventListener('click', async () => {
   }
   const btn = $('#importLastAnswerBtn');
   btn.disabled = true;
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="import-spinner"></span> Consultando ticket no Movidesk...';
   try {
-    let notes = state.technicianAnswers;
-    let recommendedId = state.recommendedTechActionId;
-    if (!notes || !notes.length || state.ticketId !== ticket) {
-      const res = await api(`/tecnico/tickets/${ticket}/respostas-tecnicas?refresh=true`);
-      notes = res.answers || [];
-      recommendedId = res.recommended_action_id;
-      state.technicianAnswers = notes;
-      state.recommendedTechActionId = recommendedId;
-    }
+    // Sempre faz a consulta com refresh=true para capturar notas recém-publicadas ou chamados recém-encerrados
+    const res = await api(`/tecnico/tickets/${ticket}/respostas-tecnicas?refresh=true`);
+    const notes = res.answers || [];
+    const recommendedId = res.recommended_action_id;
+    state.technicianAnswers = notes;
+    state.recommendedTechActionId = recommendedId;
+
     if (!notes.length) {
       toast('Este chamado não possui respostas elegíveis registradas por técnicos (mensagens de clientes e notas automáticas foram ignoradas).');
       return;
@@ -2269,9 +2285,10 @@ $('#importLastAnswerBtn').addEventListener('click', async () => {
     populateTechNoteSelector(notes, targetNote.action_id);
     applyTechnicianNoteToEditor(targetNote, true);
   } catch (e) {
-    toast(e.message);
+    toast(e.message || 'Erro ao consultar respostas técnicas do ticket no Movidesk.');
   } finally {
     btn.disabled = false;
+    btn.innerHTML = originalHtml;
   }
 });
 

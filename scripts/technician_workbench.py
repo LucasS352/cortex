@@ -322,8 +322,66 @@ def report_service_cases(conn, tenant, query, exclude_ticket_id=None, limit=3):
         matches.append((score, dict(row, solution_statement=resolution,
                                     resolution_verified=True, is_active=False,
                                     match='report_service')))
-    matches.sort(key=lambda pair: (pair[0], pair[1].get('created_date') or ''), reverse=True)
+    matches.sort(key=lambda pair: (pair[0], str(pair[1].get('created_date') or '')), reverse=True)
     return [row for _, row in matches[:limit]]
+
+
+def report_topic(query):
+    """A report's business question, not merely the word 'relatório'."""
+    value = knowledge_access.normalize(query)
+    if re.search(r'\bvendas? por produtos?\b', value): return 'sales_product'
+    if 'estatistica de vendas' in value: return 'sales_statistics'
+    if 'curva abc' in value: return 'abc_products' if 'produto' in value else 'abc'
+    if 'posicao de estoque' in value: return 'stock_position'
+    if re.search(r'\b(?:markup|margem|rentabilidade)\b', value) and 'vend' in value: return 'sales_margin'
+    if 'comissao' in value and ('vendedor' in value or 'vend' in value): return 'sales_commission'
+    if 'projecao de compras' in value: return 'purchase_projection'
+    if 'demonstrativo de venda analitico' in value or re.search(r'\bdva\b', value): return 'sales_dva'
+    return ''
+
+
+REPORT_TOPIC_PATTERNS = {
+    'sales_product': r'\bvendas? por produtos?\b',
+    'sales_statistics': r'\bestatistica de vendas\b',
+    'abc_products': r'\bcurva abc\b',
+    'abc': r'\bcurva abc\b',
+    'stock_position': r'\bposicao de estoque\b',
+    'sales_margin': r'\b(?:markup|margem|rentabilidade)\b',
+    'sales_commission': r'\bcomissao\b',
+    'purchase_projection': r'\bprojecao de compras\b',
+    'sales_dva': r'\b(?:dva|demonstrativo de vendas? analitico)\b',
+}
+
+
+def report_related_cases(conn, tenant, query, exclude_ticket_id=None, limit=3):
+    """Link same-topic report tickets; unverified cases remain links, never solutions."""
+    topic = report_topic(query)
+    if not topic:
+        return []
+    rows = conn.execute('''SELECT external_id,subject,status,base_status,created_date,
+        service_full,problem_statement,technical_narrative,solution_statement,
+        quality_tier,hard_block_reason
+        FROM refined_tickets WHERE tenant_id=%s AND external_id::text<>%s
+        AND service_full ILIKE %s AND base_status IN ('Resolved','Closed')
+        ORDER BY created_date DESC NULLS LAST LIMIT 1500''',
+        (tenant, str(exclude_ticket_id or ''), '%Relat%')).fetchall()
+    ranked = []
+    pattern = REPORT_TOPIC_PATTERNS[topic]
+    for row in rows:
+        title = knowledge_access.normalize(row.get('subject') or '')
+        problem = knowledge_access.normalize(row.get('problem_statement') or '')
+        solution = knowledge_access.normalize(row.get('solution_statement') or '')
+        score = 6 * bool(re.search(pattern, title)) + 3 * bool(re.search(pattern, problem))
+        score += bool(re.search(pattern, solution))
+        if topic == 'abc_products' and 'cliente' in title and 'produto' not in title:
+            continue
+        if topic == 'sales_commission' and not ('relatorio' in title or 'relatorio' in problem):
+            continue
+        if score < 3:
+            continue
+        ranked.append((score, dict(row, is_active=False, match='report_topic')))
+    ranked.sort(key=lambda item: (item[0], str(item[1].get('created_date') or '')), reverse=True)
+    return [row for _, row in ranked[:limit]]
 
 
 CAPABILITY_CONCEPTS = {
@@ -436,7 +494,7 @@ def cases_for_selected_evidence(cases, primary):
     rejection = re.search(r'\brejeicao\s*(\d{3,4})\b', title)
     return [case for case in cases if
             str(case.get('external_id') or '') == source_ticket or
-            case.get('match') == 'error_signature' or
+            case.get('match') in ('error_signature', 'report_topic') or
             (rejection and re.search(r'\brejeicao\s*' + rejection.group(1) + r'\b',
                                      knowledge_access.normalize(case.get('subject') or '')))]
 
@@ -449,6 +507,10 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
     if conn is None and reviewed:
         return [reviewed], [], "reviewed_procedure"
     cases = company_similar_cases(conn, tenant, company_id, query, limit, exclude_ticket_id) if company_id else []
+    if report_topic(query):
+        related = report_related_cases(conn, tenant, query, exclude_ticket_id, limit=3)
+        seen = {str(case.get('external_id')) for case in related}
+        cases = related + [case for case in cases if str(case.get('external_id')) not in seen]
     approved = knowledge_access.approved_procedures(conn, query)
     if approved:
         return approved, cases, 'human_approved_procedure'
@@ -458,7 +520,9 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
     if report_cases:
         report_source = company_case_source(report_cases[0])
         if report_source:
-            return [report_source], cases + report_cases, 'resolved_report_service'
+            cases = [report_cases[0]] + [case for case in cases
+                         if str(case.get('external_id')) != str(report_cases[0]['external_id'])]
+            return [report_source], cases, 'resolved_report_service'
     local_source = next((source for case in cases if (source := company_case_source(case))), None)
     documents = [source for source in knowledge_access.search(conn, query, top_k=12,
                                                                service_hint=service_hint)
@@ -908,7 +972,8 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
                       "problem": str(case.get("problem_statement") or "")[:500],
                       "diagnosis": str(case.get("technical_narrative") or "")[:800] if not case.get("is_active") else "",
                       "resolution": str(case.get("solution_statement") or "")[:1200] if (
-                          not case.get("is_active") and not case.get("hard_block_reason")) else ""}
+                          not case.get("is_active") and not case.get("hard_block_reason") and
+                          (case.get('quality_tier') in ('GOLD', 'SILVER') or case.get('resolution_verified'))) else ""}
                      for case in cases[:5]]
     capability_findings = [{"ticket": case.get("external_id"), "subject": case.get("subject"),
         "status": case.get("status") or case.get("base_status"),

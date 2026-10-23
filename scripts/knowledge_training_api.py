@@ -374,10 +374,14 @@ def ticket_technician_answers(ticket_id: int, refresh: bool = False):
 def technician_context(ticket_id: int, request: Request,
                        technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
     name = _technician_name(technician_pin, request)
+    try:
+        kt.refresh_live_ticket(ticket_id)
+    except Exception:
+        pass
     context = _guard(kt.ticket_answers, ticket_id)
     context['revision_requests'] = _guard(kt.revision_requests, ticket_id)
     try:
-        tech_notes = kt.ticket_technician_answers(ticket_id)
+        tech_notes = kt.ticket_technician_answers(ticket_id, refresh_live=False)
         context['technician_answers'] = tech_notes.get('answers', [])
         context['recommended_technician_action_id'] = tech_notes.get('recommended_action_id')
     except Exception:
@@ -392,7 +396,7 @@ def technician_context(ticket_id: int, request: Request,
 
 
 @router.get('/tecnico/tickets/{ticket_id}/respostas-tecnicas')
-def technician_ticket_answers(ticket_id: int, request: Request, refresh: bool = False,
+def technician_ticket_answers(ticket_id: int, request: Request, refresh: bool = True,
                               allow_internal: bool = True,
                               technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
     _technician_name(technician_pin, request)
