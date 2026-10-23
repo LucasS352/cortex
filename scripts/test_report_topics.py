@@ -4,7 +4,18 @@ import unittest
 from unittest.mock import patch
 
 from support_policy import decide
-from technician_workbench import connection, evidence_for_company
+from technician_workbench import connection, evidence_for_company, report_usage_case_source
+
+
+class ReportTopicUnit(unittest.TestCase):
+    def test_extractor_case_cannot_supply_on_screen_report_steps(self):
+        case = {'external_id': 125035, 'base_status': 'Closed', 'quality_tier': 'SILVER',
+                'hard_block_reason': None, 'service_full': 'Dúvidas de Relatórios',
+                'subject': 'EXTRATOR REL VENDAS POR PRODUTOS',
+                'problem_statement': 'Configuração por e-mail apresenta erro',
+                'solution_statement': 'Obrigado por entrar em contato conosco por este canal de atendimento.'}
+        self.assertIsNone(report_usage_case_source(
+            case, 'No Master tem algum relatório para ver venda por produto?'))
 
 
 @unittest.skipUnless(os.getenv('REPORT_TEST_POSTGRES') == '1', 'replay local opt-in')
@@ -33,6 +44,18 @@ class ReportTopicReplay(unittest.TestCase):
                         self.assertEqual(str(selected.get('source_external_id') or selected.get('id')), source_id)
                     if 'vendas por produto' in question.lower():
                         self.assertIn(125478, [case['external_id'] for case in cases])
+
+    def test_ticket_132273_question_uses_screen_report_not_email_extractor(self):
+        question = 'no master tem algum relatorio que eu possa ver venda por produto?'
+        with patch('knowledge_access.knowledge_index.ensure_coverage'), \
+             patch('knowledge_access.curation.ensure_schema'), connection() as conn:
+            tenant = conn.execute('SELECT id FROM tenants LIMIT 1').fetchone()['id']
+            sources, cases, _ = evidence_for_company(
+                conn, tenant, '578851081', question, exclude_ticket_id=132273,
+                service_hint='Dúvidas de Relatórios')
+        self.assertEqual(sources[0]['source_external_id'], 107436)
+        self.assertNotIn(125035, [case['external_id'] for case in cases
+                                  if case.get('match') == 'report_topic'])
 
 
 if __name__ == '__main__':

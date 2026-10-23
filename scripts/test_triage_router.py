@@ -38,6 +38,43 @@ class TriageRouterTest(unittest.TestCase):
         self.assertIn('reports', result['modules'])
         self.assertEqual(specialist['id'], 'reports')
 
+    def test_sales_by_product_question_prefers_reports_over_product_registration(self):
+        from triage_router import resolve_specialist
+        specialist, result = resolve_specialist(
+            'relatorio', 'No Master tem algum relatorio que eu possa ver venda por produto?'
+        )
+        self.assertEqual(result['modules'][0], 'reports')
+        self.assertEqual(specialist['id'], 'reports')
+
+    def test_report_worker_searches_ticket_corpus_without_company_directory(self):
+        from unittest.mock import MagicMock, Mock, patch
+        from movidesk_note_worker import Settings, generate_note
+        ticket = {
+            'id': 132273, 'subject': 'relatorio', 'clients': [{'id': 'req'}],
+            'actions': [{'id': 1, 'type': 2,
+                         'description': 'no master tem algum relatorio que eu possa ver venda por produto?',
+                         'createdBy': {'id': 'req', 'profileType': 2}}],
+        }
+        db = MagicMock()
+        db.__enter__.return_value.execute.return_value.fetchone.return_value = {'name': None}
+        source = {'id': 'company-ticket-107436', 'source_external_id': 107436,
+                  'source_type': 'PROBABLE_TICKET', 'title': 'Vendas por Produto',
+                  'solution': 'Abra Vendas - Gerenciamento, Mais Opções > Vendas por Produto.',
+                  'applicable': True, 'answer_use': 'supporting_reference',
+                  'evidence_status': 'documented_resolved_case'}
+        with patch('technician_workbench.connection', return_value=db), \
+             patch('tech_evidence.ensure_single_tenant', return_value='tenant'), \
+             patch('agent_control.organization', return_value=('', '', None)), \
+             patch('technician_workbench.evidence_for_company',
+                   return_value=([source], [], 'resolved_report_service')) as retrieval, \
+             patch('knowledge_access.approved_procedures', return_value=[]), \
+             patch('technician_workbench.capability_evidence_cases', return_value=[]), \
+             patch('technician_workbench.build_reply',
+                   return_value=('Abra Vendas por Produto.', {'used': True})):
+            result = generate_note(ticket, Settings(), Mock())
+        retrieval.assert_called_once()
+        self.assertEqual(result['sources'][0]['ticket'], 107436)
+
     def test_fastreport_physical_margin_stays_with_fr3_specialist(self):
         from triage_router import resolve_specialist
         specialist, result = resolve_specialist(

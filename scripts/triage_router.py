@@ -72,7 +72,10 @@ def route(subject: str, problem: str) -> dict:
         matches.setdefault("logistics", []).extend(shipping_hits)
     if label_context and print_hits and shipping_hits:
         matches.setdefault("integrations", []).append("etiqueta com contexto de integracao e impressao")
-    ranked = sorted(matches, key=lambda key: (-len(set(matches[key])), key))[:3]
+    ranked = sorted(matches, key=lambda key: (
+        -len(set(matches[key])),
+        0 if key == 'reports' and report_hits and not technical_print else 1,
+        key))[:3]
     if not ranked:
         ranked = [curation.classify(subject, [], "")]
     ambiguous = len(ranked) > 1 or (label_context and print_hits and shipping_hits)

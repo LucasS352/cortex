@@ -371,6 +371,11 @@ def report_related_cases(conn, tenant, query, exclude_ticket_id=None, limit=3):
         title = knowledge_access.normalize(row.get('subject') or '')
         problem = knowledge_access.normalize(row.get('problem_statement') or '')
         solution = knowledge_access.normalize(row.get('solution_statement') or '')
+        if (topic == 'sales_product' and
+                not re.search(r'\b(?:extrator|envio por e-?mail|enviar? por e-?mail)\b',
+                              knowledge_access.normalize(query)) and
+                re.search(r'\b(?:extrator|fila de e-?mail)\b', title + ' ' + problem)):
+            continue
         score = 6 * bool(re.search(pattern, title)) + 3 * bool(re.search(pattern, problem))
         score += bool(re.search(pattern, solution))
         if topic == 'sales_product' and any('mais opcoes' in field and 'filtr' in field
@@ -492,6 +497,23 @@ def company_case_source(case):
             "applicability_reasons": []}
 
 
+def report_usage_case_source(case, query):
+    """A report ticket can supply steps only when its resolution documents this use."""
+    source = company_case_source(case)
+    if not source or not report_topic(query):
+        return source
+    title = knowledge_access.normalize(case.get('subject') or '')
+    problem = knowledge_access.normalize(case.get('problem_statement') or '')
+    solution = knowledge_access.normalize(case.get('solution_statement') or '')
+    if re.search(r'\b(?:erro|divergencia|corrigir|extrator|nao funciona)\b', title + ' ' + problem):
+        return None
+    if not knowledge_access.report_topic_match(knowledge_access.query_plan(query), solution):
+        return None
+    if not re.search(r'\b(?:mais opcoes|relatorios\s*[>→-]|fica na tela|acesse|abra|selecione|filtre|filtrar)\b', solution):
+        return None
+    return source
+
+
 def cases_for_selected_evidence(cases, primary):
     """Show only cases tied to the selected resolution or its exact error signature."""
     source_ticket = str((primary or {}).get('source_external_id') or '')
@@ -530,7 +552,8 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
             cases = [report_cases[0]] + [case for case in cases
                          if str(case.get('external_id')) != str(report_cases[0]['external_id'])]
             return [report_source], cases, 'resolved_report_service'
-    local_source = next((source for case in company_matches if (source := company_case_source(case))), None)
+    local_source = next((source for case in company_matches
+                         if (source := report_usage_case_source(case, query))), None)
     documents = [source for source in knowledge_access.search(conn, query, top_k=12,
                                                                service_hint=service_hint)
                  if not exclude_ticket_id or
@@ -1013,7 +1036,7 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
                 'para análise técnica explicando o que já foi verificado e o que falta. '
                 'Não prometa imagens: elas são inseridas separadamente somente quando há material revisado. '
                 'LINGUAGEM: escreva para um usuário comum do Master, não para um programador. Comece com "Olá!" e uma frase '
-                'simples explicando o que o erro significa e por que acontece. Use frases curtas, verbos diretos '
+                'simples que responda diretamente à dúvida; se houver erro, explique seu significado. Use frases curtas, verbos diretos '
                 '(abra, aperte, confira, clique, salve) e os nomes que aparecem na tela. Evite jargão como log, payload, API, '
                 'UUID, endpoint, produto_id, cod_estoque, "identificador externo" ou "parametrização"; se um código do erro '
                 'precisar ser digitado, mostre o número exato e diga em qual campo ele vai. Termine dizendo o que deve '

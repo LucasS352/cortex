@@ -345,7 +345,8 @@ def generate_note(ticket, settings, api):
     from agent_control import organization
     from technician_workbench import (connection, build_reply, evidence_for_company, environment_card,
                                       environment_rows, active_issue_messages, search_context_query,
-                                      resolved_support_cases, capability_evidence_cases, company_case_source)
+                                      resolved_support_cases, capability_evidence_cases, company_case_source,
+                                      report_usage_case_source)
     from technician_workbench import cases_for_selected_evidence, report_topic
     from tech_evidence import ensure_single_tenant
     from conversation_outcome import classify_outcome, RESOLVED_REPLY, ACKNOWLEDGED_REPLY
@@ -414,9 +415,10 @@ def generate_note(ticket, settings, api):
         reviewed = mapped_replies.match(query)
         sources, cases, evidence_scope = [], [], 'general_knowledge'
         has_directory = conn.execute("SELECT to_regclass('movidesk_company_tickets') AS name").fetchone()['name']
-        if org_id and has_directory:
+        if (org_id and has_directory) or report_topic(query):
             sources, cases, evidence_scope = evidence_for_company(
-                conn, tenant, org_id, query, exclude_ticket_id=ticket.get('id'),
+                conn, tenant, org_id if has_directory else '', query,
+                exclude_ticket_id=ticket.get('id'),
                 service_hint=service_hint)
         elif not reviewed:
             import knowledge_access
@@ -437,7 +439,7 @@ def generate_note(ticket, settings, api):
         capability_leads = capability_evidence_cases(conn, tenant, query, ticket.get('id'))
         # History attached to a solution must describe a completed procedure.
         related_cases = [case for case in cases if case.get('match') == 'report_topic']
-        cases = [case for case in cases if company_case_source(case)]
+        cases = [case for case in cases if report_usage_case_source(case, query)]
         known = {str(case['external_id']) for case in cases}
         need_history = not any(s.get('applicable') and s.get('answer_use') != 'investigation_only'
                                for s in sources)
@@ -447,8 +449,8 @@ def generate_note(ticket, settings, api):
                 cases.append(case)
                 known.add(str(case['external_id']))
         if not any(s.get('applicable') and s.get('answer_use') != 'investigation_only' for s in sources):
-            documented = next((company_case_source(case) for case in cases
-                               if company_case_source(case)), None)
+            documented = next((report_usage_case_source(case, query) for case in cases
+                               if report_usage_case_source(case, query)), None)
             if documented:
                 sources = [documented] + sources
     import triage_router
