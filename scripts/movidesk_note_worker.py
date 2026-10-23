@@ -346,7 +346,7 @@ def generate_note(ticket, settings, api):
     from technician_workbench import (connection, build_reply, evidence_for_company, environment_card,
                                       environment_rows, active_issue_messages, search_context_query,
                                       resolved_support_cases, capability_evidence_cases, company_case_source)
-    from technician_workbench import cases_for_selected_evidence
+    from technician_workbench import cases_for_selected_evidence, report_topic
     from tech_evidence import ensure_single_tenant
     from conversation_outcome import classify_outcome, RESOLVED_REPLY, ACKNOWLEDGED_REPLY
 
@@ -436,6 +436,7 @@ def generate_note(ticket, settings, api):
         company_cases = list(cases)
         capability_leads = capability_evidence_cases(conn, tenant, query, ticket.get('id'))
         # History attached to a solution must describe a completed procedure.
+        related_cases = [case for case in cases if case.get('match') == 'report_topic']
         cases = [case for case in cases if company_case_source(case)]
         known = {str(case['external_id']) for case in cases}
         need_history = not any(s.get('applicable') and s.get('answer_use') != 'investigation_only'
@@ -471,6 +472,10 @@ def generate_note(ticket, settings, api):
         raise RetryJob('Gemini indisponível; nenhuma nota de contingência publicada')
     reference = sources[:1] if (decision['can_propose_procedure'] or decision.get('can_draft_from_evidence')) and sources and sources[0].get('applicable') and sources[0].get('answer_use') != 'investigation_only' else []
     tutorials = [s for s in sources[:5] if s.get('applicable') and s.get('videos')]
+    cases_for_note = list(cases)
+    noted = {str(case.get('external_id')) for case in cases_for_note}
+    cases_for_note.extend(case for case in related_cases
+                          if str(case.get('external_id')) not in noted)
     similar = [{'ticket': case.get('external_id'), 'title': case.get('subject'),
                 'status': case.get('status') or case.get('base_status'),
                 'active': bool(case.get('is_active')),
@@ -478,7 +483,7 @@ def generate_note(ticket, settings, api):
                     not case.get('hard_block_reason') and (case.get('quality_tier') in ('GOLD', 'SILVER') or
                                                            case.get('resolution_verified')) else None,
                 'same_company': bool(case.get('same_company'))}
-               for case in cases[:5]]
+               for case in cases_for_note[:5]]
     images, media_notices = [], []
     if reference:
         images, media_notices = mapped_replies.note_images(reference[0])
@@ -508,7 +513,7 @@ def generate_note(ticket, settings, api):
                             'active': (case.get('base_status') not in ('Resolved', 'Closed')),
                             'resolution': None})
             existing_ids.add(ticket_id)
-    similar = similar[:3]
+    similar = similar[:5 if report_topic(query) else 3]
     return {'reply': reply,
             'sources': [{'ticket': s.get('source_external_id') if s.get('source_type') in
                          ('VALIDATED_TICKET', 'PROBABLE_TICKET') else None,

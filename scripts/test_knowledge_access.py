@@ -75,6 +75,19 @@ class AccessTests(unittest.TestCase):
         self.assertFalse(report_topic_match(
             query_plan('margem da etiqueta FR3'), 'Gerenciamento de Markup de Vendas'))
 
+    def test_distinct_report_topics_do_not_share_a_generic_noun(self):
+        self.assertFalse(report_topic_match(
+            query_plan('como consultar estatística de vendas'), 'Estatística de Frete'))
+        self.assertFalse(report_topic_match(
+            query_plan('como consultar estatística de vendas'), 'Vendas por Produto'))
+        self.assertFalse(report_topic_match(
+            query_plan('onde vejo curva ABC dos produtos'), 'Curva ABC de Clientes'))
+        self.assertFalse(report_topic_match(
+            query_plan('posição de estoque por empresa'), 'Controle de Estoque'))
+        self.assertTrue(report_topic_match(
+            query_plan('posição de estoque por empresa'), 'Posição de Estoque Multiempresa'))
+        self.assertTrue(query_plan('como vejo comissão de vendas por vendedor')['report'])
+
     def test_markup_article_is_applicable_to_sales_margin_request(self):
         source = {
             'title': 'Relatório Gerenciamento de Markup de Vendas',

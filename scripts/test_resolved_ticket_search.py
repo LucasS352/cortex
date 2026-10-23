@@ -2,7 +2,8 @@ import unittest
 from unittest.mock import MagicMock
 
 import mapped_replies
-from technician_workbench import extract_resolution, resolved_support_cases, report_service_cases
+from technician_workbench import (extract_resolution, resolved_support_cases, report_service_cases,
+                                  report_related_cases, cases_for_selected_evidence)
 
 ERROR = ('Erro na baixa do pedido "208581527" (id do pedido na AnyMarket) "LU-1409770438645014" '
          '(código no market place), cliente "AGOSTINHA". Produto (316977845) Sku (95949071) '
@@ -90,6 +91,21 @@ class ReportServiceSearchTest(unittest.TestCase):
         self.assertEqual(found[0]['external_id'], 20)
         self.assertTrue(found[0]['resolution_verified'])
         self.assertIn('service_full ILIKE', db.execute.call_args.args[0])
+
+    def test_related_report_ticket_can_be_linked_without_becoming_a_procedure(self):
+        db = MagicMock()
+        db.execute.return_value.fetchall.return_value = [
+            {'external_id': 125478, 'subject': 'Relacionamento de Produtos x Vendas',
+             'problem_statement': 'Vendas por Produto em Mais Opções; filtrar por produto.',
+             'solution_statement': '', 'hard_block_reason': 'ZERO_AGENT_REPLY',
+             'base_status': 'Closed', 'service_full': 'Dúvidas de Relatórios'},
+            {'external_id': 999, 'subject': 'Erro cálculo Vendas por Produto',
+             'problem_statement': '', 'solution_statement': '', 'hard_block_reason': None,
+             'base_status': 'Closed', 'service_full': 'Dúvidas de Relatórios'},
+        ]
+        related = report_related_cases(db, 'tenant', 'Onde vejo vendas por produto?')
+        self.assertEqual([r['external_id'] for r in related], [125478])
+        self.assertEqual(cases_for_selected_evidence(related, None), [])
 
 
 if __name__ == '__main__':

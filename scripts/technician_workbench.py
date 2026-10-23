@@ -373,6 +373,11 @@ def report_related_cases(conn, tenant, query, exclude_ticket_id=None, limit=3):
         solution = knowledge_access.normalize(row.get('solution_statement') or '')
         score = 6 * bool(re.search(pattern, title)) + 3 * bool(re.search(pattern, problem))
         score += bool(re.search(pattern, solution))
+        if topic == 'sales_product' and any('mais opcoes' in field and 'filtr' in field
+                                            for field in (problem, solution)):
+            score += 6
+        if re.search(r'\b(?:erro|divergencia|corrigir|problema|nao funciona|lentidao)\b', title):
+            score -= 6
         if topic == 'abc_products' and 'cliente' in title and 'produto' not in title:
             continue
         if topic == 'sales_commission' and not ('relatorio' in title or 'relatorio' in problem):
@@ -494,7 +499,8 @@ def cases_for_selected_evidence(cases, primary):
     rejection = re.search(r'\brejeicao\s*(\d{3,4})\b', title)
     return [case for case in cases if
             str(case.get('external_id') or '') == source_ticket or
-            case.get('match') in ('error_signature', 'report_topic') or
+            case.get('match') == 'error_signature' or
+            (case.get('match') == 'report_topic' and company_case_source(case)) or
             (rejection and re.search(r'\brejeicao\s*' + rejection.group(1) + r'\b',
                                      knowledge_access.normalize(case.get('subject') or '')))]
 
@@ -506,9 +512,10 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
     # Deterministic reviewed replies can also be evaluated without a database.
     if conn is None and reviewed:
         return [reviewed], [], "reviewed_procedure"
-    cases = company_similar_cases(conn, tenant, company_id, query, limit, exclude_ticket_id) if company_id else []
+    company_matches = company_similar_cases(conn, tenant, company_id, query, limit, exclude_ticket_id) if company_id else []
+    cases = list(company_matches)
     if report_topic(query):
-        related = report_related_cases(conn, tenant, query, exclude_ticket_id, limit=3)
+        related = report_related_cases(conn, tenant, query, exclude_ticket_id, limit=5)
         seen = {str(case.get('external_id')) for case in related}
         cases = related + [case for case in cases if str(case.get('external_id')) not in seen]
     approved = knowledge_access.approved_procedures(conn, query)
@@ -523,13 +530,22 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
             cases = [report_cases[0]] + [case for case in cases
                          if str(case.get('external_id')) != str(report_cases[0]['external_id'])]
             return [report_source], cases, 'resolved_report_service'
-    local_source = next((source for case in cases if (source := company_case_source(case))), None)
+    local_source = next((source for case in company_matches if (source := company_case_source(case))), None)
     documents = [source for source in knowledge_access.search(conn, query, top_k=12,
                                                                service_hint=service_hint)
                  if not exclude_ticket_id or
                  str(source.get('source_external_id') or '') != str(exclude_ticket_id)]
-    documents.sort(key=lambda source: not (source.get('applicable') and
-                                            source.get('answer_use') != 'investigation_only'))
+    if report_topic(query):
+        plan = knowledge_access.query_plan(query)
+        documents.sort(key=lambda source: (
+            not (source.get('source_type') == 'OFFICIAL_KB' and
+                 knowledge_access.report_topic_match(plan, source.get('title') or '') and
+                 not re.match(r'^(?:dev\s*-|err\s*-)',
+                              knowledge_access.normalize(source.get('title') or ''))),
+            not (source.get('applicable') and source.get('answer_use') != 'investigation_only')))
+    else:
+        documents.sort(key=lambda source: not (source.get('applicable') and
+                                                source.get('answer_use') != 'investigation_only'))
     if local_source:
         return [local_source] + documents, cases, "company_history_with_documents"
     return documents, cases, "general_knowledge"

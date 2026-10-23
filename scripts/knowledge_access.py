@@ -47,6 +47,8 @@ def query_plan(query):
     text=normalize(query)
     report = bool(re.search(
         r'\b(?:relatorio|relatorios|indicador|indicadores|markup|cmv|rentabilidade|curva abc|estatistica de vendas)\b|'
+        r'\b(?:projecao de compras|posicao de estoque|demonstrativo de venda analitico|dva)\b|'
+        r'\bcomissao\b.{0,50}\bvendedor\b|'
         r'\bmargem\b.{0,50}\b(?:venda|vendas|lucro|produto|produtos)\b|'
         r'\b(?:venda|vendas|lucro|produto|produtos)\b.{0,50}\bmargem\b', text))
     product_creation = bool(re.search(r'\b(?:criar|cadastrar|cadastro)\b.{0,35}\bprodutos?\b', text))
@@ -92,13 +94,21 @@ def report_topic_match(plan, title):
     rules = (
         (bool(re.search(r'\b(?:margem|markup|rentabilidade|lucro)\b', query)),
          r'\b(?:markup|margem|rentabilidade)\b'),
-        (bool('vendas por produto' in query or 'estatistica de vendas' in query),
+        ('vendas por produto' in query,
          r'\bestatistica\b.*\bvendas\b|\bvendas\b.*\bproduto\b'),
+        ('estatistica de vendas' in query,
+         r'\bestatistica\b.*\bvendas\b'),
         ('projecao' in query and 'compra' in query, r'\bprojecao\b.*\bcompr'),
-        ('curva abc' in query, r'\bcurva abc\b'),
-        ('estoque' in query, r'\b(?:posicao de estoque|estoque)\b'),
+        ('curva abc' in query and 'produto' in query, r'\bcurva abc\b.*\bprodutos?\b'),
+        ('curva abc' in query and 'produto' not in query, r'\bcurva abc\b'),
+        ('posicao de estoque' in query, r'\bposicao de estoque\b'),
+        ('estoque' in query and 'posicao de estoque' not in query, r'\bestoque\b'),
         ('frete' in query, r'\bestatistica\b.*\bfrete\b|\bfrete\b'),
         ('gerencial' in query, r'\brelatorio gerencial\b'),
+        ('comissao' in query and 'vendedor' in query,
+         r'\b(?:relatorio|comissao)\b.*\bcomissao\b.*\bvendedor\b|\bcomissao\b.*\bvendedor\b'),
+        ('demonstrativo de venda analitico' in query or bool(re.search(r'\bdva\b', query)),
+         r'\bdemonstrativo de vendas? analitico\b|\bdva\b'),
     )
     active = [pattern for condition, pattern in rules if condition]
     return bool(active and any(re.search(pattern, title) for pattern in active))
@@ -441,6 +451,30 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
                 row['evidence_status']='video_reference_without_transcript'
     for row in ranked:
         gate=applicability(row,query)
+        title = normalize(row.get('title') or '')
+        if (plan.get('report') and row.get('source_type') == 'OFFICIAL_KB'
+                and not report_topic_match(plan, row.get('title') or '')
+                and any(report_topic_match(plan, name) for name in (
+                    'Estatística de Vendas', 'Curva ABC de Produtos', 'Posição de Estoque',
+                    'Projeção de Compras', 'Gerenciamento de Markup de Vendas',
+                    'Comissão por Vendedor', 'Demonstrativo de Venda Analítico'))):
+            gate = {**gate, 'applicable': False,
+                    'applicability_reasons': gate['applicability_reasons'] + ['requested_report_not_matched']}
+        if (plan.get('report') and plan.get('howto') and row.get('source_type') == 'OFFICIAL_KB'
+                and re.match(r'^(?:dev\s*-\s*(?:err|mel|mod)|err\s*-)', title)):
+            row['quality_flags'].append('change_or_error_article_not_usage_guide')
+            row['answer_use'] = 'investigation_only'
+        if (plan.get('report') and plan.get('howto') and
+                row.get('source_type') in ('VALIDATED_TICKET', 'PROBABLE_TICKET')):
+            solution = normalize(row.get('solution') or '')
+            report_navigation = bool(re.search(
+                r'\b(?:mais opcoes|relatorios\s*[>→-]|fica na tela|acesse|abra|selecione|filtre|filtrar)\b',
+                solution))
+            issue_ticket = bool(re.search(
+                r'\b(?:erro|divergencia|corrigir|problema|nao funciona|lentidao)\b', title))
+            if issue_ticket or not report_navigation or not report_topic_match(plan, solution):
+                row['quality_flags'].append('historical_report_not_usage_guide')
+                row['answer_use'] = 'investigation_only'
         if (plan.get('report') and re.search(r'\bvendas? por produtos?\b', normalize(query))
                 and row.get('source_type') == 'OFFICIAL_KB'
                 and re.search(r'\b(?:markup|margem|rentabilidade)\b', normalize(row.get('title') or ''))):
