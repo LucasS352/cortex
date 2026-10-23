@@ -1964,9 +1964,22 @@ function setEditorFromPlainText(text) {
   updateWordCount();
 }
 
+function normalizeMovideskImagesInHtml(html) {
+  if (!html) return '';
+  return String(html)
+    .replace(
+      /https?:\/\/[^"'\s>]*movidesk-files\/([A-Fa-f0-9]{32})(?:\?[^"'\s>]*)?/gi,
+      (_, hash) => `/api/treinamento/tecnico/imagem/${hash.toUpperCase()}`
+    )
+    .replace(
+      /\/api\/(?:movidesk\/image|image)\/([A-Fa-f0-9]{32})/gi,
+      (_, hash) => `/api/treinamento/tecnico/imagem/${hash.toUpperCase()}`
+    );
+}
+
 function setEditorFromHtmlOrText(htmlContent, textContent) {
   if (htmlContent && /<[a-z][\s\S]*>/i.test(htmlContent)) {
-    $('#richEditor').innerHTML = htmlContent;
+    $('#richEditor').innerHTML = normalizeMovideskImagesInHtml(htmlContent);
     updateWordCount();
   } else {
     setEditorFromPlainText(textContent || '');
@@ -1988,7 +2001,7 @@ function buildAnswerAndProcedureFromEditor() {
   return {
     answer: plainText,
     procedure,
-    validated_html: getEditorHtml(),
+    validated_html: normalizeMovideskImagesInHtml(getEditorHtml()),
   };
 }
 
@@ -1999,6 +2012,13 @@ function updateWordCount() {
 }
 
 $('#richEditor').addEventListener('input', () => {
+  $('#richEditor').querySelectorAll('img').forEach(img => {
+    const src = img.getAttribute('src') || '';
+    const m = src.match(/movidesk-files\/([A-Fa-f0-9]{32})/i) || src.match(/\/api\/(?:movidesk\/image|image)\/([A-Fa-f0-9]{32})/i);
+    if (m) {
+      img.setAttribute('src', `/api/treinamento/tecnico/imagem/${m[1].toUpperCase()}`);
+    }
+  });
   updateWordCount();
 });
 

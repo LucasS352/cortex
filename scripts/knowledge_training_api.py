@@ -10,6 +10,7 @@ import time
 from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 import knowledge_training as kt
@@ -401,6 +402,16 @@ def technician_ticket_answers(ticket_id: int, request: Request, refresh: bool = 
                               technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
     _technician_name(technician_pin, request)
     return _guard(kt.ticket_technician_answers, ticket_id, allow_internal=allow_internal, refresh_live=refresh)
+
+
+@router.get('/tecnico/imagem/{file_hash}')
+def technician_ticket_image(file_hash: str):
+    data, media_type = _guard(kt.fetch_movidesk_image, file_hash)
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff'},
+    )
 
 
 @router.post('/tecnico/tickets/{ticket_id}/nota')

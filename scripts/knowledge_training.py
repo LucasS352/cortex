@@ -1220,6 +1220,65 @@ def _parse_cortex_note(description):
     }
 
 
+IMAGE_CACHE_DIR = Path(PROJECT_ROOT) / 'output' / 'attachments' / 'cache'
+
+
+def fetch_movidesk_image(file_hash: str) -> tuple[bytes, str]:
+    """Busca imagem do Movidesk por hash MD5 (32 hex) usando cache local ou endpoint /storage/download."""
+    match = re.fullmatch(r'([A-Fa-f0-9]{32})', str(file_hash or '').strip())
+    if not match:
+        raise ValueError('Identificador de imagem inválido.')
+    clean_hash = match.group(1).upper()
+    IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    alt_cache_dir = Path(__file__).parent / 'output' / 'attachments' / 'cache'
+
+    for cache_dir in (IMAGE_CACHE_DIR, alt_cache_dir):
+        for ext, mime in (('.png', 'image/png'), ('.jpg', 'image/jpeg'), ('.jpeg', 'image/jpeg'),
+                          ('.gif', 'image/gif'), ('.webp', 'image/webp')):
+            for candidate_hash in (clean_hash, clean_hash.lower()):
+                cached = cache_dir / f'{candidate_hash}{ext}'
+                if cached.is_file() and cached.stat().st_size > 0:
+                    return cached.read_bytes(), mime
+
+    from config import MOVIDESK_BASE_URL, MOVIDESK_TOKEN
+    if not MOVIDESK_TOKEN:
+        raise LookupError('Token do Movidesk não configurado.')
+    base = (MOVIDESK_BASE_URL or 'https://api.movidesk.com/public/v1').rstrip('/')
+    url = f'{base}/storage/download?token={MOVIDESK_TOKEN}&id={clean_hash}'
+    req = urllib.request.Request(url, headers={'User-Agent': 'DeskCortex/1.0'})
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = resp.read(5 * 1024 * 1024 + 1)
+            if not data or len(data) > 5 * 1024 * 1024:
+                raise LookupError('Imagem vazia ou excede 5 MB.')
+            ct = (resp.headers.get('Content-Type') or '').lower()
+    except Exception as exc:
+        raise LookupError(f'Não foi possível carregar a imagem {clean_hash} do Movidesk.') from exc
+
+    if data.startswith(b'\x89PNG\r\n\x1a\n'):
+        ext, mime = '.png', 'image/png'
+    elif data.startswith(b'\xff\xd8\xff'):
+        ext, mime = '.jpg', 'image/jpeg'
+    elif data.startswith((b'GIF87a', b'GIF89a')):
+        ext, mime = '.gif', 'image/gif'
+    elif len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        ext, mime = '.webp', 'image/webp'
+    elif 'jpeg' in ct or 'jpg' in ct:
+        ext, mime = '.jpg', 'image/jpeg'
+    elif 'gif' in ct:
+        ext, mime = '.gif', 'image/gif'
+    elif 'webp' in ct:
+        ext, mime = '.webp', 'image/webp'
+    else:
+        ext, mime = '.png', 'image/png'
+
+    try:
+        (IMAGE_CACHE_DIR / f'{clean_hash}{ext}').write_bytes(data)
+    except OSError:
+        pass
+    return data, mime
+
+
 def _sanitize_rich_html(raw_html):
     """Sanitiza HTML de notas ou do editor rico preservando formatação segura (negrito, listas, links, imagens)."""
     if not raw_html:
@@ -1229,7 +1288,35 @@ def _sanitize_rich_html(raw_html):
     cleaned = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|button|meta|link)\b[^>]*/?\s*>', '', cleaned, flags=re.I)
     cleaned = re.sub(r'\son[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)', '', cleaned, flags=re.I)
     cleaned = re.sub(r'(href|src)\s*=\s*(["\']?)\s*javascript:[^"\'>\s]*\2', r'\1="#"', cleaned, flags=re.I)
-    return sanitize(cleaned).strip()
+    # Reescreve URLs temporárias do S3 do Movidesk para a rota de proxy/cache autenticada na tela
+    cleaned = re.sub(
+        r'https?://[^"\'\s>]*movidesk-files/([A-Fa-f0-9]{32})(?:\?[^"\'\s>]*)?',
+        lambda m: f'/api/treinamento/tecnico/imagem/{m.group(1).upper()}',
+        cleaned,
+        flags=re.I,
+    )
+    cleaned = re.sub(
+        r'/api/(?:movidesk/image|image)/([A-Fa-f0-9]{32})',
+        lambda m: f'/api/treinamento/tecnico/imagem/{m.group(1).upper()}',
+        cleaned,
+        flags=re.I,
+    )
+    # Protege atributos src/href (exceto mailto:) para que números na URL não sejam corrompidos por [telefone]
+    protected_urls = []
+
+    def _stash_url(match):
+        attr, quote_char, url_val = match.group(1), match.group(2), match.group(3)
+        if url_val.strip().lower().startswith('mailto:'):
+            return match.group(0)
+        idx = len(protected_urls)
+        protected_urls.append(f'{attr}={quote_char}{url_val}{quote_char}')
+        return f'__CORTEX_URL_{idx}__'
+
+    cleaned = re.sub(r'\b(src|href)\s*=\s*(["\'])([^"\']*)\2', _stash_url, cleaned, flags=re.I)
+    cleaned = sanitize(cleaned).strip()
+    for idx, original_attr in enumerate(protected_urls):
+        cleaned = cleaned.replace(f'__CORTEX_URL_{idx}__', original_attr)
+    return cleaned
 
 
 def _status_label(status, base_status):
@@ -1627,6 +1714,44 @@ def _save_proposal_images(images, procedure):
     return saved
 
 
+def _extract_inline_movidesk_images(validated_html, max_images=5):
+    """Extrai prints inline do Movidesk presentes no HTML validado e os salva em TRAINING_MEDIA para a curadoria."""
+    if not validated_html or max_images <= 0:
+        return []
+    hashes = []
+    for h in re.findall(
+        r'(?:movidesk-files/|/api/(?:treinamento/tecnico/imagem|movidesk/image|image)/)([A-Fa-f0-9]{32})',
+        str(validated_html),
+        flags=re.I,
+    ):
+        upper_h = h.upper()
+        if upper_h not in hashes:
+            hashes.append(upper_h)
+    saved = []
+    TRAINING_MEDIA.mkdir(parents=True, exist_ok=True)
+    for idx, f_hash in enumerate(hashes[:max_images], start=1):
+        try:
+            raw, _ = fetch_movidesk_image(f_hash)
+            with Image.open(io.BytesIO(raw)) as source:
+                if source.width * source.height > 25_000_000:
+                    continue
+                source.load()
+                image = source.convert('RGBA' if source.mode in ('RGBA', 'LA') else 'RGB')
+                image.thumbnail((2400, 2400))
+                file_name = uuid.uuid4().hex + '.png'
+                image.save(TRAINING_MEDIA / file_name, 'PNG', optimize=True)
+            saved.append({
+                'file': file_name,
+                'name': f'Print da resolução {idx}',
+                'caption': f'Captura de tela importada da resolução técnica (print {idx})',
+                'placement': 'answer',
+                'after_step': None,
+            })
+        except Exception:
+            continue
+    return saved
+
+
 def review_answer(ticket_id, action_id, rating, module_key, comment, actor, example_ticket_id=None,
                   proposed_title=None, proposed_answer=None, proposed_procedure=None, proposed_images=None,
                   question_action_id=None, source_answer_action_id=None, *,
@@ -1661,6 +1786,8 @@ def review_answer(ticket_id, action_id, rating, module_key, comment, actor, exam
                 raise ValueError('A pergunta ou resposta selecionada não pertence ao ticket indicado ou ainda não foi sincronizada.')
             question_text = question['text']
         saved_images = _save_proposal_images(proposed_images or [], proposed_procedure)
+        if validated_html and len(saved_images) < 5:
+            saved_images.extend(_extract_inline_movidesk_images(validated_html, max_images=5 - len(saved_images)))
         proposal = {'title': proposed_title, 'answer': proposed_answer,
                     'procedure': proposed_procedure, 'images': saved_images, 'question': question_text,
                     'question_action_id': str(question_action_id) if question_action_id else None,
