@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 
 import mapped_replies
-from technician_workbench import extract_resolution, resolved_support_cases
+from technician_workbench import extract_resolution, resolved_support_cases, report_service_cases
 
 ERROR = ('Erro na baixa do pedido "208581527" (id do pedido na AnyMarket) "LU-1409770438645014" '
          '(código no market place), cliente "AGOSTINHA". Produto (316977845) Sku (95949071) '
@@ -68,6 +68,28 @@ class SignatureSearchTest(unittest.TestCase):
         ]
         result = resolved_support_cases(db, 'tenant', ERROR, company_id='453')
         self.assertEqual(result[0]['external_id'], 4)
+
+
+class ReportServiceSearchTest(unittest.TestCase):
+    def test_service_and_documented_navigation_prioritize_sales_by_product(self):
+        db = MagicMock()
+        common = {'status': 'Resolvido', 'base_status': 'Resolved', 'quality_tier': 'REVIEW',
+                  'hard_block_reason': None, 'service_full': 'Dúvidas de Relatórios',
+                  'technical_narrative': ''}
+        db.execute.return_value.fetchall.return_value = [
+            {**common, 'external_id': 10, 'subject': 'Relatório de transportadoras',
+             'problem_statement': 'Como analisar transportadoras nas vendas por produto?',
+             'solution_statement': 'Abra Vendas Gerenciamento, Mais Opções, Vendas por Produto. '
+                                   'Filtre pela transportadora e confira os registros.'},
+            {**common, 'external_id': 20, 'subject': 'Relatório de vendas por produto',
+             'problem_statement': 'Onde encontro as vendas por produto?',
+             'solution_statement': 'Temos o relatório de vendas por produto. Abra Vendas Gerenciamento, '
+                                   'Mais Opções, Vendas por Produto e confira o resultado.'},
+        ]
+        found = report_service_cases(db, 'tenant', 'onde ver relatório de vendas por produto')
+        self.assertEqual(found[0]['external_id'], 20)
+        self.assertTrue(found[0]['resolution_verified'])
+        self.assertIn('service_full ILIKE', db.execute.call_args.args[0])
 
 
 if __name__ == '__main__':

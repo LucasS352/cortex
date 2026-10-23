@@ -389,6 +389,9 @@ def generate_note(ticket, settings, api):
     query = search_context_query(question, recent)
     from support_policy import decide
     org_id, org_name, _ = organization(ticket.get('clients'))
+    service_parts = ticket.get('serviceFull') or [ticket.get('serviceFirstLevel'),
+        ticket.get('serviceSecondLevel'), ticket.get('serviceThirdLevel')]
+    service_hint = ' > '.join(str(part) for part in service_parts if part) if isinstance(service_parts, list) else str(service_parts or '')
     from support_triage import intake
     triage = intake(question, query, active_history)
     if triage:
@@ -413,10 +416,11 @@ def generate_note(ticket, settings, api):
         has_directory = conn.execute("SELECT to_regclass('movidesk_company_tickets') AS name").fetchone()['name']
         if org_id and has_directory:
             sources, cases, evidence_scope = evidence_for_company(
-                conn, tenant, org_id, query, exclude_ticket_id=ticket.get('id'))
+                conn, tenant, org_id, query, exclude_ticket_id=ticket.get('id'),
+                service_hint=service_hint)
         elif not reviewed:
             import knowledge_access
-            sources = knowledge_access.search(conn, query, top_k=12)
+            sources = knowledge_access.search(conn, query, top_k=12, service_hint=service_hint)
             sources.sort(key=lambda source: not (source.get('applicable') and
                 source.get('answer_use') != 'investigation_only'))
         import knowledge_access
@@ -453,7 +457,8 @@ def generate_note(ticket, settings, api):
     decision = decide(query, sources, company_cases)
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in active_history)
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
-           'subject': ticket.get('subject'), 'contact_name': (latest.get('createdBy') or {}).get('businessName')}
+           'subject': ticket.get('subject'), 'service_full': service_hint,
+           'contact_name': (latest.get('createdBy') or {}).get('businessName')}
     cases = cases_for_selected_evidence(cases, sources[0] if sources else None)
     active_company = []
     active_ids = {str(c.get('external_id')) for c in active_company}

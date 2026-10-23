@@ -225,7 +225,7 @@ def anchor_matches(plan,text):
     return objects,codes
 
 
-def rank_rows(rows,plan,module='TODOS',top_k=5):
+def rank_rows(rows,plan,module='TODOS',top_k=5,service_hint=''):
     results=[]
     seen=set()
     for source in rows:
@@ -288,6 +288,11 @@ def rank_rows(rows,plan,module='TODOS',top_k=5):
             score -= 25 if re.search(r'\bdev\s*-\s*(?:err|mel|mod)\b', title) else 0
             score -= 5 if r.get('source_type') in ('VALIDATED_TICKET', 'PROBABLE_TICKET') else 0
         score+=4 if module!='TODOS' and normalize(module) in normalize(' '.join(r.get('modules') or [])) else 0
+        metadata = r.get('metadata') if isinstance(r.get('metadata'), dict) else {}
+        service = normalize(metadata.get('service_full') or '')
+        hint = normalize(service_hint)
+        if service and hint and (service == hint or service in hint or hint in service):
+            score += 18
         r.update(q)
         r.update(retrieval_score=round(score,4),matched_objects=objects,matched_codes=codes,matched_terms=matched,
                  matched_identifiers=identifiers,matched_signatures=signatures,
@@ -298,7 +303,7 @@ def rank_rows(rows,plan,module='TODOS',top_k=5):
     return sorted(results,key=lambda r:(-r['retrieval_score'],r['id']))[:top_k]
 
 
-def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,maintain_index=True):
+def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,maintain_index=True,service_hint=''):
     if maintain_index:
         knowledge_index.ensure_coverage()
         curation.ensure_schema()
@@ -386,7 +391,7 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
     for r in rows: r.pop('embedding',None)
     if source_types:
         rows=[r for r in rows if r.get('source_type') in source_types]
-    ranked=rank_rows(rows,plan,module,top_k)
+    ranked=rank_rows(rows,plan,module,top_k,service_hint)
     historical_ids=[r.get('source_external_id') for r in ranked
                     if r.get('source_type') in ('VALIDATED_TICKET','PROBABLE_TICKET') and r.get('source_external_id')]
     if historical_ids:
@@ -409,6 +414,12 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
                 continue
             aid=(row.get('metadata') or {}).get('external_id');article=kb.get(aid)
             row['source_url']=f'https://helpdesk.alternativasistemas.com.br/kb/article/{aid}' if article else None
+            # The original "Agrupado por Produto" screen was reported obsolete
+            # by support on 2026-10-23. Keep the article visible for audit, but
+            # do not turn its former navigation into a customer instruction.
+            if str(aid) == '310538':
+                row['quality_flags'].append('obsolete_screen_confirmed')
+                row['answer_use']='investigation_only'
             if not article:
                 row['quality_flags'].append('original_not_linked');row['answer_use']='investigation_only'
             else:
@@ -430,6 +441,11 @@ def search(conn,query,module='TODOS',top_k=5,embedding=None,source_types=None,ma
                 row['evidence_status']='video_reference_without_transcript'
     for row in ranked:
         gate=applicability(row,query)
+        if (plan.get('report') and re.search(r'\bvendas? por produtos?\b', normalize(query))
+                and row.get('source_type') == 'OFFICIAL_KB'
+                and re.search(r'\b(?:markup|margem|rentabilidade)\b', normalize(row.get('title') or ''))):
+            gate = {**gate, 'applicable': False,
+                    'applicability_reasons': gate['applicability_reasons'] + ['requested_report_not_matched']}
         if (plan.get('report') and row.get('source_type') == 'OFFICIAL_KB'
                 and row.get('videos') and report_topic_match(plan, row.get('title') or '')):
             reasons = [reason for reason in gate['applicability_reasons']

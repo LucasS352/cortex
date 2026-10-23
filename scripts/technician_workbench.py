@@ -170,7 +170,7 @@ _RESOLUTION_TAIL = re.compile(
 _RESOLUTION_HEAD = re.compile(
     r'(?:a[cç][oõ]es realizadas para resolu[cç][aã]o|resolu[cç][aã]o(?:/resultado observado)?)\s*:\s*(.+)', re.I | re.S)
 _RESOLUTION_ACTION = re.compile(
-    r'\b(?:relac|vincul|ctrl|cadastr|configur|corrig|alter[aeo]|de ?/ ?para|tipo [pf]\b|inclu|preench|habilit|marc[aoq]|ajust)')
+    r'\b(?:relac|vincul|ctrl|cadastr|configur|corrig|alter[aeo]|de ?/ ?para|tipo [pf]\b|inclu|preench|habilit|marc[aoq]|ajust|abr[ae]|acess|selecion|filtr|pesquis|export|visualiz)')
 _RESOLUTION_WEAK = re.compile(r'manobra|paliativ|encaminhad|setor de desenvolvimento|nao respondeu|inatividade')
 PROJECT_TICKET = re.compile(r'^\s*(?:dev|mel|dsm|dsc)\b|\s-\s*dev\s*-', re.I)
 ERROR_SIGNATURES = (
@@ -243,6 +243,9 @@ def _signature_cases(conn, tenant, patterns, exclude_ticket_id, company_id, limi
 
 def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3, company_id=None):
     """Find documented resolutions: exact error signature first, same company before others."""
+    service_cases = report_service_cases(conn, tenant, query, exclude_ticket_id, limit)
+    if service_cases:
+        return service_cases
     patterns = error_signature_patterns(query)
     if patterns:
         found = _signature_cases(conn, tenant, patterns, exclude_ticket_id, company_id, limit, query)
@@ -278,6 +281,49 @@ def resolved_support_cases(conn, tenant, query, exclude_ticket_id=None, limit=3,
             if len(result) >= limit:
                 break
     return result
+
+
+def report_service_cases(conn, tenant, query, exclude_ticket_id=None, limit=3):
+    """Use completed report-service tickets when the request names a sales-by-product report."""
+    normalized = knowledge_access.normalize(query)
+    if not re.search(r'\bvendas? por produtos?\b', normalized):
+        return []
+    rows = conn.execute('''SELECT external_id,subject,status,base_status,created_date,
+        service_full,problem_statement,technical_narrative,solution_statement,
+        quality_tier,hard_block_reason
+        FROM refined_tickets WHERE tenant_id=%s AND external_id::text<>%s
+        AND service_full ILIKE %s AND base_status IN ('Resolved','Closed')
+        AND coalesce(hard_block_reason,'')=''
+        AND (subject ILIKE %s OR solution_statement ILIKE %s)
+        ORDER BY created_date DESC NULLS LAST LIMIT 120''',
+        (tenant, str(exclude_ticket_id or ''), '%Relat%', '%produto%', '%vendas por produto%')).fetchall()
+    matches = []
+    for row in rows:
+        resolution = extract_resolution(row)
+        if not resolution:
+            continue
+        gate = knowledge_access.applicability({
+            'title': row.get('subject'), 'problem': row.get('problem_statement'),
+            'diagnosis': row.get('technical_narrative'), 'solution': resolution}, query)
+        if not gate['applicable']:
+            continue
+        text = knowledge_access.normalize(resolution)
+        if not re.search(r'\bvendas? por produtos?\b', text):
+            continue
+        position = re.search(r'\bvendas? por produtos?\b', text).start()
+        score = (8 if position < 250 else 0) + (5 if 'mais opcoes' in text else 0)
+        score += 2 if 'filt' in text else 0
+        score += 9 if re.search(r'\b(?:temos|existe) o relatorio de vendas? por produtos?\b', text) else 0
+        score -= 6 if 'outra opcao' in text or 'cadastro do cliente' in text else 0
+        problem = knowledge_access.normalize(row.get('problem_statement') or '')
+        if any(word in problem and word not in normalized
+               for word in ('transportadora', 'fornecedor', 'icms', 'estoque', 'comissao')):
+            score -= 4
+        matches.append((score, dict(row, solution_statement=resolution,
+                                    resolution_verified=True, is_active=False,
+                                    match='report_service')))
+    matches.sort(key=lambda pair: (pair[0], pair[1].get('created_date') or ''), reverse=True)
+    return [row for _, row in matches[:limit]]
 
 
 CAPABILITY_CONCEPTS = {
@@ -378,6 +424,8 @@ def company_case_source(case):
             "diagnosis": case.get("technical_narrative"), "solution": case.get("solution_statement"),
             "applicable": True, "answer_use": "supporting_reference",
             "evidence_status": "documented_resolved_case", "quality_flags": [],
+            "provenance": ("Chamado resolvido do serviço " + str(case['service_full'])
+                           if case.get('service_full') else "Chamado resolvido documentado"),
             "applicability_reasons": []}
 
 
@@ -394,7 +442,7 @@ def cases_for_selected_evidence(cases, primary):
 
 
 def evidence_for_company(conn, tenant, company_id: str, query: str,
-                         exclude_ticket_id=None, limit: int = 8):
+                         exclude_ticket_id=None, limit: int = 8, service_hint: str = ''):
     """Retrieve documentation as well as customer history; keep provenance distinct."""
     reviewed = mapped_replies.match(query)
     # Deterministic reviewed replies can also be evaluated without a database.
@@ -406,8 +454,14 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
         return approved, cases, 'human_approved_procedure'
     if reviewed:
         return [reviewed], cases, "reviewed_procedure"
+    report_cases = report_service_cases(conn, tenant, query, exclude_ticket_id, limit=1)
+    if report_cases:
+        report_source = company_case_source(report_cases[0])
+        if report_source:
+            return [report_source], cases + report_cases, 'resolved_report_service'
     local_source = next((source for case in cases if (source := company_case_source(case))), None)
-    documents = [source for source in knowledge_access.search(conn, query, top_k=12)
+    documents = [source for source in knowledge_access.search(conn, query, top_k=12,
+                                                               service_hint=service_hint)
                  if not exclude_ticket_id or
                  str(source.get('source_external_id') or '') != str(exclude_ticket_id)]
     documents.sort(key=lambda source: not (source.get('applicable') and
@@ -921,6 +975,7 @@ Empresa Movidesk: {row.get('movidesk_company_id', 'não informada')} — {row.ge
 Fatos da empresa confirmados pelo técnico: {verified[:12]}
 Ambientes Master explicitamente vinculados: {environment}
 Atendimento: {row.get('subject', 'não informado')}; contato: {row.get('contact_name', 'não informado')}
+Serviço classificado no chamado: {row.get('service_full') or 'não informado'}
 Histórico recente: {history[-10000:]}
 Pergunta atual: {question}
 Fonte principal aplicável: {primary.get('title') if grounded else 'nenhuma'}

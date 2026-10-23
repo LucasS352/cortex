@@ -54,6 +54,19 @@ class AccessTests(unittest.TestCase):
         ranked = rank_rows(rows, query_plan('relatório de vendas por produto'))
         self.assertEqual(ranked[0]['id'], 2)
 
+    def test_ticket_service_is_a_ranking_clue(self):
+        rows = [
+            {'id': 1, 'title': 'Relatório de vendas por produto', 'source_type': 'PROBABLE_TICKET',
+             'solution': 'Abra a tela e filtre as vendas pelos produtos desejados para conferir o relatório.',
+             'metadata': {'service_full': 'Dúvidas de Relatórios'}},
+            {'id': 2, 'title': 'Relatório de vendas por produto', 'source_type': 'PROBABLE_TICKET',
+             'solution': 'Abra a tela e filtre as vendas pelos produtos desejados para conferir o relatório.',
+             'metadata': {'service_full': 'Dúvidas de Estoque'}},
+        ]
+        ranked = rank_rows(rows, query_plan('relatório de vendas por produto'),
+                           service_hint='Dúvidas de Relatórios')
+        self.assertEqual(ranked[0]['id'], 1)
+
     def test_report_catalog_matches_business_name_not_printing_margin(self):
         self.assertTrue(report_topic_match(
             query_plan('relatório da margem das vendas'), 'Gerenciamento de Markup de Vendas'))
