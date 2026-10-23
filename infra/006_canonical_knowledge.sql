@@ -150,6 +150,11 @@ ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS proposed_procedure
 ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS proposed_images jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS question_action_id text;
 ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS source_answer_action_id text;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS score smallint CHECK (score >= 0 AND score <= 10);
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS subtopic_key text;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS keywords text[] NOT NULL DEFAULT '{}';
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS validated_html text;
+ALTER TABLE cortex_kb.answer_reviews ADD COLUMN IF NOT EXISTS is_draft boolean NOT NULL DEFAULT false;
 ALTER TABLE cortex_kb.candidates ADD COLUMN IF NOT EXISTS source_action_id text;
 ALTER TABLE cortex_kb.candidates ADD COLUMN IF NOT EXISTS source_question_action_id text;
 ALTER TABLE cortex_kb.candidates ADD COLUMN IF NOT EXISTS source_answer_action_id text;

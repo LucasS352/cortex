@@ -460,14 +460,23 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
                 extraction.update(title=proposal['title'], procedure=proposal['procedure'],
                                   customer_answer=proposal['answer'], images=proposal.get('images') or [],
                                   confidence='HUMAN_PROPOSAL')
+                if proposal.get('keywords') is not None:
+                    extraction['keywords'] = proposal['keywords']
+                if proposal.get('validated_html') is not None:
+                    extraction['validated_html'] = proposal['validated_html']
+                target_mod = module_key or existing['suggested_module']
+                valid_subs = dict(taxonomy.subtopic_options(target_mod))
+                target_sub = (proposal.get('subtopic_key')
+                              if proposal.get('subtopic_key') in valid_subs
+                              else existing.get('suggested_subtopic') or 'general')
                 checks = quality_checks(extraction, proposal['answer'] + '\n' + proposal['procedure'])
                 conn.execute('''UPDATE cortex_kb.candidates SET extraction=%s,quality_checks=%s,
-                    suggested_module=%s,extractor='technician_proposal',source_question_action_id=%s,
+                    suggested_module=%s,suggested_subtopic=%s,extractor='technician_proposal',source_question_action_id=%s,
                     source_answer_action_id=%s WHERE id=%s''',
-                    (Jsonb(extraction), Jsonb(checks), module_key or existing['suggested_module'],
+                    (Jsonb(extraction), Jsonb(checks), target_mod, target_sub,
                      proposal.get('question_action_id'), proposal.get('answer_action_id'), open_['id']))
                 existing.update(extraction=extraction, quality_checks=checks,
-                                suggested_module=module_key or existing['suggested_module'],
+                                suggested_module=target_mod, suggested_subtopic=target_sub,
                                 extractor='technician_proposal')
                 audit(conn, 'candidate', open_['id'], 'technician:revised', actor,
                       'Proposta reenviada para curadoria', after={'extraction': extraction})
@@ -508,12 +517,20 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
                          'confirmation_quote': None},
             'confidence': 'HUMAN_PROPOSAL',
         }
+        if proposal.get('keywords'):
+            extraction['keywords'] = proposal['keywords']
+        if proposal.get('validated_html'):
+            extraction['validated_html'] = proposal['validated_html']
         text, extractor = proposal['answer'] + '\n' + proposal['procedure'], 'technician_proposal'
     else:
         # Chamada ao modelo fora da transação: não segura conexão nem locks.
         extraction, text, extractor = extract(ticket, actions)
     module = module_key or extraction['module_hint']
-    sub = taxonomy.subtopic(module, extraction['title'], [extraction['symptom'] or ''])
+    valid_subs = dict(taxonomy.subtopic_options(module))
+    proposed_sub = (proposal.get('subtopic_key') or '').strip() if proposal else ''
+    sub = (proposed_sub
+           if proposed_sub and (proposed_sub in valid_subs or proposed_sub in ('general', 'geral'))
+           else taxonomy.subtopic(module, extraction['title'], [extraction['symptom'] or '']))
     checks = quality_checks(extraction, text)
     with connect() as conn:
         related = find_related(conn, extraction, module)
@@ -542,8 +559,8 @@ def get_candidate(candidate_id):
     with connect() as conn:
         row = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s', (candidate_id,)).fetchone()
         reviews = conn.execute('''SELECT ticket_external_id,action_id,example_ticket_external_id,
-            question_action_id,source_answer_action_id,rating,comment,actor,updated_at FROM cortex_kb.answer_reviews
-            WHERE candidate_id=%s ORDER BY updated_at DESC''', (candidate_id,)).fetchall()
+            question_action_id,source_answer_action_id,rating,score,subtopic_key,keywords,comment,actor,updated_at
+            FROM cortex_kb.answer_reviews WHERE candidate_id=%s ORDER BY updated_at DESC''', (candidate_id,)).fetchall()
     if not row:
         raise LookupError('Sugestão não encontrada.')
     return {**dict(row), 'answer_reviews': reviews}
@@ -1126,6 +1143,112 @@ def select_answer(actions, action_id):
     return selected
 
 
+def _parse_cortex_note(description):
+    """Extrai de forma estruturada o conteúdo da resposta sugerida pela IA e seus metadados."""
+    from movidesk_note_worker import plain
+    raw = str(description or '')
+    raw_with_breaks = re.sub(r'<\s*br\s*/?\s*>', '\n', raw, flags=re.I)
+    raw_with_breaks = re.sub(r'<\s*/\s*(?:div|p|li|tr|h[1-6])\s*>', '\n', raw_with_breaks, flags=re.I)
+    lines = [re.sub(r'[ \t]+', ' ', plain(line)).strip() for line in raw_with_breaks.splitlines()]
+    text = sanitize('\n'.join(line for line in lines if line)).strip()
+
+    specialist_match = re.search(r'Especialista acionado:\s*([^\n·|<]+)', text, re.I)
+    decision_match = re.search(r'Decisão interna:\s*([^\n·|<]+)', text, re.I)
+    obs_match = re.search(r'Observação interna:\s*(.+?)(?=\n\s*(?:Fontes usadas|Chamados semelhantes|Especialista acionado|CORTEX-AI-NOTE|$))', text, re.I | re.S)
+    sources_match = re.search(r'Fontes usadas:\s*([^\n<]+)', text, re.I)
+
+    similar_tickets = []
+    for m in re.finditer(r'#(\d{4,9})\s*[—\-]\s*([^\n(]+?)(?:\s*\((?:score\s*)?([0-9.]+)\))?(?=\n|$)', text):
+        similar_tickets.append({
+            'ticket_id': int(m.group(1)),
+            'subject': m.group(2).strip(),
+            'score': float(m.group(3)) if m.group(3) else None,
+        })
+
+    sources_raw = sources_match.group(1).strip() if sources_match else ''
+    sources_list = [s.strip() for s in re.split(r'[,;]', sources_raw) if s.strip() and s.strip().lower() not in ('nenhuma', 'none', '-')]
+    for st in similar_tickets:
+        label = f"#{st['ticket_id']}"
+        if label not in sources_list:
+            sources_list.append(label)
+
+    # Extract clean suggested reply text (between "Sugestão de resposta ao cliente:" and internal footers)
+    reply_match = re.search(
+        r'Sugestão de resposta(?: ao cliente)?:\s*\n*(.+?)(?=\n\s*(?:Observação interna:|Fontes usadas:|Chamados semelhantes|Especialista acionado:|Decisão interna:)|\Z)',
+        text, re.I | re.S
+    )
+    if reply_match:
+        clean_reply = reply_match.group(1).strip()
+    else:
+        cleaned = re.sub(r'^.*?CORTEX-AI-NOTE:[a-z0-9:_-]+\s*', '', text, flags=re.I | re.S)
+        cleaned = re.sub(r'^CORTEX\s*[—\-]\s*Apoio automático ao atendimento\s*', '', cleaned, flags=re.I)
+        cleaned = re.sub(r'Especialista acionado:.*?\n', '', cleaned, flags=re.I)
+        cleaned = re.sub(r'Decisão interna:.*?\n', '', cleaned, flags=re.I)
+        cleaned = re.sub(r'\n\s*(?:Observação interna|Fontes usadas|Chamados semelhantes).*$', '', cleaned, flags=re.I | re.S)
+        clean_reply = cleaned.strip() or text
+
+    decision = decision_match.group(1).strip() if decision_match else None
+    confidence = None
+    max_score = max((st['score'] for st in similar_tickets if st.get('score') is not None), default=None)
+    if max_score is not None:
+        if max_score >= 0.78:
+            confidence = 'Alta'
+        elif max_score >= 0.55:
+            confidence = 'Média'
+        else:
+            confidence = 'Baixa'
+    elif decision:
+        dl = decision.lower()
+        if dl in ('respond', 'direct_reply', 'auto_reply') and sources_list:
+            confidence = 'Alta'
+        elif dl in ('respond', 'direct_reply', 'partial', 'suggest'):
+            confidence = 'Média'
+        elif dl in ('Clarify', 'clarify', 'escalate', 'blocked'):
+            confidence = 'Baixa'
+    elif sources_list:
+        confidence = 'Alta' if len(sources_list) >= 2 else 'Média'
+
+    return {
+        'clean_reply': clean_reply,
+        'specialist': specialist_match.group(1).strip() if specialist_match else None,
+        'internal_decision': decision,
+        'internal_observation': obs_match.group(1).strip() if obs_match else None,
+        'sources': sources_list,
+        'sources_count': len(sources_list),
+        'confidence': confidence,
+        'similar_tickets': similar_tickets,
+    }
+
+
+def _sanitize_rich_html(raw_html):
+    """Sanitiza HTML de notas ou do editor rico preservando formatação segura (negrito, listas, links, imagens)."""
+    if not raw_html:
+        return ''
+    cleaned = str(raw_html)
+    cleaned = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|button|meta|link)\b[^>]*>.*?<\s*/\s*\1\s*>', '', cleaned, flags=re.I | re.S)
+    cleaned = re.sub(r'<\s*(script|style|iframe|object|embed|form|input|button|meta|link)\b[^>]*/?\s*>', '', cleaned, flags=re.I)
+    cleaned = re.sub(r'\son[a-z]+\s*=\s*(?:"[^"]*"|\'[^\']*\'|[^\s>]+)', '', cleaned, flags=re.I)
+    cleaned = re.sub(r'(href|src)\s*=\s*(["\']?)\s*javascript:[^"\'>\s]*\2', r'\1="#"', cleaned, flags=re.I)
+    return sanitize(cleaned).strip()
+
+
+def _status_label(status, base_status):
+    raw = str(status or base_status or '').strip()
+    if not raw:
+        return 'Fechado'
+    mapping = {
+        'closed': 'Fechado',
+        'resolved': 'Resolvido',
+        'inattendance': 'Em atendimento',
+        'in attendance': 'Em atendimento',
+        'new': 'Novo',
+        'stopped': 'Parado',
+        'canceled': 'Cancelado',
+        'cancelled': 'Cancelado',
+    }
+    return mapping.get(raw.lower(), raw)
+
+
 def ticket_answers(ticket_id):
     ensure_schema()
     with connect() as conn:
@@ -1139,41 +1262,308 @@ def ticket_answers(ticket_id):
             continue
         text = sanitize(plain(description)).strip()
         if 'CORTEX-AI-NOTE:' in description:
-            answers.append({'action_id': str(action['id']), 'text': text,
-                            'created_at': action.get('createdDate'),
-                            'suggested_question_action_id': latest_question})
+            parsed = _parse_cortex_note(description)
+            answers.append({
+                'action_id': str(action['id']),
+                'text': text,
+                'clean_reply': parsed['clean_reply'],
+                'created_at': action.get('createdDate'),
+                'suggested_question_action_id': latest_question,
+                'sources': parsed['sources'],
+                'sources_count': parsed['sources_count'],
+                'confidence': parsed['confidence'],
+                'specialist': parsed['specialist'],
+                'internal_decision': parsed['internal_decision'],
+                'internal_observation': parsed['internal_observation'],
+                'similar_tickets': parsed['similar_tickets'],
+            })
         elif not is_agent(action) and str(action.get('type')) == '2' and len(text) >= 5:
             latest_question = str(action['id'])
-            questions.append({'action_id': latest_question, 'text': text[:10000],
-                              'created_at': action.get('createdDate')})
-    return {'ticket': ticket_id, 'subject': sanitize(ticket.get('subject')).strip(),
-            'questions': questions[-30:], 'answers': answers[-30:]}
+            creator = action.get('createdBy') or {}
+            author_name = sanitize(creator.get('businessName') or creator.get('userName') or creator.get('email') or 'Cliente').strip()
+            questions.append({
+                'action_id': latest_question,
+                'text': text[:10000],
+                'html': _sanitize_rich_html(description)[:25000],
+                'created_at': action.get('createdDate'),
+                'author': author_name,
+            })
+
+    subject = sanitize(ticket.get('subject')).strip()
+    status_display = _status_label(ticket.get('status'), ticket.get('baseStatus'))
+    created_at = ticket.get('createdDate') or (ordered[0].get('createdDate') if ordered else None)
+    latest_ans = answers[-1] if answers else None
+    latest_q = questions[-1] if questions else None
+
+    ai_understanding = None
+    if latest_ans and latest_ans.get('internal_observation'):
+        ai_understanding = latest_ans['internal_observation']
+    elif latest_q or subject:
+        q_preview = (latest_q['text'] if latest_q else '')
+        first_sentence = re.split(r'(?<=[.!?])\s+|\n+', q_preview.strip())[0] if q_preview else ''
+        if subject and first_sentence and norm(subject) not in norm(first_sentence):
+            ai_understanding = f"Solicitação referente a \"{subject}\": {first_sentence[:280]}"
+        elif first_sentence:
+            ai_understanding = f"O cliente solicita apoio técnico referente a: {first_sentence[:280]}"
+        elif subject:
+            ai_understanding = f"Atendimento analisado com foco no assunto: {subject}."
+
+    additional_context = []
+    if subject:
+        additional_context.append({'label': 'Assunto do chamado', 'value': subject})
+    if latest_ans and latest_ans.get('specialist'):
+        additional_context.append({'label': 'Especialista acionado', 'value': latest_ans['specialist']})
+    if latest_ans and latest_ans.get('internal_decision'):
+        additional_context.append({'label': 'Decisão de roteamento', 'value': latest_ans['internal_decision']})
+    if latest_ans and latest_ans.get('sources'):
+        additional_context.append({'label': 'Fontes consultadas', 'value': ', '.join(latest_ans['sources'])})
+
+    return {
+        'ticket': ticket_id,
+        'subject': subject,
+        'status': status_display,
+        'base_status': ticket.get('baseStatus') or ticket.get('status') or 'Closed',
+        'created_at': created_at,
+        'movidesk_url': f'https://alternativa.movidesk.com/Ticket/Edit/{ticket_id}',
+        'ai_understanding': ai_understanding,
+        'additional_context': additional_context,
+        'questions': questions[-30:],
+        'answers': answers[-30:],
+    }
 
 
-def ticket_technician_answers(ticket_id):
+def ticket_technician_answers(ticket_id, allow_internal=True, refresh_live=False):
     """Notas treináveis e pareamento provável: pergunta do cliente -> resposta humana seguinte."""
     ensure_schema()
+    if refresh_live:
+        try:
+            sync_ticket_from_movidesk(ticket_id)
+        except Exception:
+            pass
     with connect() as conn:
-        ticket, actions = load_ticket(conn, ticket_id)
+        try:
+            ticket, actions = load_ticket(conn, ticket_id)
+        except LookupError:
+            sync_ticket_from_movidesk(ticket_id)
+            ticket, actions = load_ticket(conn, ticket_id)
     from movidesk_note_worker import plain, automatic_receipt_action
     ordered = sorted(actions, key=lambda a: (str(a.get('createdDate') or ''), int(a.get('id') or 0)))
     questions, answers, latest_question = [], [], None
+    auto_event_re = re.compile(
+        r'(?:recebemos\s+a?\s*sua\s+solicita[cç][aã]o|seu\s+chamado\s+foi\s+recebido|'
+        r'encerrad[oa]\s+automaticamente\s+por\s+inatividade|evento\s+autom[aá]tico\s+do\s+sistema)',
+        re.I
+    )
     for action in ordered:
         description = str(action.get('description') or '')
         if (action.get('id') is None or action.get('isDeleted') or
                 'CORTEX-AI-NOTE:' in description or automatic_receipt_action(action)):
             continue
         text = sanitize(plain(description)).strip()
+        if auto_event_re.search(text):
+            continue
+        action_type = str(action.get('type') or '2')
+        is_public = action_type == '2'
+        visibility = 'public' if is_public else 'internal'
+        creator = action.get('createdBy') or {}
+        author_name = sanitize(
+            creator.get('businessName') or creator.get('userName') or creator.get('email') or ('Técnico' if is_agent(action) else 'Cliente')
+        ).strip()
         if is_agent(action) and len(text) >= 20:
-            answers.append({'action_id': str(action['id']), 'text': text[:10000],
-                            'created_at': action.get('createdDate'),
-                            'suggested_question_action_id': latest_question})
-        elif not is_agent(action) and str(action.get('type')) == '2' and len(text) >= 5:
+            if not is_public and not allow_internal:
+                continue
+            answers.append({
+                'action_id': str(action['id']),
+                'text': text[:10000],
+                'html': _sanitize_rich_html(description)[:25000],
+                'created_at': action.get('createdDate'),
+                'suggested_question_action_id': latest_question,
+                'author': author_name,
+                'type': int(action_type) if action_type.isdigit() else 2,
+                'is_public': is_public,
+                'visibility': visibility,
+            })
+        elif not is_agent(action) and is_public and len(text) >= 5:
             latest_question = str(action['id'])
-            questions.append({'action_id': latest_question, 'text': text[:10000],
-                              'created_at': action.get('createdDate')})
-    return {'ticket': ticket_id, 'subject': sanitize(ticket.get('subject')).strip(),
-            'questions': questions[-30:], 'answers': answers[-30:]}
+            questions.append({
+                'action_id': latest_question,
+                'text': text[:10000],
+                'html': _sanitize_rich_html(description)[:25000],
+                'created_at': action.get('createdDate'),
+                'author': author_name,
+            })
+
+    # Prioriza a última resposta pública de técnico; se não houver pública, usa a última interna
+    public_answers = [a for a in answers if a.get('is_public')]
+    recommended = public_answers[-1] if public_answers else (answers[-1] if answers else None)
+
+    return {
+        'ticket': ticket_id,
+        'subject': sanitize(ticket.get('subject')).strip(),
+        'status': _status_label(ticket.get('status'), ticket.get('baseStatus')),
+        'questions': questions[-30:],
+        'answers': answers[-30:],
+        'recommended_action_id': recommended['action_id'] if recommended else None,
+    }
+
+
+def save_answer_score(ticket_id, action_id, score, actor, module_key=None, comment=None):
+    """Salva de maneira persistente a avaliação de 0 a 10 da resposta da IA sem publicar conhecimento automaticamente."""
+    if not isinstance(score, int) or isinstance(score, bool) or score < 0 or score > 10:
+        raise ValueError('A nota da resposta deve ser um número inteiro de 0 a 10.')
+    ensure_schema()
+    with connect() as conn:
+        _, actions = load_ticket(conn, ticket_id)
+        selected = select_answer(actions, action_id)
+        existing = conn.execute(
+            'SELECT * FROM cortex_kb.answer_reviews WHERE ticket_external_id=%s AND action_id=%s AND actor=%s',
+            (ticket_id, str(action_id), actor)
+        ).fetchone()
+        valid_modules = {m['key'] for m in taxonomy_options()}
+        resolved_module = (
+            module_key if module_key in valid_modules and module_key != 'unclassified'
+            else (existing['module_key'] if existing and existing.get('module_key') in valid_modules else 'geral')
+        )
+        derived_rating = 1 if score >= 7 else -1
+        resolved_comment = sanitize(comment) if comment is not None else (existing['comment'] if existing else '')
+        row = conn.execute(
+            """INSERT INTO cortex_kb.answer_reviews
+                (ticket_external_id, action_id, answer_text, rating, score, module_key, comment, actor, is_draft)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, true)
+               ON CONFLICT (ticket_external_id, action_id, actor)
+               DO UPDATE SET
+                   score = excluded.score,
+                   rating = excluded.rating,
+                   module_key = excluded.module_key,
+                   comment = excluded.comment,
+                   updated_at = now()
+               RETURNING id, score, rating, module_key, updated_at""",
+            (
+                ticket_id, str(action_id), sanitize(selected['description']),
+                derived_rating, score, resolved_module, resolved_comment, actor,
+            )
+        ).fetchone()
+        audit(
+            conn, 'answer_review', row['id'], 'scored', actor,
+            f'Nota {score}/10 atribuída à resposta da IA',
+            before=dict(existing) if existing else None,
+            after={'score': score, 'rating': derived_rating, 'ticket': ticket_id, 'action': str(action_id), 'module': row['module_key']}
+        )
+    return {
+        'id': row['id'],
+        'ticket_id': ticket_id,
+        'action_id': str(action_id),
+        'score': row['score'],
+        'rating': row['rating'],
+        'module_key': row['module_key'],
+        'actor': actor,
+        'updated_at': row['updated_at'],
+    }
+
+
+def save_review_draft(ticket_id, action_id, actor, score=None, module_key=None, subtopic_key=None,
+                      keywords=None, proposed_title=None, proposed_answer=None, proposed_procedure=None,
+                      validated_html=None, comment=None, example_ticket_id=None,
+                      question_action_id=None, source_answer_action_id=None):
+    """Salva o rascunho da validação do técnico no banco de dados para continuidade posterior."""
+    if score is not None and (not isinstance(score, int) or isinstance(score, bool) or score < 0 or score > 10):
+        raise ValueError('A nota da resposta deve ser um número inteiro de 0 a 10.')
+    ensure_schema()
+    with connect() as conn:
+        _, actions = load_ticket(conn, ticket_id)
+        selected = select_answer(actions, action_id)
+        existing = conn.execute(
+            'SELECT * FROM cortex_kb.answer_reviews WHERE ticket_external_id=%s AND action_id=%s AND actor=%s',
+            (ticket_id, str(action_id), actor)
+        ).fetchone()
+        valid_modules = {m['key'] for m in taxonomy_options()}
+        resolved_module = (
+            module_key if module_key in valid_modules and module_key != 'unclassified'
+            else (existing['module_key'] if existing and existing.get('module_key') in valid_modules else 'geral')
+        )
+        resolved_score = score if score is not None else (existing.get('score') if existing else None)
+        derived_rating = (1 if resolved_score >= 7 else -1) if resolved_score is not None else (existing['rating'] if existing else -1)
+        kw_list = _as_list(keywords if keywords is not None else (existing.get('keywords') if existing else []))
+        clean_html = _sanitize_rich_html(validated_html) if validated_html is not None else (existing.get('validated_html') if existing else None)
+
+        row = conn.execute(
+            """INSERT INTO cortex_kb.answer_reviews
+                (ticket_external_id, action_id, answer_text, rating, score, module_key, subtopic_key, keywords,
+                 comment, actor, example_ticket_external_id, proposed_title, proposed_answer, proposed_procedure,
+                 validated_html, question_action_id, source_answer_action_id, is_draft)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, true)
+               ON CONFLICT (ticket_external_id, action_id, actor)
+               DO UPDATE SET
+                   rating = excluded.rating,
+                   score = excluded.score,
+                   module_key = excluded.module_key,
+                   subtopic_key = excluded.subtopic_key,
+                   keywords = excluded.keywords,
+                   comment = excluded.comment,
+                   example_ticket_external_id = excluded.example_ticket_external_id,
+                   proposed_title = excluded.proposed_title,
+                   proposed_answer = excluded.proposed_answer,
+                   proposed_procedure = excluded.proposed_procedure,
+                   validated_html = excluded.validated_html,
+                   question_action_id = excluded.question_action_id,
+                   source_answer_action_id = excluded.source_answer_action_id,
+                   is_draft = true,
+                   updated_at = now()
+               RETURNING id, updated_at""",
+            (
+                ticket_id, str(action_id), sanitize(selected['description']),
+                derived_rating, resolved_score, resolved_module,
+                sanitize(subtopic_key).strip() or None, kw_list,
+                sanitize(comment), actor,
+                example_ticket_id or ticket_id,
+                sanitize(proposed_title).strip() or None,
+                sanitize(proposed_answer).strip() or None,
+                sanitize(proposed_procedure).strip() or None,
+                clean_html,
+                str(question_action_id) if question_action_id else None,
+                str(source_answer_action_id) if source_answer_action_id else None,
+            )
+        ).fetchone()
+        audit(
+            conn, 'answer_review', row['id'], 'draft_saved', actor,
+            'Rascunho de curadoria salvo pelo técnico',
+            before=dict(existing) if existing else None,
+            after={
+                'ticket': ticket_id, 'action': str(action_id), 'score': resolved_score,
+                'module': resolved_module, 'subtopic': subtopic_key,
+                'source_answer_action': source_answer_action_id,
+            }
+        )
+    return {'id': row['id'], 'ticket_id': ticket_id, 'action_id': str(action_id), 'actor': actor, 'is_draft': True, 'updated_at': row['updated_at']}
+
+
+def ticket_saved_reviews(ticket_id, actor=None):
+    """Retorna avaliações e rascunhos salvos para o ticket."""
+    ensure_schema()
+    with connect() as conn:
+        if actor:
+            rows = conn.execute(
+                """SELECT id, ticket_external_id, action_id, rating, score, module_key, subtopic_key, keywords,
+                          comment, actor, example_ticket_external_id, proposed_title, proposed_answer,
+                          proposed_procedure, validated_html, proposed_images, question_action_id,
+                          source_answer_action_id, candidate_id, is_draft, created_at, updated_at
+                   FROM cortex_kb.answer_reviews
+                   WHERE ticket_external_id=%s
+                   ORDER BY (actor=%s) DESC, updated_at DESC""",
+                (ticket_id, actor)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT id, ticket_external_id, action_id, rating, score, module_key, subtopic_key, keywords,
+                          comment, actor, example_ticket_external_id, proposed_title, proposed_answer,
+                          proposed_procedure, validated_html, proposed_images, question_action_id,
+                          source_answer_action_id, candidate_id, is_draft, created_at, updated_at
+                   FROM cortex_kb.answer_reviews
+                   WHERE ticket_external_id=%s
+                   ORDER BY updated_at DESC""",
+                (ticket_id,)
+            ).fetchall()
+    return [dict(r) for r in rows]
 
 
 TRAINING_MEDIA = Path(__file__).parent / 'output' / 'training_media'
@@ -1228,9 +1618,12 @@ def _save_proposal_images(images, procedure):
 
 def review_answer(ticket_id, action_id, rating, module_key, comment, actor, example_ticket_id=None,
                   proposed_title=None, proposed_answer=None, proposed_procedure=None, proposed_images=None,
-                  question_action_id=None, source_answer_action_id=None):
+                  question_action_id=None, source_answer_action_id=None, *,
+                  subtopic_key=None, keywords=None, score=None, validated_html=None):
     if rating not in (-1, 1):
         raise ValueError('Avaliação inválida.')
+    if score is not None and (not isinstance(score, int) or isinstance(score, bool) or score < 0 or score > 10):
+        raise ValueError('A nota da resposta deve ser um número inteiro de 0 a 10.')
     if module_key == 'unclassified' or module_key not in {m['key'] for m in taxonomy_options()}:
         raise ValueError('Classifique o módulo da resposta.')
     if rating == -1 and (not isinstance(example_ticket_id, int) or isinstance(example_ticket_id, bool)
@@ -1261,33 +1654,52 @@ def review_answer(ticket_id, action_id, rating, module_key, comment, actor, exam
                     'procedure': proposed_procedure, 'images': saved_images, 'question': question_text,
                     'question_action_id': str(question_action_id) if question_action_id else None,
                     'answer_action_id': str(source_answer_action_id) if source_answer_action_id else None}
+        if subtopic_key is not None:
+            proposal['subtopic_key'] = sanitize(subtopic_key).strip()
+        if keywords is not None:
+            proposal['keywords'] = _as_list(keywords)
+        if validated_html is not None:
+            proposal['validated_html'] = _sanitize_rich_html(validated_html)
+        if score is not None:
+            proposal['score'] = score
     with connect() as conn:
         _, actions = load_ticket(conn, ticket_id)
         selected = select_answer(actions, action_id)
     # A proposta do técnico sempre fica isolada na fila. Somente a decisão
     # administrativa posterior pode publicá-la no índice usado pelo CORTEX.
     candidate = create_candidate(example_ticket_id, actor, True, None, module_key, proposal) if rating == -1 else None
+    clean_subtopic = sanitize(subtopic_key).strip() if subtopic_key else None
+    kw_list = _as_list(keywords) if keywords is not None else []
+    clean_html = _sanitize_rich_html(validated_html) if validated_html else None
     with connect() as conn:
         row = conn.execute("""INSERT INTO cortex_kb.answer_reviews
-            (ticket_external_id,action_id,answer_text,rating,module_key,comment,actor,
-             example_ticket_external_id,proposed_title,proposed_answer,proposed_procedure,proposed_images,
-             question_action_id,source_answer_action_id,candidate_id)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(ticket_external_id,action_id,actor)
-            DO UPDATE SET rating=excluded.rating,module_key=excluded.module_key,comment=excluded.comment,
+            (ticket_external_id,action_id,answer_text,rating,score,module_key,subtopic_key,keywords,comment,actor,
+             example_ticket_external_id,proposed_title,proposed_answer,proposed_procedure,validated_html,proposed_images,
+             question_action_id,source_answer_action_id,candidate_id,is_draft)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,false) ON CONFLICT(ticket_external_id,action_id,actor)
+            DO UPDATE SET rating=excluded.rating,score=COALESCE(excluded.score,answer_reviews.score),
+            module_key=excluded.module_key,subtopic_key=COALESCE(excluded.subtopic_key,answer_reviews.subtopic_key),
+            keywords=CASE WHEN array_length(excluded.keywords,1) IS NOT NULL THEN excluded.keywords ELSE answer_reviews.keywords END,
+            comment=excluded.comment,
             example_ticket_external_id=excluded.example_ticket_external_id,
             proposed_title=excluded.proposed_title,proposed_answer=excluded.proposed_answer,
-            proposed_procedure=excluded.proposed_procedure,proposed_images=excluded.proposed_images,
+            proposed_procedure=excluded.proposed_procedure,
+            validated_html=COALESCE(excluded.validated_html,answer_reviews.validated_html),
+            proposed_images=excluded.proposed_images,
             question_action_id=excluded.question_action_id,source_answer_action_id=excluded.source_answer_action_id,
-            candidate_id=COALESCE(excluded.candidate_id,answer_reviews.candidate_id),updated_at=now() RETURNING id""",
-            (ticket_id,str(action_id),sanitize(selected['description']),rating,module_key,sanitize(comment),actor,
+            candidate_id=COALESCE(excluded.candidate_id,answer_reviews.candidate_id),
+            is_draft=false,updated_at=now() RETURNING id""",
+            (ticket_id,str(action_id),sanitize(selected['description']),rating,score,module_key,clean_subtopic,kw_list,sanitize(comment),actor,
              example_ticket_id if rating == -1 else None,
              proposed_title if rating == -1 else None, proposed_answer if rating == -1 else None,
-             proposed_procedure if rating == -1 else None, Jsonb(proposal['images'] if proposal else []),
+             proposed_procedure if rating == -1 else None, clean_html if rating == -1 else None,
+             Jsonb(proposal['images'] if proposal else []),
              str(question_action_id) if rating == -1 and question_action_id else None,
              str(source_answer_action_id) if rating == -1 and source_answer_action_id else None,
              candidate['id'] if candidate else None)).fetchone()
         audit(conn,'answer_review',row['id'],'rated',actor,sanitize(comment),
-              after={'rating':rating,'ticket':ticket_id,'action':str(action_id),'module':module_key,
+              after={'rating':rating,'score':score,'ticket':ticket_id,'action':str(action_id),'module':module_key,
+                     'subtopic':clean_subtopic,'keywords':kw_list,
                      'example_ticket':example_ticket_id if rating == -1 else None,
                      'question_action':question_action_id if rating == -1 else None,
                      'source_answer_action':source_answer_action_id if rating == -1 else None})
@@ -1298,9 +1710,9 @@ def review_answer(ticket_id, action_id, rating, module_key, comment, actor, exam
 def answer_reviews(limit=100):
     ensure_schema()
     with connect() as conn:
-        return conn.execute("""SELECT id,ticket_external_id,action_id,rating,module_key,comment,actor,
-            example_ticket_external_id,proposed_title,proposed_answer,proposed_procedure,proposed_images,
-            question_action_id,source_answer_action_id,candidate_id,created_at,updated_at FROM cortex_kb.answer_reviews
+        return conn.execute("""SELECT id,ticket_external_id,action_id,rating,score,module_key,subtopic_key,keywords,comment,actor,
+            example_ticket_external_id,proposed_title,proposed_answer,proposed_procedure,validated_html,proposed_images,
+            question_action_id,source_answer_action_id,candidate_id,is_draft,created_at,updated_at FROM cortex_kb.answer_reviews
             ORDER BY updated_at DESC LIMIT %s""",(limit,)).fetchall()
 
 

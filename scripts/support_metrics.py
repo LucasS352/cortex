@@ -10,9 +10,12 @@ def snapshot():
             WHERE table_schema='cortex_kb' AND table_name='answer_reviews'""")}
         correction = 'count(*) FILTER (WHERE rating=-1 AND proposed_answer IS NOT NULL)' if 'proposed_answer' in columns else 'NULL::bigint'
         rejection = 'count(*) FILTER (WHERE rating=-1 AND proposed_answer IS NULL)' if 'proposed_answer' in columns else 'count(*) FILTER (WHERE rating=-1)'
+        avg_score = 'round(avg(score)::numeric, 2)::float' if 'score' in columns else 'NULL::float'
+        scored_count = 'count(*) FILTER (WHERE score IS NOT NULL)' if 'score' in columns else '0::bigint'
         reviews = conn.execute(f'''SELECT count(*) total,
             count(*) FILTER (WHERE rating=1) approved,
-            {correction} corrected, {rejection} rejected
+            {correction} corrected, {rejection} rejected,
+            {avg_score} average_score, {scored_count} scored_count
             FROM cortex_kb.answer_reviews''').fetchone()
         approval = conn.execute('''SELECT count(*) decided,
             avg(extract(epoch FROM (decided_at-created_at))) mean_seconds

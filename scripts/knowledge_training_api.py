@@ -46,7 +46,13 @@ def _technician_name(pin: str, request: Request) -> str:
 
 def _technician_origin(request: Request):
     origin = request.headers.get('origin', '').rstrip('/')
-    if not origin or origin != web_auth.public_origin():
+    try:
+        expected = web_auth.public_origin()
+    except ValueError:
+        if web_auth.enabled():
+            raise HTTPException(403, 'Origem inválida.')
+        expected = f"{request.url.scheme}://{request.url.netloc}".rstrip('/')
+    if not origin or origin != expected:
         raise HTTPException(403, 'Origem inválida.')
 
 
@@ -286,13 +292,39 @@ class ModuleEdit(BaseModel):
 class AnswerReview(BaseModel):
     action_id: str = Field(min_length=1, max_length=80)
     rating: Literal[-1, 1]
+    score: int | None = Field(default=None, ge=0, le=10)
     module_key: str = Field(min_length=2, max_length=50)
+    subtopic_key: str | None = Field(default=None, max_length=80)
+    keywords: list[str] = Field(default_factory=list, max_length=30)
     comment: str = Field(default='', max_length=1000)
     example_ticket_id: int | None = Field(default=None, gt=0)
     proposed_title: str | None = Field(default=None, max_length=200)
     proposed_answer: str | None = Field(default=None, max_length=10000)
     proposed_procedure: str | None = Field(default=None, max_length=10000)
+    validated_html: str | None = Field(default=None, max_length=25000)
     proposed_images: list[dict] = Field(default_factory=list, max_length=5)
+    question_action_id: str | None = Field(default=None, max_length=80)
+    source_answer_action_id: str | None = Field(default=None, max_length=80)
+
+
+class AnswerScorePayload(BaseModel):
+    action_id: str = Field(min_length=1, max_length=80)
+    score: int = Field(ge=0, le=10)
+    module_key: str | None = Field(default=None, max_length=50)
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class ReviewDraftPayload(BaseModel):
+    action_id: str = Field(min_length=1, max_length=80)
+    score: int | None = Field(default=None, ge=0, le=10)
+    module_key: str | None = Field(default=None, max_length=50)
+    subtopic_key: str | None = Field(default=None, max_length=80)
+    keywords: list[str] = Field(default_factory=list, max_length=30)
+    title: str | None = Field(default=None, max_length=200)
+    answer: str | None = Field(default=None, max_length=10000)
+    procedure: str | None = Field(default=None, max_length=10000)
+    validated_html: str | None = Field(default=None, max_length=25000)
+    comment: str | None = Field(default=None, max_length=1000)
     question_action_id: str | None = Field(default=None, max_length=80)
     source_answer_action_id: str | None = Field(default=None, max_length=80)
 
@@ -309,9 +341,14 @@ class TechnicianProposal(BaseModel):
     action_id: str = Field(min_length=1, max_length=80)
     question_action_id: str = Field(min_length=1, max_length=80)
     module_key: str = Field(min_length=2, max_length=50)
+    subtopic_key: str | None = Field(default=None, max_length=80)
+    keywords: list[str] = Field(default_factory=list, max_length=30)
+    score: int | None = Field(default=None, ge=0, le=10)
     title: str = Field(min_length=5, max_length=200)
     answer: str = Field(min_length=20, max_length=10000)
     procedure: str = Field(min_length=20, max_length=10000)
+    validated_html: str | None = Field(default=None, max_length=25000)
+    source_answer_action_id: str | None = Field(default=None, max_length=80)
     comment: str = Field(default='', max_length=1000)
     images: list[TechnicianProposalImage] = Field(default_factory=list, max_length=5)
 
@@ -327,7 +364,9 @@ def ticket_answers(ticket_id: int):
 
 
 @router.get('/tickets/{ticket_id}/respostas-tecnicas')
-def ticket_technician_answers(ticket_id: int):
+def ticket_technician_answers(ticket_id: int, refresh: bool = False):
+    if refresh:
+        return _guard(kt.ticket_technician_answers, ticket_id, refresh_live=True)
     return _guard(kt.ticket_technician_answers, ticket_id)
 
 
@@ -337,8 +376,67 @@ def technician_context(ticket_id: int, request: Request,
     name = _technician_name(technician_pin, request)
     context = _guard(kt.ticket_answers, ticket_id)
     context['revision_requests'] = _guard(kt.revision_requests, ticket_id)
+    try:
+        tech_notes = kt.ticket_technician_answers(ticket_id)
+        context['technician_answers'] = tech_notes.get('answers', [])
+        context['recommended_technician_action_id'] = tech_notes.get('recommended_action_id')
+    except Exception:
+        context.setdefault('technician_answers', [])
+        context.setdefault('recommended_technician_action_id', None)
+    try:
+        context['saved_reviews'] = kt.ticket_saved_reviews(ticket_id, actor=name)
+    except Exception:
+        context.setdefault('saved_reviews', [])
     return {'technician': name, 'context': context,
             'taxonomy': [module for module in _guard(kt.taxonomy_options) if module['key'] != 'unclassified']}
+
+
+@router.get('/tecnico/tickets/{ticket_id}/respostas-tecnicas')
+def technician_ticket_answers(ticket_id: int, request: Request, refresh: bool = False,
+                              allow_internal: bool = True,
+                              technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
+    _technician_name(technician_pin, request)
+    return _guard(kt.ticket_technician_answers, ticket_id, allow_internal=allow_internal, refresh_live=refresh)
+
+
+@router.post('/tecnico/tickets/{ticket_id}/nota')
+def technician_score_answer(ticket_id: int, body: AnswerScorePayload, request: Request,
+                            technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
+    _technician_origin(request)
+    name = _technician_name(technician_pin, request)
+    return _guard(kt.save_answer_score, ticket_id, body.action_id, body.score, name, body.module_key, body.comment)
+
+
+@router.post('/tickets/{ticket_id}/nota')
+def admin_score_answer(ticket_id: int, body: AnswerScorePayload, request: Request):
+    return _guard(kt.save_answer_score, ticket_id, body.action_id, body.score, actor(request), body.module_key, body.comment)
+
+
+@router.post('/tecnico/tickets/{ticket_id}/rascunho')
+def technician_save_draft(ticket_id: int, body: ReviewDraftPayload, request: Request,
+                          technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
+    _technician_origin(request)
+    name = _technician_name(technician_pin, request)
+    return _guard(
+        kt.save_review_draft, ticket_id, body.action_id, name,
+        score=body.score, module_key=body.module_key, subtopic_key=body.subtopic_key,
+        keywords=body.keywords, proposed_title=body.title, proposed_answer=body.answer,
+        proposed_procedure=body.procedure, validated_html=body.validated_html,
+        comment=body.comment, example_ticket_id=ticket_id,
+        question_action_id=body.question_action_id, source_answer_action_id=body.source_answer_action_id
+    )
+
+
+@router.post('/tickets/{ticket_id}/rascunho')
+def admin_save_draft(ticket_id: int, body: ReviewDraftPayload, request: Request):
+    return _guard(
+        kt.save_review_draft, ticket_id, body.action_id, actor(request),
+        score=body.score, module_key=body.module_key, subtopic_key=body.subtopic_key,
+        keywords=body.keywords, proposed_title=body.title, proposed_answer=body.answer,
+        proposed_procedure=body.procedure, validated_html=body.validated_html,
+        comment=body.comment, example_ticket_id=ticket_id,
+        question_action_id=body.question_action_id, source_answer_action_id=body.source_answer_action_id
+    )
 
 
 @router.post('/tecnico/tickets/{ticket_id}/propostas')
@@ -346,17 +444,34 @@ def technician_proposal(ticket_id: int, body: TechnicianProposal, request: Reque
                         technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
     _technician_origin(request)
     name = _technician_name(technician_pin, request)
+    extra_kwargs = {
+        k: v for k, v in {
+            'subtopic_key': body.subtopic_key,
+            'keywords': body.keywords or None,
+            'score': body.score,
+            'validated_html': body.validated_html,
+        }.items() if v is not None
+    }
     return _guard(kt.review_answer, ticket_id, body.action_id, -1, body.module_key, body.comment,
                   name, ticket_id, body.title, body.answer, body.procedure,
-                  [image.model_dump() for image in body.images], body.question_action_id, None)
+                  [image.model_dump() for image in body.images], body.question_action_id,
+                  body.source_answer_action_id, **extra_kwargs)
 
 
 @router.post('/tickets/{ticket_id}/avaliar')
 def review_answer(ticket_id: int, body: AnswerReview, request: Request):
+    extra_kwargs = {
+        k: v for k, v in {
+            'subtopic_key': body.subtopic_key,
+            'keywords': body.keywords or None,
+            'score': body.score,
+            'validated_html': body.validated_html,
+        }.items() if v is not None
+    }
     return _guard(kt.review_answer, ticket_id, body.action_id, body.rating, body.module_key, body.comment,
                   actor(request), body.example_ticket_id, body.proposed_title, body.proposed_answer,
                   body.proposed_procedure, body.proposed_images, body.question_action_id,
-                  body.source_answer_action_id)
+                  body.source_answer_action_id, **extra_kwargs)
 
 
 @router.get('/avaliacoes')

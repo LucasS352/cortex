@@ -1,158 +1,2658 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CORTEX — Editor de Resolução Técnica</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CORTEX — Curadoria de Conhecimento e Treinamento da IA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --navy:#101828; --ink:#182230; --muted:#667085; --line:#dfe3ea; --bg:#f3f5f8;
-          --card:#fff; --blue:#155eef; --blue-soft:#eff4ff; --green:#079455; --red:#d92d20; }
-  * { box-sizing:border-box; }
-  body { margin:0; min-height:100vh; background:var(--bg); color:var(--ink); font:15px/1.5 "Segoe UI",system-ui,sans-serif; }
-  button,input,select,textarea { font:inherit; }
-  .topbar { height:72px; padding:0 32px; background:var(--navy); color:#fff; display:flex; align-items:center; gap:18px; }
-  .brand { width:40px; height:40px; border-radius:11px; background:linear-gradient(145deg,#12b5cb,#155eef); display:grid; place-items:center; font-weight:800; }
-  .topbar h1 { margin:0; font-size:19px; font-weight:650; } .topbar p { margin:1px 0 0; color:#98a2b3; font-size:13px; }
-  .ticket { border:1px solid #344054; border-radius:20px; padding:6px 13px; color:#d0d5dd; }
-  .identity { margin-left:auto; display:flex; align-items:center; gap:10px; color:#d0d5dd; font-size:13px; }
-  .identity button { border:1px solid #475467; border-radius:7px; padding:6px 9px; background:transparent; color:#fff; cursor:pointer; }
-  .access { max-width:470px; margin:70px auto; padding:32px; background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 8px 30px #10182814; }
-  .access h2 { margin:0 0 6px; }.access p { margin:0 0 22px; color:var(--muted); }
-  .pin { font-size:25px; letter-spacing:12px; text-align:center; font-weight:700; }
-  .access button { width:100%; margin-top:14px; border:0; border-radius:9px; background:var(--blue); color:#fff; padding:12px; font-weight:700; cursor:pointer; }
-  .shell { max-width:1500px; margin:0 auto; padding:28px 32px 110px; }
-  .intro { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; margin-bottom:20px; }
-  .intro h2 { font-size:25px; margin:0 0 5px; } .intro p { margin:0; color:var(--muted); }
-  .safe { background:#ecfdf3; color:#067647; padding:8px 12px; border-radius:8px; font-size:13px; white-space:nowrap; }
-  .workspace { display:grid; grid-template-columns:minmax(330px,.8fr) minmax(600px,1.55fr); gap:22px; align-items:start; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:0 1px 3px #1018280d; }
-  .card-head { padding:18px 20px; border-bottom:1px solid var(--line); }
-  .card-head h3 { margin:0; font-size:16px; } .card-head p { color:var(--muted); margin:3px 0 0; font-size:13px; }
-  .card-body { padding:20px; }
-  .context { position:sticky; top:18px; }
-  label { display:block; color:#344054; font-size:13px; font-weight:650; margin:17px 0 6px; }
-  label:first-child { margin-top:0; }
-  input,select,textarea { width:100%; border:1px solid #cfd4dc; border-radius:8px; padding:11px 12px; background:#fff; color:var(--ink); outline:none; }
-  input:focus,select:focus,textarea:focus { border-color:#84adff; box-shadow:0 0 0 3px #dbe7ff; }
-  textarea { resize:vertical; min-height:120px; } textarea.answer { min-height:180px; } textarea.steps { min-height:300px; line-height:1.65; }
-  .preview { white-space:pre-wrap; max-height:340px; overflow:auto; padding:14px; border:1px solid var(--line); border-radius:9px; background:#f8fafc; font-size:13px; color:#344054; }
-  .question-preview { margin-top:10px; padding:12px; border-left:3px solid var(--blue); background:var(--blue-soft); border-radius:0 8px 8px 0; white-space:pre-wrap; }
-  .section { padding:22px 24px; border-bottom:1px solid var(--line); }
-  .section:last-child { border-bottom:0; }
-  .section-title { display:flex; gap:12px; align-items:flex-start; margin-bottom:14px; }
-  .number { width:28px; height:28px; border-radius:50%; background:var(--blue-soft); color:var(--blue); display:grid; place-items:center; font-weight:750; flex:none; }
-  .section-title h3 { margin:1px 0 0; font-size:16px; } .section-title p { margin:2px 0 0; color:var(--muted); font-size:13px; }
-  .two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
-  .upload { border:1px dashed #98a2b3; border-radius:10px; padding:18px; text-align:center; background:#fafbfc; }
-  .upload input { border:0; padding:0; width:auto; max-width:100%; }
-  .images { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:12px; }
-  .image-row { border:1px solid var(--line); border-radius:10px; padding:10px; display:grid; grid-template-columns:130px 1fr; gap:10px; }
-  .image-row img { width:130px; height:95px; object-fit:contain; background:#f2f4f7; border-radius:6px; }
-  .image-row label { margin:0 0 4px; }
-  .image-row input,.image-row select { padding:7px 8px; margin-bottom:7px; }
-  .footer { position:fixed; left:0; right:0; bottom:0; z-index:5; background:#fff; border-top:1px solid var(--line); box-shadow:0 -8px 25px #10182812; }
-  .footer-inner { max-width:1500px; min-height:82px; margin:auto; padding:14px 32px; display:flex; align-items:center; gap:18px; }
-  .footer-copy { flex:1; color:var(--muted); font-size:13px; }
-  .submit { border:0; border-radius:9px; background:var(--blue); color:#fff; padding:13px 24px; font-weight:700; cursor:pointer; min-width:250px; }
-  .submit:disabled { opacity:.55; cursor:wait; }
-  .error { color:var(--red); margin-top:10px; display:none; }
-  .success { display:none; max-width:760px; margin:70px auto; background:#fff; padding:42px; border-radius:16px; text-align:center; border:1px solid var(--line); }
-  .success .icon { width:58px; height:58px; margin:0 auto 14px; border-radius:50%; background:#dcfae6; color:var(--green); display:grid; place-items:center; font-size:28px; }
-  .loading { padding:80px 20px; text-align:center; color:var(--muted); }
-  @media(max-width:950px) { .workspace{grid-template-columns:1fr}.context{position:static}.two{grid-template-columns:1fr}.shell{padding:20px 16px 120px}.topbar{padding:0 16px}.ticket{display:none}.identity span{display:none}.images{grid-template-columns:1fr}.footer-inner{padding:12px 16px}.footer-copy{display:none}.submit{width:100%} }
+:root {
+  --bg: #f4f6fa;
+  --surface: #ffffff;
+  --surface-subtle: #f8fafc;
+  --surface-accent: #f0f7ff;
+  --ink: #0f172a;
+  --ink-secondary: #334155;
+  --muted: #64748b;
+  --subtle: #94a3b8;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --brand: #2563eb;
+  --brand-hover: #1d4ed8;
+  --brand-soft: #eff6ff;
+  --brand-border: #bfdbfe;
+  --emerald: #10b981;
+  --emerald-dark: #059669;
+  --emerald-soft: #ecfdf5;
+  --emerald-border: #a7f3d0;
+  --amber: #f59e0b;
+  --amber-soft: #fffbeb;
+  --amber-border: #fde68a;
+  --danger: #ef4444;
+  --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
+  --sidebar-bg: #0f172a;
+  --sidebar-hover: #1e293b;
+  --sidebar-active: #2563eb;
+  --sidebar-text: #94a3b8;
+  --sidebar-text-active: #ffffff;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-focus: 0 0 0 3px rgba(37, 99, 235, 0.16);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Layout Principal com Sidebar Preservada */
+.app-layout {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* Sidebar Esquerda */
+.sidebar {
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #1e293b;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  user-select: none;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 18px 18px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.sidebar-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.4);
+  flex-shrink: 0;
+}
+
+.sidebar-brand-text strong {
+  display: block;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.sidebar-brand-text span {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.sidebar-nav {
+  padding: 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: var(--sidebar-text);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.nav-item:hover {
+  background: var(--sidebar-hover);
+  color: #e2e8f0;
+}
+
+.nav-item.active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-text-active);
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
+}
+
+.nav-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.sidebar-footer {
+  padding: 12px 10px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Área Central */
+.main-area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Topbar Limpa (sem busca global, sem sino e sem seta dropdown conforme solicitado) */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 10px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.auth-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.auth-bar-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.auth-input-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 3px 6px 3px 10px;
+}
+
+.auth-input-group label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.auth-input-group input {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  width: 88px;
+  padding: 4px 6px;
+  outline: none;
+}
+
+.auth-input-group input#pin {
+  width: 68px;
+  letter-spacing: 0.15em;
+  text-align: center;
+}
+
+.btn-load-context {
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-load-context:hover {
+  background: var(--brand-hover);
+}
+
+.btn-load-context:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #bfdbfe;
+}
+
+.user-info {
+  line-height: 1.25;
+}
+
+.user-info strong {
+  display: block;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.user-info span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Cabeçalho da Página (sem botões Anterior / Próximo conforme solicitado) */
+.page-header {
+  padding: 20px 28px 14px;
+}
+
+.breadcrumb {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.breadcrumb strong {
+  color: var(--ink-secondary);
+  font-weight: 600;
+}
+
+.page-title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.page-title-row h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.page-subtitle {
+  margin: 3px 0 0;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+/* Banner de alertas ou devolução de revisão */
+.status-banner {
+  margin: 0 28px 14px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-banner.show {
+  display: flex;
+}
+
+.status-banner.info {
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  color: #1e40af;
+}
+
+.status-banner.warn {
+  background: var(--amber-soft);
+  border: 1px solid var(--amber-border);
+  color: #92400e;
+}
+
+.status-banner.ok {
+  background: var(--emerald-soft);
+  border: 1px solid var(--emerald-border);
+  color: #065f46;
+}
+
+.status-banner.bad {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  color: #991b1b;
+}
+
+/* Grid Principal de 3 Áreas (Coluna Esquerda: Atendimento | Coluna Direita: IA + Solução Validada) */
+.curation-grid {
+  padding: 0 28px 32px;
+  display: grid;
+  grid-template-columns: minmax(320px, 370px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* Cards Base */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ==========================================================================
+   ÁREA 1 — INFORMAÇÕES DO ATENDIMENTO (Coluna Esquerda)
+   ========================================================================== */
+.ticket-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 68px;
+}
+
+.ticket-card {
+  padding: 18px;
+}
+
+.ticket-id-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ticket-id-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ticket-number {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.ticket-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.ticket-status-badge.open {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.ticket-status-badge.resolved {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #a7f3d0;
+}
+
+.btn-movidesk-ext {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.btn-movidesk-ext:hover {
+  background: var(--surface-subtle);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.ticket-date-meta {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.section-micro-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.note-meta-line {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.question-selector {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface-subtle);
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.customer-message-box {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 290px;
+  overflow-y: auto;
+}
+
+/* Card "O que a IA analisou" */
+.analyzed-card {
+  overflow: hidden;
+}
+
+.analyzed-header {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.analyzed-header:hover {
+  background: var(--surface-subtle);
+}
+
+.analyzed-body {
+  padding: 0 18px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.analyzed-body.collapsed {
+  display: none;
+}
+
+.mini-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 12px 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.mini-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.mini-tab.active {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+.analyzed-snippet-wrap {
+  position: relative;
+}
+
+.analyzed-snippet {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 64px 10px 12px;
+  font-size: 12.5px;
+  color: var(--ink-secondary);
+  line-height: 1.5;
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.btn-copy-inline {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+
+.btn-copy-inline:hover {
+  background: #f1f5f9;
+}
+
+.context-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.context-kv-item {
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 10px;
+}
+
+.context-kv-item strong {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.ai-understanding-box {
+  margin-top: 12px;
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.ai-understanding-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.ai-understanding-text {
+  font-size: 12.5px;
+  color: var(--ink-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+
+/* ==========================================================================
+   COLUNA DIREITA (ÁREA 2 + ÁREA 3)
+   ========================================================================== */
+.right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   ÁREA 2 — RESPOSTA SUGERIDA PELA IA
+   ========================================================================== */
+.ai-response-card {
+  padding: 20px 24px;
+}
+
+.ai-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ai-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-icon-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.ai-card-title-group h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ai-action-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--surface-subtle);
+}
+
+/* Seletor de Nota de 0 a 10 */
+.rating-widget {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rating-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  position: relative;
+}
+
+.rating-help-trigger {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+}
+
+.rating-tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 270px;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.45;
+  z-index: 50;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+}
+
+.rating-label-wrap:hover .rating-tooltip {
+  display: block;
+}
+
+.score-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.score-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.12s ease;
+}
+
+.score-btn:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-soft);
+}
+
+.score-btn.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+}
+
+.score-btn.active.score-low {
+  background: #dc2626;
+  border-color: #dc2626;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.28);
+}
+
+.score-btn.active.score-mid {
+  background: #d97706;
+  border-color: #d97706;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.28);
+}
+
+.score-btn.active.score-good {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.score-btn.active.score-perfect {
+  background: #059669;
+  border-color: #059669;
+  box-shadow: 0 2px 6px rgba(5, 150, 105, 0.28);
+}
+
+.score-status-pill {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  min-width: 70px;
+  text-align: right;
+}
+
+/* Corpo da Resposta da IA */
+.ai-response-body {
+  padding: 16px 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.ai-response-body p {
+  margin: 0 0 10px;
+}
+
+.ai-response-body p:last-child {
+  margin-bottom: 0;
+}
+
+.ai-step-list {
+  margin: 10px 0;
+  padding-left: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-step-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ai-step-num {
+  font-weight: 700;
+  color: var(--brand);
+  min-width: 18px;
+}
+
+/* Rodapé da Resposta da IA */
+.ai-card-footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ai-telemetry-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.telemetry-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink-secondary);
+}
+
+.telemetry-pill strong {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.confidence-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--emerald);
+}
+
+.confidence-dot.med {
+  background: var(--amber);
+}
+
+.confidence-dot.low {
+  background: var(--danger);
+}
+
+.btn-outline-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-outline-sm:hover {
+  background: var(--surface-subtle);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+/* ==========================================================================
+   ÁREA 3 — SOLUÇÃO VALIDADA PELO TÉCNICO (DESTAQUE VISUAL E ESPAÇO AMPLO)
+   ========================================================================== */
+.validated-solution-card {
+  padding: 24px 26px;
+  border: 2px solid #cbd5e1;
+  box-shadow: var(--shadow-md);
+  background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
+  position: relative;
+}
+
+.validated-solution-card:focus-within {
+  border-color: var(--brand);
+}
+
+.validated-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.validated-title-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.validated-check-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--emerald-soft);
+  color: var(--emerald-dark);
+  border: 1px solid var(--emerald-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 800;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.validated-title-wrap h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.validated-subtitle {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.import-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-import-last {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s ease;
+}
+
+.btn-import-last:hover {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-hover);
+}
+
+.btn-import-last:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Barra de Origem / Seletor de Nota Importada */
+.imported-source-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 13px;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  font-size: 12px;
+  color: #1e40af;
+}
+
+.imported-source-bar.show {
+  display: flex;
+}
+
+.imported-source-bar.internal-warn {
+  background: var(--amber-soft);
+  border-color: var(--amber-border);
+  color: #92400e;
+}
+
+.imported-source-select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--brand-border);
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  max-width: 360px;
+}
+
+/* Editor de Texto Rico Profissional (Amplo e Evidenciado) */
+.rich-editor-shell {
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rich-editor-shell:focus-within {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-focus);
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--line);
+}
+
+.toolbar-buttons {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.tool-btn {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.tool-btn:hover {
+  background: #e2e8f0;
+  color: var(--ink);
+}
+
+.tool-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin: 0 4px;
+}
+
+.editor-word-count {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.rich-editor-area {
+  min-height: 290px;
+  max-height: 540px;
+  overflow-y: auto;
+  padding: 18px 20px;
+  font-size: 14.5px;
+  line-height: 1.68;
+  color: var(--ink);
+  outline: none;
+  resize: vertical;
+}
+
+.rich-editor-area:empty::before {
+  content: attr(data-placeholder);
+  color: var(--subtle);
+  pointer-events: none;
+}
+
+.rich-editor-area p {
+  margin: 0 0 10px;
+}
+
+.rich-editor-area ol,
+.rich-editor-area ul {
+  margin: 8px 0 12px;
+  padding-left: 22px;
+}
+
+.rich-editor-area li {
+  margin-bottom: 6px;
+}
+
+.rich-editor-area img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  margin: 8px 0;
+}
+
+/* Painel de Prints / Imagens Anexadas */
+.images-drawer {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  border: 1px dashed var(--line-strong);
+  display: none;
+}
+
+.images-drawer.show {
+  display: block;
+}
+
+.image-Attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.image-item-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+}
+
+.image-item-card img {
+  width: 100%;
+  height: 110px;
+  object-fit: contain;
+  background: #f8fafc;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.image-item-card input,
+.image-item-card select {
+  width: 100%;
+  padding: 5px 8px;
+  margin-top: 4px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* Classificação Manual Compacta do Conhecimento */
+.classification-box {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.classification-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.classification-header span {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.classification-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 12px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-group label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+
+.field-group label .req {
+  color: var(--danger);
+}
+
+.field-control {
+  padding: 8px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.field-control:focus {
+  border-color: var(--brand);
+  box-shadow: var(--shadow-focus);
+}
+
+.classification-secondary-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.tags-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-hover);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Rodapé de Ações (Salvar rascunho / Enviar para curadoria) */
+.curation-footer {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.footer-audit-info {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footer-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-draft {
+  padding: 10px 18px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-draft:hover {
+  background: var(--surface-subtle);
+  color: var(--ink);
+}
+
+.btn-submit-curation {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 9px;
+  border: none;
+  background: var(--brand);
+  color: #ffffff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+  transition: all 0.15s ease;
+}
+
+.btn-submit-curation:hover {
+  background: var(--brand-hover);
+}
+
+.btn-submit-curation:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Toast Flutuante */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  max-width: 420px;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+  display: none;
+  z-index: 100;
+}
+
+@media (max-width: 1120px) {
+  .curation-grid {
+    grid-template-columns: 1fr;
+  }
+  .ticket-column {
+    position: static;
+  }
+  .classification-grid,
+  .classification-secondary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 820px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    display: none;
+  }
+}
 </style>
 </head>
 <body>
-<header class="topbar"><div class="brand">C</div><div><h1>CORTEX · Editor de Resolução Técnica</h1><p>Documentação preparada pelo suporte e validada pela curadoria</p></div><div class="identity" id="identity" hidden><span id="identityName"></span><button id="changeOperator">Trocar técnico</button></div><div class="ticket" id="ticketBadge">Ticket</div></header>
-<section id="access" class="access"><h2>Identificação do técnico</h2><p>Digite seu PIN de 4 números. Seu nome será registrado no envio para a curadoria.</p><label for="pin">PIN de acesso</label><input id="pin" class="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="off" placeholder="••••"><button id="accessButton">Acessar chamado</button><div id="accessError" class="error"></div></section>
-<div id="loading" class="loading" hidden>Carregando informações do chamado…</div>
-<main id="app" class="shell" hidden>
-  <div class="intro"><div><h2>Registrar resolução do atendimento</h2><p>Escreva o conteúdo completo que poderá orientar atendimentos futuros.</p></div><div class="safe">Não será publicado sem aprovação administrativa</div></div>
-  <div class="workspace">
-    <aside class="card context">
-      <div class="card-head"><h3>Contexto do chamado</h3><p>Confira a pergunta e a orientação que originou esta revisão.</p></div>
-      <div class="card-body">
-        <label for="questionSelect">Pergunta do cliente relacionada</label><select id="questionSelect"></select><div id="questionPreview" class="question-preview"></div>
-        <label for="answerSelect">Resposta do Cortex em análise</label><select id="answerSelect"></select><div id="answerPreview" class="preview"></div>
+<div class="app-layout">
+  <!-- Sidebar Institucional Preservada -->
+  <aside class="sidebar" aria-label="Menu principal do CORTEX">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">C</div>
+      <div class="sidebar-brand-text">
+        <strong>CORTEX</strong>
+        <span>Treinamento da IA</span>
       </div>
-    </aside>
-    <section class="card">
-      <div class="section"><div class="section-title"><div class="number">1</div><div><h3>Identificação</h3><p>Use um título objetivo e selecione somente a categoria geral.</p></div></div>
-        <div class="two"><div><label for="title">Título do conhecimento</label><input id="title" maxlength="200" placeholder="Ex.: Consultar produtos por fornecedor"></div><div><label for="module">Categoria geral</label><select id="module"><option value="">Selecione</option></select></div></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="/treinamento/tecnico" class="nav-item active">
+        <span class="nav-item-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Curadoria de Conhecimento
+        </span>
+      </a>
+      <a href="/treinamento" class="nav-item">
+        <span class="nav-item-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>
+          Fila de Revisão
+        </span>
+      </a>
+      <a href="/treinamento" class="nav-item">
+        <span class="nav-item-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+          Base de Conhecimento
+        </span>
+      </a>
+      <a href="/treinamento" class="nav-item">
+        <span class="nav-item-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          Tickets Sugeridos
+        </span>
+      </a>
+      <a href="/treinamento" class="nav-item">
+        <span class="nav-item-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+          Métricas &amp; Qualidade
+        </span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="/admin" class="nav-item">
+        <span class="nav-item-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          Configurações
+        </span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Conteúdo Principal -->
+  <div class="main-area">
+    <!-- Topbar sem busca global, sem sino e sem dropdown chevron -->
+    <header class="topbar">
+      <div class="auth-bar" aria-label="Identificação do técnico">
+        <span class="auth-bar-label">Identificação do técnico</span>
+        <div class="auth-input-group">
+          <label for="ticket">Ticket</label>
+          <input id="ticket" type="number" min="1" step="1" placeholder="132269">
+        </div>
+        <div class="auth-input-group">
+          <label for="pin">PIN (4 dígitos)</label>
+          <input id="pin" type="password" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="••••">
+        </div>
+        <button id="loadBtn" type="button" class="btn-load-context">Carregar chamado</button>
       </div>
-      <div class="section"><div class="section-title"><div class="number">2</div><div><h3>Resposta final para o cliente</h3><p>Texto claro e direto, pronto para ser utilizado no atendimento.</p></div></div>
-        <textarea id="answer" class="answer" maxlength="10000" placeholder="Ex.: Sim, esse relatório está disponível no Master. Para acessá-lo..."></textarea>
-        <div class="hint">Evite despedidas, nomes de clientes e informações exclusivas deste chamado.</div>
+
+      <div class="user-profile">
+        <div class="user-avatar" id="techAvatar">T</div>
+        <div class="user-info">
+          <strong id="techNameDisplay">Aguardando PIN</strong>
+          <span id="techRoleDisplay">Técnico de Suporte</span>
+        </div>
       </div>
-      <div class="section"><div class="section-title"><div class="number">3</div><div><h3>Passo a passo da resolução</h3><p>Registre uma ação por linha e numere os passos. Este é o conteúdo principal da curadoria.</p></div></div>
-        <textarea id="procedure" class="steps" maxlength="10000" placeholder="1. Acesse Relatórios > Vendas > Histórico.&#10;2. Abra Produtos por Fabricante/Fornecedor.&#10;3. Selecione a aba Fornecedor.&#10;4. Informe os filtros e clique em Procurar."></textarea>
+    </header>
+
+    <!-- Cabeçalho da Página sem botões de paginação Anterior / Próximo -->
+    <div class="page-header">
+      <div class="breadcrumb">
+        <span>Treinamento da IA</span>
+        <span>›</span>
+        <strong>Curadoria de Conhecimento</strong>
       </div>
-      <div class="section"><div class="section-title"><div class="number">4</div><div><h3>Imagens de apoio</h3><p>Opcional. Dê um nome claro a cada print e defina se ele aparece após a resposta ou após um passo.</p></div></div>
-        <div class="upload"><input id="files" type="file" accept="image/png,image/jpeg,image/webp" multiple><div class="hint">Até 5 imagens, com no máximo 5 MB cada.</div></div><div id="images" class="images"></div>
+      <div class="page-title-row">
+        <div>
+          <h1>Treinamento da IA</h1>
+          <p class="page-subtitle">Avalie a resposta sugerida, complemente quando necessário e contribua para evoluir a base de conhecimento.</p>
+        </div>
       </div>
-      <div class="section"><label for="comment">Observação para a curadoria <span class="hint">(opcional)</span></label><textarea id="comment" placeholder="Ex.: procedimento validado na versão atual do Master"></textarea><div id="error" class="error"></div></div>
-    </section>
+    </div>
+
+    <!-- Banner de Status / Revisão Solicitada -->
+    <div id="statusBanner" class="status-banner" role="status"></div>
+
+    <!-- Grid Principal: Área 1 (Esquerda) + Áreas 2 e 3 (Direita) -->
+    <main class="curation-grid">
+      <!-- ====================================================================
+           ÁREA 1 — INFORMAÇÕES DO ATENDIMENTO (Coluna Esquerda)
+           ==================================================================== -->
+      <section class="ticket-column" aria-label="Informações do atendimento">
+        <div class="card ticket-card">
+          <div class="ticket-id-row">
+            <div class="ticket-id-group">
+              <span class="ticket-number" id="displayTicketNumber">#—</span>
+              <span class="ticket-status-badge" id="displayTicketStatus">Sincronizado</span>
+            </div>
+            <a id="movideskLink" href="https://alternativa.movidesk.com" target="_blank" rel="noopener noreferrer" class="btn-movidesk-ext">
+              Abrir no Movidesk ↗
+            </a>
+          </div>
+          <div class="ticket-date-meta" id="displayTicketDate">
+            Informe seu PIN de 4 dígitos para carregar os dados do atendimento.
+          </div>
+
+          <div class="section-micro-label">
+            <span>Mensagem original do cliente</span>
+          </div>
+          <div class="note-meta-line" id="questionMetaLine">Nota —</div>
+          <select id="questionSelect" class="question-selector" style="display:none" aria-label="Selecionar nota da pergunta do cliente"></select>
+          <div class="customer-message-box" id="questionPreview">Carregue um chamado para visualizar a mensagem original do cliente selecionada para análise.</div>
+        </div>
+
+        <!-- O que a IA analisou + Entendimento da IA -->
+        <div class="card analyzed-card">
+          <button type="button" class="analyzed-header" id="toggleAnalyzedBtn" aria-expanded="true">
+            <span>O que a IA analisou</span>
+            <span id="analyzedChevron">⌃</span>
+          </button>
+          <div class="analyzed-body" id="analyzedBody">
+            <div class="mini-tabs" role="tablist">
+              <button type="button" class="mini-tab active" data-tab="msg" id="tabBtnMsg">Mensagem do cliente</button>
+              <button type="button" class="mini-tab" data-tab="ctx" id="tabBtnCtx">Contexto adicional</button>
+            </div>
+
+            <div id="tabPanelMsg" class="analyzed-snippet-wrap">
+              <div class="analyzed-snippet" id="analyzedSnippetText">Nenhum trecho carregado.</div>
+              <button type="button" class="btn-copy-inline" id="copySnippetBtn">Copiar</button>
+            </div>
+
+            <div id="tabPanelCtx" style="display:none">
+              <div class="context-kv-list" id="additionalContextList"></div>
+            </div>
+
+            <div class="ai-understanding-box" id="aiUnderstandingBox">
+              <div class="ai-understanding-title">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                <span>Entendimento da IA</span>
+              </div>
+              <p class="ai-understanding-text" id="aiUnderstandingText">A interpretação da solicitação pelo CORTEX será exibida aqui ao carregar o ticket.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           COLUNA DIREITA: ÁREA 2 (Resposta da IA) + ÁREA 3 (Solução Validada)
+           ==================================================================== -->
+      <div class="right-column">
+        <!-- ÁREA 2 — Resposta sugerida pela IA -->
+        <section class="card ai-response-card" aria-label="Resposta sugerida pela IA">
+          <div class="ai-card-header">
+            <div class="ai-card-title-group">
+              <div class="ai-icon-badge" aria-hidden="true">✦</div>
+              <h2>Resposta sugerida pela IA</h2>
+              <select id="answerSelect" class="ai-action-select" style="display:none" aria-label="Selecionar resposta da IA"></select>
+            </div>
+
+            <!-- Seletor de Nota de 0 a 10 -->
+            <div class="rating-widget" aria-label="Avaliação da resposta de 0 a 10">
+              <div class="rating-label-wrap">
+                <span>Avaliação da resposta</span>
+                <span class="rating-help-trigger" tabindex="0" aria-label="Critérios de avaliação">?</span>
+                <div class="rating-tooltip" role="tooltip">
+                  <strong>Escala de qualidade (0 a 10):</strong><br>
+                  • <b>0</b>: Resposta totalmente incorreta<br>
+                  • <b>1 a 3</b>: Muito insatisfatória<br>
+                  • <b>4 a 6</b>: Parcialmente correta<br>
+                  • <b>7 a 9</b>: Boa, mas com melhorias<br>
+                  • <b>10</b>: Totalmente correta
+                </div>
+              </div>
+              <div class="score-buttons" id="scoreButtons" role="radiogroup" aria-label="Nota de 0 a 10">
+                <button type="button" class="score-btn" data-score="0">0</button>
+                <button type="button" class="score-btn" data-score="1">1</button>
+                <button type="button" class="score-btn" data-score="2">2</button>
+                <button type="button" class="score-btn" data-score="3">3</button>
+                <button type="button" class="score-btn" data-score="4">4</button>
+                <button type="button" class="score-btn" data-score="5">5</button>
+                <button type="button" class="score-btn" data-score="6">6</button>
+                <button type="button" class="score-btn" data-score="7">7</button>
+                <button type="button" class="score-btn" data-score="8">8</button>
+                <button type="button" class="score-btn" data-score="9">9</button>
+                <button type="button" class="score-btn" data-score="10">10</button>
+              </div>
+              <span class="score-status-pill" id="scoreFeedbackLabel">Sem nota</span>
+            </div>
+          </div>
+
+          <!-- Conteúdo da Resposta da IA -->
+          <div class="ai-response-body" id="answerPreview">
+            <p style="color:var(--muted)">A resposta completa sugerida pelo CORTEX aparecerá aqui assim que o chamado for carregado.</p>
+          </div>
+
+          <!-- Rodapé da Resposta da IA -->
+          <div class="ai-card-footer">
+            <div class="ai-telemetry-badges" id="aiTelemetryContainer">
+              <span class="telemetry-pill">Aguardando carregamento do chamado</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button type="button" class="btn-outline-sm" id="copyAiResponseBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                Copiar
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ==================================================================
+             ÁREA 3 — SOLUÇÃO VALIDADA PELO TÉCNICO (Ampliada e Evidenciada)
+             ================================================================== -->
+        <section class="card validated-solution-card" aria-label="Solução validada pelo técnico">
+          <div class="validated-header">
+            <div class="validated-title-wrap">
+              <div class="validated-check-icon" aria-hidden="true">✓</div>
+              <div>
+                <h2>Solução validada pelo técnico</h2>
+                <p class="validated-subtitle">"Revise a resposta, faça ajustes se necessário e envie para a curadoria administrativa."</p>
+              </div>
+            </div>
+
+            <div class="import-actions-group">
+              <button type="button" class="btn-import-last" id="importLastAnswerBtn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Importar última resposta do ticket
+              </button>
+            </div>
+          </div>
+
+          <!-- Barra de Rastreabilidade / Escolha de outra nota técnica do chamado -->
+          <div class="imported-source-bar" id="importedSourceBar">
+            <div id="importedSourceLabel">
+              <strong>Origem:</strong> Resposta importada do ticket.
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label for="techNoteSelector" style="font-weight:600">Trocar nota do técnico:</label>
+              <select id="techNoteSelector" class="imported-source-select"></select>
+            </div>
+          </div>
+
+          <!-- Editor de Texto Rico Confortável e Espaçoso -->
+          <div class="rich-editor-shell">
+            <div class="editor-toolbar" role="toolbar" aria-label="Formatação da solução validada">
+              <div class="toolbar-buttons">
+                <button type="button" class="tool-btn" data-cmd="bold" title="Negrito (Ctrl+B)"><b>B</b></button>
+                <button type="button" class="tool-btn" data-cmd="italic" title="Itálico (Ctrl+I)"><i>I</i></button>
+                <button type="button" class="tool-btn" data-cmd="underline" title="Sublinhado (Ctrl+U)"><u>U</u></button>
+                <span class="tool-divider"></span>
+                <button type="button" class="tool-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">• Lista</button>
+                <button type="button" class="tool-btn" data-cmd="insertOrderedList" title="Lista numerada (Passo a passo)">1. Lista</button>
+                <span class="tool-divider"></span>
+                <button type="button" class="tool-btn" id="insertLinkBtn" title="Inserir link">🔗 Link</button>
+                <button type="button" class="tool-btn" id="triggerImagesBtn" title="Anexar imagens ou prints de validação">🖼️ Imagem</button>
+                <input id="files" type="file" accept="image/png,image/jpeg,image/webp" multiple style="display:none">
+                <span class="tool-divider"></span>
+                <button type="button" class="tool-btn" id="useAiInEditorBtn" title="Copiar a sugestão da IA para o editor para ajustar">✨ Usar texto da IA</button>
+              </div>
+              <span class="editor-word-count" id="wordCountLabel">0 palavras</span>
+            </div>
+
+            <div
+              id="richEditor"
+              class="rich-editor-area"
+              contenteditable="true"
+              role="textbox"
+              aria-multiline="true"
+              aria-label="Editor da solução validada pelo técnico"
+              data-placeholder="Escreva aqui a solução técnica validada, importe a última resposta registrada no ticket ou ajuste a sugestão da IA..."
+            ></div>
+          </div>
+
+          <!-- Gaveta de Prints / Imagens Anexadas -->
+          <div class="images-drawer" id="imagesDrawer">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <strong style="font-size:12.5px;color:var(--ink-secondary)">Prints anexados à solução (até 5 arquivos PNG, JPEG ou WebP)</strong>
+              <button type="button" class="btn-outline-sm" id="addMoreImagesBtn" style="padding:3px 9px;font-size:11.5px">+ Adicionar print</button>
+            </div>
+            <div class="image-Attachment-grid" id="imageList"></div>
+          </div>
+
+          <!-- Classificação Manual Discreta e Compacta do Conhecimento -->
+          <div class="classification-box">
+            <div class="classification-header">
+              <span>Classificação do Conhecimento no CORTEX</span>
+              <small style="color:var(--muted);font-size:11.5px">Independente da categoria original do ticket no Movidesk</small>
+            </div>
+            <div class="classification-grid">
+              <div class="field-group">
+                <label for="module">Categoria principal <span class="req">*</span></label>
+                <select id="module" class="field-control">
+                  <option value="">Selecione a categoria...</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label for="subtopic">Subcategoria</label>
+                <select id="subtopic" class="field-control">
+                  <option value="geral">Geral</option>
+                </select>
+              </div>
+              <div class="field-group">
+                <label for="keywords">Tags adicionais <small style="color:var(--muted);font-weight:400">(opcional, separe por vírgula)</small></label>
+                <input id="keywords" type="text" class="field-control" placeholder="Ex.: nfe, inscricao estadual, rejeicao">
+                <div class="tags-pills-row" id="tagsPreviewRow"></div>
+              </div>
+            </div>
+
+            <div class="classification-secondary-grid">
+              <div class="field-group">
+                <label for="title">Título do conhecimento na base <span class="req">*</span></label>
+                <input id="title" type="text" class="field-control" maxlength="200" placeholder="Ex.: Como parametrizar o relatório ou corrigir a rejeição">
+              </div>
+              <div class="field-group">
+                <label for="comment">Observação para a curadoria administrativa <small style="color:var(--muted);font-weight:400">(opcional)</small></label>
+                <input id="comment" type="text" class="field-control" maxlength="1000" placeholder="Ex.: Validado na versão atual do Master com o cliente">
+              </div>
+            </div>
+          </div>
+
+          <!-- Rodapé de Envio para Curadoria Administrativa -->
+          <div class="curation-footer">
+            <div class="footer-audit-info" id="footerAuditStatus">
+              <span>As soluções enviadas passam pela aprovação administrativa antes de alimentar a base oficial.</span>
+            </div>
+            <div class="footer-buttons">
+              <button type="button" class="btn-draft" id="saveDraftBtn">Salvar rascunho</button>
+              <button type="button" class="btn-submit-curation" id="submitBtn">
+                <span>Enviar para curadoria</span>
+                <span>→</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
   </div>
-</main>
-<section id="success" class="success"><div class="icon">✓</div><h2>Resolução enviada para a curadoria</h2><p>O conteúdo ficou aguardando avaliação administrativa e ainda não está disponível para a IA.</p></section>
-<footer id="footer" class="footer" hidden><div class="footer-inner"><div class="footer-copy"><b>Antes de enviar:</b> confira pergunta, resposta, passos e imagens. A curadoria poderá corrigir, aprovar ou rejeitar o conteúdo.</div><button id="submit" class="submit">Enviar para a fila de curadoria</button></div></footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
 <script>
-const API='/api/treinamento', qs=new URLSearchParams(location.search), ticket=Number(qs.get('ticket')), marker=qs.get('marker')||'';
-const $=s=>document.querySelector(s); const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let data, files=[], technicianPin=sessionStorage.getItem('cortex_technician_pin')||'';
-async function api(path,opts={}){const headers={'Content-Type':'application/json',...(technicianPin?{'X-Cortex-Technician-Pin':technicianPin}:{})};const response=await fetch(API+path,{...opts,headers:{...headers,...(opts.headers||{})},body:opts.body?JSON.stringify(opts.body):undefined});const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(typeof body.detail==='string'?body.detail:(body.detail?.message||'Falha na operação.'));return body;}
-function fail(message){const box=$('#error');box.textContent=message;box.style.display='block';box.scrollIntoView({behavior:'smooth',block:'center'});}
-function selectQuestion(answer){if(answer?.suggested_question_action_id&&data.questions.some(q=>q.action_id===answer.suggested_question_action_id))$('#questionSelect').value=answer.suggested_question_action_id;showQuestion();}
-function showQuestion(){const q=data.questions.find(x=>x.action_id===$('#questionSelect').value);$('#questionPreview').textContent=q?.text||'Selecione a pergunta relacionada.';}
-function showAnswer(){const a=data.answers.find(x=>x.action_id===$('#answerSelect').value);$('#answerPreview').textContent=a?.text||'';selectQuestion(a);}
-function renderImages(){
-  $('#images').innerHTML=files.map((item,i)=>`<div class="image-row"><img src="${URL.createObjectURL(item.file)}" alt="Prévia de ${esc(item.name)}"><div><label>Nome da imagem</label><input id="name_${i}" maxlength="120" value="${esc(item.name)}" placeholder="Ex.: Caminho do relatório"><label>Onde exibir</label><select id="placement_${i}"><option value="answer">Após a resposta final</option><option value="procedure" selected>Após um passo do procedimento</option></select><div id="step_wrap_${i}"><label>Número do passo</label><input id="step_${i}" type="number" min="1" max="100" value="${i+1}"></div><label>Legenda</label><input id="caption_${i}" maxlength="300" placeholder="Explique o que o print demonstra"></div></div>`).join('');
-  files.forEach((_,i)=>{$(`#placement_${i}`).onchange=()=>{$(`#step_wrap_${i}`).hidden=$(`#placement_${i}`).value==='answer';};});
+const $ = selector => document.querySelector(selector);
+const $$ = selector => [...document.querySelectorAll(selector)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+const params = new URLSearchParams(location.search);
+let state = {
+  ticketId: Number(params.get('ticket')) || null,
+  marker: params.get('marker') || '',
+  technicianName: null,
+  context: null,
+  taxonomy: [],
+  technicianAnswers: [],
+  recommendedTechActionId: null,
+  selectedScore: null,
+  importedSourceActionId: null,
+  files: [],
+};
+
+if (state.ticketId > 0) {
+  $('#ticket').value = state.ticketId;
 }
-function displayContext(result){
-  data=result.context; const taxonomy=result.taxonomy;
-  if(!data.answers.length)throw new Error('A resposta do Cortex ainda não está sincronizada neste ticket.');
-  if(!data.questions.length)throw new Error('Nenhuma pergunta do cliente foi encontrada neste ticket. Atualize a sincronização e tente novamente.');
-  const selected=data.answers.find(a=>marker&&a.text.includes(marker))||data.answers[data.answers.length-1];
-  $('#identityName').textContent=`Técnico: ${result.technician}`; $('#identity').hidden=false;
-  $('#ticketBadge').textContent=`Ticket #${ticket}`; $('#title').value=data.subject||'';
-  $('#module').innerHTML='<option value="">Selecione</option>'+[...taxonomy].filter(m=>m.key!=='unclassified').map(m=>`<option value="${esc(m.key)}">${esc(m.label)}</option>`).join('');
-  $('#questionSelect').innerHTML=data.questions.map(q=>`<option value="${esc(q.action_id)}">Nota ${esc(q.action_id)} · ${esc(q.created_at||'')} · ${esc(q.text.slice(0,90))}</option>`).join('');
-  $('#answerSelect').innerHTML=data.answers.map(a=>`<option value="${esc(a.action_id)}" ${a===selected?'selected':''}>Ação ${esc(a.action_id)} · ${esc(a.created_at||'')}</option>`).join('');
-  $('#questionSelect').onchange=showQuestion; $('#answerSelect').onchange=showAnswer; showAnswer();
-  if (data.revision_requests?.length) {
-    const notice = document.createElement('div'); notice.className = 'card';
-    notice.textContent = 'Ajustes solicitados pela curadoria: ' + data.revision_requests.map(r => r.request.reason).join(' · ');
-    $('#app').prepend(notice);
+
+function toast(msg, duration = 4800) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => { el.style.display = 'none'; }, duration);
+}
+
+function showBanner(text, kind = 'info') {
+  const banner = $('#statusBanner');
+  if (!text) {
+    banner.className = 'status-banner';
+    banner.innerHTML = '';
+    return;
   }
-  $('#files').onchange=e=>{files=[...e.target.files].slice(0,5).map(file=>({file,name:file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim()}));if(e.target.files.length>5)fail('Serão utilizadas somente as cinco primeiras imagens.');renderImages();};
-  $('#loading').hidden=true; $('#access').hidden=true; $('#app').hidden=false; $('#footer').hidden=false;
+  banner.className = `status-banner show ${kind}`;
+  banner.innerHTML = `<span>${esc(text)}</span><button type="button" onclick="showBanner('')" style="background:transparent;border:none;font-weight:700;cursor:pointer;color:inherit">✕</button>`;
 }
-async function access(){
-  if(!Number.isInteger(ticket)||ticket<=0)throw new Error('O link não contém um número de ticket válido.');
-  const pin=$('#pin').value.trim()||technicianPin;
-  if(!/^\d{4}$/.test(pin)){const box=$('#accessError');box.textContent='Digite os quatro números do seu PIN.';box.style.display='block';return;}
-  technicianPin=pin; $('#accessError').style.display='none'; $('#access').hidden=true; $('#loading').hidden=false;
-  try{const result=await api(`/tecnico/tickets/${ticket}`);sessionStorage.setItem('cortex_technician_pin',technicianPin);displayContext(result);}
-  catch(e){technicianPin='';sessionStorage.removeItem('cortex_technician_pin');$('#loading').hidden=true;$('#access').hidden=false;const box=$('#accessError');box.textContent=e.message;box.style.display='block';$('#pin').value='';$('#pin').focus();}
+
+function formatDateBr(isoStr) {
+  if (!isoStr) return 'Data não informada';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return String(isoStr).replace('T', ' ').slice(0, 16);
+  const pad = n => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
-async function submit(){
-  $('#error').style.display='none'; const title=$('#title').value.trim(),answer=$('#answer').value.trim(),procedure=$('#procedure').value.trim();
-  if(!$('#questionSelect').value)return fail('Selecione a pergunta do cliente relacionada.');
-  if(!$('#module').value)return fail('Selecione a categoria geral.');
-  if(title.length<5)return fail('Informe um título objetivo para o conhecimento.');
-  if(answer.length<20)return fail('Escreva a resposta final que será apresentada ao cliente.');
-  if(procedure.length<20||!/^\s*1\.\s/m.test(procedure))return fail('O passo a passo deve começar por “1.” e descrever a resolução completa.');
-  const images=await Promise.all(files.map((item,i)=>new Promise((resolve,reject)=>{const name=$(`#name_${i}`).value.trim(),caption=$(`#caption_${i}`).value.trim(),placement=$(`#placement_${i}`).value,after_step=placement==='procedure'?Number($(`#step_${i}`).value):null;if(name.length<3)return reject(new Error('Dê um nome claro para cada imagem.'));if(caption.length<3)return reject(new Error('Informe uma legenda para cada imagem.'));if(placement==='procedure'&&(!Number.isInteger(after_step)||after_step<1))return reject(new Error('Indique depois de qual passo a imagem deve aparecer.'));if(item.file.size>5*1024*1024)return reject(new Error('Cada imagem deve ter no máximo 5 MB.'));const reader=new FileReader();reader.onerror=()=>reject(new Error('Não foi possível ler uma das imagens.'));reader.onload=()=>resolve({data_url:reader.result,name,caption,placement,after_step});reader.readAsDataURL(item.file);})));
-  $('#submit').disabled=true;
-  try{await api(`/tecnico/tickets/${ticket}/propostas`,{method:'POST',body:{action_id:$('#answerSelect').value,module_key:$('#module').value,comment:$('#comment').value.trim(),title,answer,procedure,images,question_action_id:$('#questionSelect').value}});$('#app').hidden=true;$('#footer').hidden=true;$('#success').style.display='block';window.scrollTo({top:0,behavior:'smooth'});}catch(e){fail(e.message);$('#submit').disabled=false;}
+
+async function api(path, opts = {}) {
+  const pin = $('#pin').value.trim();
+  const headers = {
+    'X-Cortex-Technician-Pin': pin,
+    ...(opts.body ? {'Content-Type': 'application/json'} : {}),
+  };
+  const res = await fetch('/api/treinamento' + path, {
+    ...opts,
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = data.detail;
+    const msg = typeof detail === 'string'
+      ? detail
+      : Array.isArray(detail)
+        ? detail.map(x => x.msg || JSON.stringify(x)).join('; ')
+        : detail?.message || `Erro HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
 }
-$('#submit').onclick=()=>submit().catch(e=>{fail(e.message);$('#submit').disabled=false;});
-$('#accessButton').onclick=()=>access().catch(e=>{const box=$('#accessError');box.textContent=e.message;box.style.display='block';});
-$('#pin').onkeydown=e=>{if(e.key==='Enter')$('#accessButton').click();};
-$('#changeOperator').onclick=()=>{sessionStorage.removeItem('cortex_technician_pin');location.reload();};
-if(technicianPin)access();else $('#pin').focus();
+
+/* ============================================================================
+   Editor de Texto Rico & Extração de Texto / Procedimento
+   ============================================================================ */
+function getEditorPlainText() {
+  const editor = $('#richEditor');
+  if (!editor) return '';
+  const clone = editor.cloneNode(true);
+  clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  clone.querySelectorAll('p, div, h1, h2, h3, h4').forEach(block => {
+    block.append('\n');
+  });
+  clone.querySelectorAll('ol').forEach(ol => {
+    [...ol.querySelectorAll(':scope > li')].forEach((li, idx) => {
+      li.prepend(`${idx + 1}. `);
+      li.append('\n');
+    });
+  });
+  clone.querySelectorAll('ul').forEach(ul => {
+    [...ul.querySelectorAll(':scope > li')].forEach(li => {
+      li.prepend('• ');
+      li.append('\n');
+    });
+  });
+  return (clone.textContent || '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function getEditorHtml() {
+  return ($('#richEditor')?.innerHTML || '').trim();
+}
+
+function setEditorFromPlainText(text) {
+  const raw = String(text || '').trim();
+  if (!raw) {
+    $('#richEditor').innerHTML = '';
+    updateWordCount();
+    return;
+  }
+  const lines = raw.split(/\r?\n/);
+  let html = '';
+  let inList = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const stepMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
+    if (stepMatch) {
+      if (!inList) {
+        html += '<ol>';
+        inList = true;
+      }
+      html += `<li>${esc(stepMatch[2])}</li>`;
+    } else {
+      if (inList) {
+        html += '</ol>';
+        inList = false;
+      }
+      if (trimmed) {
+        html += `<p>${esc(trimmed)}</p>`;
+      }
+    }
+  }
+  if (inList) html += '</ol>';
+  $('#richEditor').innerHTML = html;
+  updateWordCount();
+}
+
+function setEditorFromHtmlOrText(htmlContent, textContent) {
+  if (htmlContent && /<[a-z][\s\S]*>/i.test(htmlContent)) {
+    $('#richEditor').innerHTML = htmlContent;
+    updateWordCount();
+  } else {
+    setEditorFromPlainText(textContent || '');
+  }
+}
+
+function buildAnswerAndProcedureFromEditor() {
+  const plainText = getEditorPlainText();
+  const lines = plainText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const numberedLines = lines.filter(l => /^\d+\.\s+/.test(l));
+  let procedure = '';
+  if (numberedLines.length >= 1) {
+    procedure = numberedLines.map((l, idx) => `${idx + 1}. ${l.replace(/^\d+\.\s+/, '')}`).join('\n');
+  } else if (lines.length > 1) {
+    procedure = lines.map((l, idx) => `${idx + 1}. ${l.replace(/^[•\-*]\s+/, '')}`).join('\n');
+  } else if (lines.length === 1) {
+    procedure = `1. ${lines[0]}`;
+  }
+  return {
+    answer: plainText,
+    procedure,
+    validated_html: getEditorHtml(),
+  };
+}
+
+function updateWordCount() {
+  const text = getEditorPlainText();
+  const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+  $('#wordCountLabel').textContent = `${words} ${words === 1 ? 'palavra' : 'palavras'}`;
+}
+
+$('#richEditor').addEventListener('input', () => {
+  updateWordCount();
+});
+
+$$('.tool-btn[data-cmd]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const cmd = btn.dataset.cmd;
+    $('#richEditor').focus();
+    document.execCommand(cmd, false, null);
+    updateWordCount();
+  });
+});
+
+$('#insertLinkBtn').addEventListener('click', () => {
+  const url = prompt('Informe a URL do link (https://...):', 'https://');
+  if (!url || url === 'https://') return;
+  $('#richEditor').focus();
+  document.execCommand('createLink', false, url.trim());
+  updateWordCount();
+});
+
+/* ============================================================================
+   Renderização da Resposta da IA (Área 2) e Avaliação 0 a 10
+   ============================================================================ */
+const SCORE_DESCRIPTIONS = {
+  0: '0/10 · Totalmente incorreta',
+  1: '1/10 · Muito insatisfatória',
+  2: '2/10 · Muito insatisfatória',
+  3: '3/10 · Muito insatisfatória',
+  4: '4/10 · Parcialmente correta',
+  5: '5/10 · Parcialmente correta',
+  6: '6/10 · Parcialmente correta',
+  7: '7/10 · Boa (com melhorias)',
+  8: '8/10 · Boa (com melhorias)',
+  9: '9/10 · Muito boa',
+  10: '10/10 · Totalmente correta',
+};
+
+function highlightScoreButton(score) {
+  state.selectedScore = (score !== null && score !== undefined && score !== '') ? Number(score) : null;
+  $$('#scoreButtons .score-btn').forEach(btn => {
+    const val = Number(btn.dataset.score);
+    btn.classList.remove('active', 'score-low', 'score-mid', 'score-good', 'score-perfect');
+    if (state.selectedScore === val) {
+      btn.classList.add('active');
+      if (val <= 3) btn.classList.add('score-low');
+      else if (val <= 6) btn.classList.add('score-mid');
+      else if (val <= 9) btn.classList.add('score-good');
+      else btn.classList.add('score-perfect');
+    }
+  });
+  $('#scoreFeedbackLabel').textContent = state.selectedScore !== null
+    ? SCORE_DESCRIPTIONS[state.selectedScore] || `Nota ${state.selectedScore}/10`
+    : 'Sem nota';
+}
+
+$$('#scoreButtons .score-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const score = Number(btn.dataset.score);
+    highlightScoreButton(score);
+    if (!state.context || !state.ticketId) {
+      toast(`Nota ${score}/10 selecionada. Carregue um chamado com seu PIN para salvá-la.`);
+      return;
+    }
+    const actionId = $('#answerSelect').value;
+    if (!actionId) return;
+    try {
+      await api(`/tecnico/tickets/${state.ticketId}/nota`, {
+        method: 'POST',
+        body: {
+          action_id: actionId,
+          score,
+          module_key: $('#module').value || null,
+          comment: $('#comment').value.trim() || null,
+        },
+      });
+      $('#footerAuditStatus').innerHTML = `<span>✓ Avaliação <b>nota ${score}/10</b> salva para a ação #${esc(actionId)} (${esc(state.technicianName)}).</span>`;
+      toast(`Avaliação nota ${score}/10 registrada com sucesso.`);
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+});
+
+function formatAiAnswerHtml(answerObj) {
+  const raw = (answerObj?.clean_reply || answerObj?.text || '').trim();
+  if (!raw) return '<p style="color:var(--muted)">Sem texto disponível nesta resposta.</p>';
+  const lines = raw.split(/\r?\n/);
+  let html = '';
+  let stepItems = [];
+  const flushSteps = () => {
+    if (!stepItems.length) return;
+    html += '<ol class="ai-step-list">' + stepItems.map(s =>
+      `<li class="ai-step-item"><span class="ai-step-num">${esc(s.num)}.</span><span>${esc(s.body)}</span></li>`
+    ).join('') + '</ol>';
+    stepItems = [];
+  };
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushSteps();
+      continue;
+    }
+    const m = trimmed.match(/^(\d+)\.\s+(.*)$/);
+    if (m) {
+      stepItems.push({num: m[1], body: m[2]});
+    } else {
+      flushSteps();
+      html += `<p>${esc(trimmed)}</p>`;
+    }
+  }
+  flushSteps();
+  return html;
+}
+
+function renderSelectedAiAnswer() {
+  if (!state.context) return;
+  const answers = state.context.answers || [];
+  const selected = answers.find(a => a.action_id === $('#answerSelect').value) || answers[answers.length - 1];
+  if (!selected) return;
+
+  $('#answerPreview').innerHTML = formatAiAnswerHtml(selected);
+
+  // Fontes utilizadas e Confiança somente quando disponíveis
+  const telemetry = [];
+  if (typeof selected.sources_count === 'number' && selected.sources_count > 0) {
+    telemetry.push(`<span class="telemetry-pill" title="${esc((selected.sources || []).join(', '))}">Fontes utilizadas: <strong>${selected.sources_count}</strong></span>`);
+  }
+  if (selected.confidence) {
+    const dotClass = selected.confidence === 'Alta' ? '' : selected.confidence === 'Média' ? 'med' : 'low';
+    telemetry.push(`<span class="telemetry-pill"><span class="confidence-dot ${dotClass}"></span>Confiança: <strong>${esc(selected.confidence)}</strong></span>`);
+  }
+  if (selected.specialist) {
+    telemetry.push(`<span class="telemetry-pill">Especialista: <strong>${esc(selected.specialist)}</strong></span>`);
+  }
+  if (!telemetry.length) {
+    telemetry.push(`<span class="telemetry-pill">Ação da IA <strong>#${esc(selected.action_id)}</strong> · ${esc(formatDateBr(selected.created_at))}</span>`);
+  }
+  $('#aiTelemetryContainer').innerHTML = telemetry.join('');
+
+  // Sincroniza a pergunta sugerida
+  const questions = state.context.questions || [];
+  if (selected.suggested_question_action_id && questions.some(q => q.action_id === selected.suggested_question_action_id)) {
+    $('#questionSelect').value = selected.suggested_question_action_id;
+  }
+  renderSelectedQuestion();
+
+  // Restaura avaliação/rascunho salvo para esta action_id, se houver
+  restoreSavedReviewForAction(selected.action_id);
+}
+
+function renderSelectedQuestion() {
+  if (!state.context) return;
+  const questions = state.context.questions || [];
+  const q = questions.find(item => item.action_id === $('#questionSelect').value) || questions[questions.length - 1];
+  if (!q) {
+    $('#questionMetaLine').textContent = 'Nenhuma mensagem de cliente identificada';
+    $('#questionPreview').textContent = 'Não há nota pública de cliente sincronizada neste ticket.';
+    $('#analyzedSnippetText').textContent = 'Sem trecho de pergunta disponível.';
+    return;
+  }
+  $('#questionMetaLine').innerHTML = `<span>Nota <b>${esc(q.action_id)}</b> - ${esc(formatDateBr(q.created_at))}</span>`;
+  $('#questionPreview').textContent = q.text;
+  $('#analyzedSnippetText').textContent = q.text.slice(0, 600) + (q.text.length > 600 ? '…' : '');
+}
+
+/* ============================================================================
+   Classificação: Categoria Principal, Subcategoria Dependente e Tags
+   ============================================================================ */
+function renderSubtopics(moduleKey, selectedSubtopic = null) {
+  const mod = state.taxonomy.find(m => m.key === moduleKey);
+  const subtopics = (mod && Array.isArray(mod.subtopics) && mod.subtopics.length)
+    ? mod.subtopics
+    : [['geral', 'Geral']];
+  $('#subtopic').innerHTML = subtopics.map(([key, label]) =>
+    `<option value="${esc(key)}" ${key === selectedSubtopic ? 'selected' : ''}>${esc(label)}</option>`
+  ).join('');
+}
+
+$('#module').addEventListener('change', e => {
+  renderSubtopics(e.target.value);
+});
+
+function parseTagsInput() {
+  return $('#keywords').value
+    .split(/[,;\n]+/)
+    .map(t => t.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+function renderTagPills() {
+  const tags = parseTagsInput();
+  $('#tagsPreviewRow').innerHTML = tags.map(t => `<span class="tag-chip">#${esc(t)}</span>`).join('');
+}
+
+$('#keywords').addEventListener('input', renderTagPills);
+
+/* ============================================================================
+   Funcionalidade Principal: Importar Última Resposta do Ticket
+   ============================================================================ */
+function applyTechnicianNoteToEditor(note, askConfirm = true) {
+  if (!note) return;
+  const currentText = getEditorPlainText();
+  if (askConfirm && currentText.length >= 10 && currentText.trim() !== (note.text || '').trim()) {
+    const ok = confirm('O editor já possui conteúdo. Deseja substituí-lo pela resposta selecionada do ticket?');
+    if (!ok) return;
+  }
+  if (note.visibility === 'internal' && askConfirm) {
+    const allowInternal = confirm(
+      `A nota #${note.action_id} (${note.author || 'Técnico'}) é uma NOTA INTERNA.\n\n` +
+      'Certifique-se de revisar o conteúdo e remover qualquer dado interno ou confidencial antes de enviar para curadoria. Deseja importar?'
+    );
+    if (!allowInternal) return;
+  }
+
+  setEditorFromHtmlOrText(note.html, note.text);
+  state.importedSourceActionId = String(note.action_id);
+
+  // Atualiza barra de auditoria de origem
+  const bar = $('#importedSourceBar');
+  bar.classList.add('show');
+  bar.classList.toggle('internal-warn', note.visibility === 'internal');
+  const visBadge = note.visibility === 'internal'
+    ? '⚠️ Nota Interna (revise dados sensíveis)'
+    : '✓ Resposta Pública do Técnico';
+  $('#importedSourceLabel').innerHTML =
+    `<strong>Origem importada:</strong> Ação #${esc(note.action_id)} · Autor: <b>${esc(note.author || 'Técnico')}</b> · ${esc(formatDateBr(note.created_at))} · <span>${visBadge}</span>`;
+
+  if ($('#techNoteSelector').value !== String(note.action_id)) {
+    $('#techNoteSelector').value = String(note.action_id);
+  }
+  if (note.suggested_question_action_id && (state.context?.questions || []).some(q => q.action_id === note.suggested_question_action_id)) {
+    $('#questionSelect').value = note.suggested_question_action_id;
+    renderSelectedQuestion();
+  }
+  toast(`Resposta da ação #${note.action_id} (${note.author || 'Técnico'}) importada para o editor.`);
+}
+
+function populateTechNoteSelector(answers, selectedActionId) {
+  const select = $('#techNoteSelector');
+  if (!answers || !answers.length) {
+    select.innerHTML = '<option value="">Nenhuma nota técnica encontrada</option>';
+    return;
+  }
+  select.innerHTML = answers.map(a => {
+    const kind = a.visibility === 'internal' ? '[Interna]' : '[Pública]';
+    const preview = (a.text || '').replace(/\s+/g, ' ').slice(0, 65);
+    return `<option value="${esc(a.action_id)}" ${String(a.action_id) === String(selectedActionId) ? 'selected' : ''}>` +
+      `#${esc(a.action_id)} ${kind} ${esc(a.author || 'Técnico')} (${esc(formatDateBr(a.created_at))}) — ${esc(preview)}` +
+      `</option>`;
+  }).join('');
+}
+
+$('#techNoteSelector').addEventListener('change', e => {
+  const chosen = state.technicianAnswers.find(a => String(a.action_id) === String(e.target.value));
+  if (chosen) applyTechnicianNoteToEditor(chosen, true);
+});
+
+$('#importLastAnswerBtn').addEventListener('click', async () => {
+  const ticket = Number($('#ticket').value);
+  if (!Number.isInteger(ticket) || ticket <= 0) {
+    return toast('Informe um número de ticket válido.');
+  }
+  if (!/^\d{4}$/.test($('#pin').value.trim())) {
+    return toast('Informe seu PIN de 4 dígitos no topo da página para consultar as notas do ticket.');
+  }
+  const btn = $('#importLastAnswerBtn');
+  btn.disabled = true;
+  try {
+    let notes = state.technicianAnswers;
+    let recommendedId = state.recommendedTechActionId;
+    if (!notes || !notes.length || state.ticketId !== ticket) {
+      const res = await api(`/tecnico/tickets/${ticket}/respostas-tecnicas?refresh=true`);
+      notes = res.answers || [];
+      recommendedId = res.recommended_action_id;
+      state.technicianAnswers = notes;
+      state.recommendedTechActionId = recommendedId;
+    }
+    if (!notes.length) {
+      toast('Este chamado não possui respostas elegíveis registradas por técnicos (mensagens de clientes e notas automáticas foram ignoradas).');
+      return;
+    }
+    const targetNote = notes.find(a => String(a.action_id) === String(recommendedId)) || notes[notes.length - 1];
+    populateTechNoteSelector(notes, targetNote.action_id);
+    applyTechnicianNoteToEditor(targetNote, true);
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* ============================================================================
+   Carregamento do Contexto do Chamado e Restauração de Rascunho/Avaliação
+   ============================================================================ */
+function restoreSavedReviewForAction(actionId) {
+  const savedList = state.context?.saved_reviews || [];
+  const saved = savedList.find(r => String(r.action_id) === String(actionId));
+  const localRaw = localStorage.getItem(`cortex_draft_${state.ticketId}_${actionId}`);
+  let localDraft = null;
+  try { if (localRaw) localDraft = JSON.parse(localRaw); } catch (_) {}
+
+  const source = saved || localDraft;
+  if (!source) {
+    highlightScoreButton(null);
+    return;
+  }
+  if (source.score !== null && source.score !== undefined) {
+    highlightScoreButton(source.score);
+  }
+  if (source.module_key && state.taxonomy.some(m => m.key === source.module_key)) {
+    $('#module').value = source.module_key;
+    renderSubtopics(source.module_key, source.subtopic_key || 'geral');
+  }
+  if (Array.isArray(source.keywords) && source.keywords.length) {
+    $('#keywords').value = source.keywords.join(', ');
+    renderTagPills();
+  }
+  if (source.proposed_title) {
+    $('#title').value = source.proposed_title;
+  }
+  if (source.comment) {
+    $('#comment').value = source.comment;
+  }
+  if (!getEditorPlainText() && (source.validated_html || source.proposed_answer)) {
+    setEditorFromHtmlOrText(source.validated_html, source.proposed_answer);
+  }
+  if (source.source_answer_action_id) {
+    state.importedSourceActionId = String(source.source_answer_action_id);
+  }
+}
+
+async function loadContext() {
+  const ticket = Number($('#ticket').value);
+  if (!Number.isInteger(ticket) || ticket <= 0) {
+    return toast('Informe um número de ticket válido.');
+  }
+  if (!/^\d{4}$/.test($('#pin').value.trim())) {
+    return toast('Digite seu PIN individual de 4 dígitos para carregar o chamado.');
+  }
+  $('#loadBtn').disabled = true;
+  try {
+    const data = await api(`/tecnico/tickets/${ticket}`);
+    state.ticketId = ticket;
+    state.technicianName = data.technician;
+    state.context = data.context;
+    state.taxonomy = data.taxonomy || [];
+    state.technicianAnswers = data.context.technician_answers || [];
+    state.recommendedTechActionId = data.context.recommended_technician_action_id || null;
+
+    // Atualiza perfil do técnico na topbar
+    $('#techNameDisplay').textContent = data.technician;
+    $('#techRoleDisplay').textContent = 'Técnico de Suporte · Autenticado';
+    $('#techAvatar').textContent = (data.technician || 'T').slice(0, 2).toUpperCase();
+
+    // Área 1 — Identificação do ticket
+    $('#displayTicketNumber').textContent = `#${ticket}`;
+    const statusText = data.context.status || 'Fechado';
+    const statusBadge = $('#displayTicketStatus');
+    statusBadge.textContent = statusText;
+    statusBadge.className = 'ticket-status-badge ' + (
+      /fechado|resolvido|closed|resolved/i.test(statusText) ? 'resolved' : 'open'
+    );
+    $('#displayTicketDate').textContent = `Movidesk • ${formatDateBr(data.context.created_at)}`;
+    $('#movideskLink').href = data.context.movidesk_url || `https://alternativa.movidesk.com/Ticket/Edit/${ticket}`;
+
+    // Perguntas do cliente
+    const questions = data.context.questions || [];
+    const qSelect = $('#questionSelect');
+    qSelect.innerHTML = questions.map(q =>
+      `<option value="${esc(q.action_id)}">Nota ${esc(q.action_id)} · ${esc(formatDateBr(q.created_at))}</option>`
+    ).join('');
+    qSelect.style.display = questions.length > 1 ? 'block' : 'none';
+
+    // Entendimento da IA e Contexto Adicional
+    $('#aiUnderstandingText').textContent = data.context.ai_understanding ||
+      (data.context.subject ? `Solicitação analisada referente ao assunto: ${data.context.subject}.` : 'Análise concluída pelo CORTEX.');
+
+    const addCtx = data.context.additional_context || [];
+    $('#additionalContextList').innerHTML = addCtx.length
+      ? addCtx.map(item => `<div class="context-kv-item"><strong>${esc(item.label)}</strong><span>${esc(item.value)}</span></div>`).join('')
+      : '<div class="context-kv-item"><span>Sem metadados adicionais registrados para este atendimento.</span></div>';
+
+    // Taxonomia real do CORTEX
+    const currentMod = $('#module').value;
+    $('#module').innerHTML = `<option value="">Selecione a categoria...</option>` +
+      state.taxonomy.map(m => `<option value="${esc(m.key)}">${esc(m.label)}</option>`).join('');
+    if (currentMod && state.taxonomy.some(m => m.key === currentMod)) {
+      $('#module').value = currentMod;
+      renderSubtopics(currentMod);
+    } else if (state.taxonomy.length) {
+      renderSubtopics(state.taxonomy[0].key);
+    }
+
+    // Título sugerido
+    if (!$('#title').value.trim() && data.context.subject) {
+      $('#title').value = data.context.subject;
+    }
+
+    // Respostas sugeridas pela IA
+    const answers = data.context.answers || [];
+    if (!answers.length) {
+      showBanner('Nenhuma resposta automática do CORTEX foi encontrada no histórico sincronizado deste chamado.', 'warn');
+      renderSelectedQuestion();
+      return;
+    }
+    const selected = answers.find(a => state.marker && a.text.includes(state.marker)) || answers[answers.length - 1];
+    const aSelect = $('#answerSelect');
+    aSelect.innerHTML = answers.map(a =>
+      `<option value="${esc(a.action_id)}" ${a.action_id === selected.action_id ? 'selected' : ''}>Ação #${esc(a.action_id)} · ${esc(formatDateBr(a.created_at))}</option>`
+    ).join('');
+    aSelect.style.display = answers.length > 1 ? 'inline-block' : 'none';
+
+    // Verifica pedidos de revisão administrativa
+    const revisions = data.context.revision_requests || [];
+    if (revisions.length) {
+      const latestRev = revisions[0];
+      showBanner(`Revisão solicitada por ${latestRev.decided_by || 'Administrador'}: "${latestRev.decision_reason || 'Complemente o passo a passo'}"`, 'warn');
+    } else {
+      showBanner('');
+    }
+
+    if (state.technicianAnswers.length) {
+      populateTechNoteSelector(state.technicianAnswers, state.recommendedTechActionId);
+    }
+
+    renderSelectedAiAnswer();
+    toast(`Chamado #${ticket} carregado para ${data.technician}.`);
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    $('#loadBtn').disabled = false;
+  }
+}
+
+$('#loadBtn').addEventListener('click', loadContext);
+$('#pin').addEventListener('keydown', e => { if (e.key === 'Enter') loadContext(); });
+$('#ticket').addEventListener('keydown', e => { if (e.key === 'Enter') loadContext(); });
+$('#answerSelect').addEventListener('change', renderSelectedAiAnswer);
+$('#questionSelect').addEventListener('change', renderSelectedQuestion);
+
+/* ============================================================================
+   Interações da Coluna Esquerda e Área 2 (Abas, Collapse, Copiar)
+   ============================================================================ */
+$('#toggleAnalyzedBtn').addEventListener('click', () => {
+  const body = $('#analyzedBody');
+  const collapsed = body.classList.toggle('collapsed');
+  $('#toggleAnalyzedBtn').setAttribute('aria-expanded', String(!collapsed));
+  $('#analyzedChevron').textContent = collapsed ? '⌄' : '⌃';
+});
+
+$$('.mini-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.mini-tab').forEach(b => b.classList.toggle('active', b === btn));
+    const isMsg = btn.dataset.tab === 'msg';
+    $('#tabPanelMsg').style.display = isMsg ? 'block' : 'none';
+    $('#tabPanelCtx').style.display = isMsg ? 'none' : 'block';
+  });
+});
+
+$('#copySnippetBtn').addEventListener('click', async () => {
+  const text = $('#analyzedSnippetText').textContent || '';
+  await navigator.clipboard?.writeText(text).catch(() => {});
+  toast('Trecho analisado copiado para a área de transferência.');
+});
+
+$('#copyAiResponseBtn').addEventListener('click', async () => {
+  if (!state.context) return toast('Carregue um chamado primeiro.');
+  const answers = state.context.answers || [];
+  const selected = answers.find(a => a.action_id === $('#answerSelect').value) || answers[answers.length - 1];
+  const text = selected?.clean_reply || selected?.text || $('#answerPreview').innerText || '';
+  await navigator.clipboard?.writeText(text).catch(() => {});
+  toast('Resposta sugerida pela IA copiada.');
+});
+
+$('#useAiInEditorBtn').addEventListener('click', () => {
+  if (!state.context) return toast('Carregue um chamado primeiro.');
+  const answers = state.context.answers || [];
+  const selected = answers.find(a => a.action_id === $('#answerSelect').value) || answers[answers.length - 1];
+  if (!selected) return;
+  const current = getEditorPlainText();
+  if (current.length >= 10 && !confirm('Substituir o texto atual do editor pela sugestão da IA?')) return;
+  setEditorFromPlainText(selected.clean_reply || selected.text);
+  state.importedSourceActionId = null;
+  $('#importedSourceBar').classList.remove('show');
+  toast('Sugestão da IA copiada para o editor. Faça os ajustes necessários.');
+});
+
+/* ============================================================================
+   Gerenciamento de Prints / Imagens no Editor
+   ============================================================================ */
+$('#triggerImagesBtn').addEventListener('click', () => $('#files').click());
+$('#addMoreImagesBtn').addEventListener('click', () => $('#files').click());
+
+$('#files').addEventListener('change', e => {
+  const incoming = [...e.target.files];
+  if (!incoming.length) return;
+  state.files = [...state.files, ...incoming].slice(0, 5);
+  if (incoming.length > 5) toast('São permitidos no máximo 5 prints por proposta.');
+  renderImageAttachments();
+});
+
+function renderImageAttachments() {
+  const drawer = $('#imagesDrawer');
+  const container = $('#imageList');
+  if (!state.files.length) {
+    drawer.classList.remove('show');
+    container.innerHTML = '';
+    return;
+  }
+  drawer.classList.add('show');
+  container.innerHTML = state.files.map((file, i) => `
+    <div class="image-item-card">
+      <img src="${URL.createObjectURL(file)}" alt="Prévia do print ${i + 1}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong style="font-size:11px;color:var(--muted)">Print #${i + 1}</strong>
+        <button type="button" onclick="removeImageAt(${i})" style="background:none;border:none;color:var(--danger);font-size:11px;font-weight:700;cursor:pointer">Remover</button>
+      </div>
+      <input id="name_${i}" type="text" placeholder="Nome da imagem" value="${esc(file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' '))}">
+      <select id="place_${i}">
+        <option value="procedure" selected>Exibir após o passo nº</option>
+        <option value="answer">Exibir após a resposta final</option>
+      </select>
+      <input id="step_${i}" type="number" min="1" max="100" value="${i + 1}" title="Número do passo">
+      <input id="caption_${i}" type="text" placeholder="Legenda obrigatória do print">
+    </div>
+  `).join('');
+}
+
+window.removeImageAt = index => {
+  state.files.splice(index, 1);
+  renderImageAttachments();
+};
+
+function readImagesPayload() {
+  return Promise.all(state.files.map((file, i) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Não foi possível ler um dos arquivos de imagem.'));
+    reader.onload = () => {
+      const placement = $(`#place_${i}`).value;
+      resolve({
+        data_url: reader.result,
+        name: $(`#name_${i}`).value.trim(),
+        caption: $(`#caption_${i}`).value.trim(),
+        placement,
+        after_step: placement === 'procedure' ? Number($(`#step_${i}`).value) : null,
+      });
+    };
+    reader.readAsDataURL(file);
+  })));
+}
+
+/* ============================================================================
+   Salvar Rascunho e Enviar para Curadoria Administrativa
+   ============================================================================ */
+$('#saveDraftBtn').addEventListener('click', async () => {
+  const ticket = Number($('#ticket').value);
+  if (!state.context || !ticket) {
+    return toast('Carregue o chamado com seu PIN antes de salvar o rascunho.');
+  }
+  const actionId = $('#answerSelect').value;
+  const {answer, procedure, validated_html} = buildAnswerAndProcedureFromEditor();
+  const payload = {
+    action_id: actionId,
+    score: state.selectedScore,
+    module_key: $('#module').value || null,
+    subtopic_key: $('#subtopic').value || null,
+    keywords: parseTagsInput(),
+    title: $('#title').value.trim() || state.context.subject || null,
+    answer: answer || null,
+    procedure: procedure || null,
+    validated_html: validated_html || null,
+    comment: $('#comment').value.trim() || null,
+    question_action_id: $('#questionSelect').value || null,
+    source_answer_action_id: state.importedSourceActionId || null,
+  };
+  localStorage.setItem(`cortex_draft_${ticket}_${actionId}`, JSON.stringify({
+    ...payload,
+    proposed_title: payload.title,
+    proposed_answer: payload.answer,
+    proposed_procedure: payload.procedure,
+    saved_at: new Date().toISOString(),
+  }));
+  $('#saveDraftBtn').disabled = true;
+  try {
+    await api(`/tecnico/tickets/${ticket}/rascunho`, {method: 'POST', body: payload});
+    const nowStr = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+    $('#footerAuditStatus').innerHTML = `<span>✓ Rascunho salvo às <b>${nowStr}</b> por <b>${esc(state.technicianName)}</b>. Você pode retomar a edição posteriormente.</span>`;
+    toast('Rascunho salvo com sucesso.');
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    $('#saveDraftBtn').disabled = false;
+  }
+});
+
+$('#submitBtn').addEventListener('click', async () => {
+  const ticket = Number($('#ticket').value);
+  if (!state.context || !ticket) {
+    return toast('Carregue o chamado com seu PIN antes de enviar para curadoria.');
+  }
+  const moduleKey = $('#module').value;
+  if (!moduleKey) {
+    $('#module').focus();
+    return toast('Selecione a Categoria principal do conhecimento antes de enviar.');
+  }
+  const {answer, procedure, validated_html} = buildAnswerAndProcedureFromEditor();
+  if (answer.length < 20) {
+    $('#richEditor').focus();
+    return toast('Escreva ou importe uma solução validada com pelo menos 20 caracteres no editor.');
+  }
+  let title = $('#title').value.trim() || (state.context.subject || '').trim();
+  if (title.length < 5) {
+    title = `Resolução validada · Chamado #${ticket}`;
+    $('#title').value = title;
+  }
+  const questionActionId = $('#questionSelect').value || (state.context.questions?.[0]?.action_id ?? '');
+  if (!questionActionId) {
+    return toast('Nenhuma pergunta do cliente encontrada no ticket sincronizado.');
+  }
+
+  $('#submitBtn').disabled = true;
+  try {
+    const images = await readImagesPayload();
+    const body = {
+      action_id: $('#answerSelect').value,
+      question_action_id: String(questionActionId),
+      module_key: moduleKey,
+      subtopic_key: $('#subtopic').value || 'geral',
+      keywords: parseTagsInput(),
+      score: state.selectedScore,
+      title,
+      answer,
+      procedure,
+      validated_html,
+      source_answer_action_id: state.importedSourceActionId || null,
+      comment: $('#comment').value.trim(),
+      images,
+    };
+    const res = await api(`/tecnico/tickets/${ticket}/propostas`, {method: 'POST', body});
+    localStorage.removeItem(`cortex_draft_${ticket}_${body.action_id}`);
+    showBanner(
+      `Solução enviada para a fila de curadoria administrativa (Candidato #${res.candidate_id || res.id}). ` +
+      `Técnico responsável: ${state.technicianName}. O conhecimento será publicado na base oficial após aprovação do administrador.`,
+      'ok'
+    );
+    $('#footerAuditStatus').innerHTML =
+      `<span>✓ Enviado para curadoria administrativa (Candidato <b>#${esc(res.candidate_id || res.id)}</b>) por <b>${esc(state.technicianName)}</b>.</span>`;
+    toast('Solução enviada com sucesso para a fila de curadoria administrativa!');
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    $('#submitBtn').disabled = false;
+  }
+});
+
+// Restaura PIN da sessão atual (sessionStorage) para facilitar navegação entre chamados
+(() => {
+  const savedPin = sessionStorage.getItem('cortex_tech_session_pin');
+  if (savedPin && /^\d{4}$/.test(savedPin) && !$('#pin').value) {
+    $('#pin').value = savedPin;
+  }
+  $('#pin').addEventListener('change', () => {
+    const val = $('#pin').value.trim();
+    if (/^\d{4}$/.test(val)) sessionStorage.setItem('cortex_tech_session_pin', val);
+  });
+  if (state.ticketId > 0 && /^\d{4}$/.test($('#pin').value.trim())) {
+    loadContext();
+  }
+})();
 </script>
 </body>
 </html>

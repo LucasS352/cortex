@@ -169,7 +169,8 @@ async function renderList() {
       const data = await api('/metricas-suporte');
       const table = (rows, headers, values) => rows.length ? `<table style="width:100%;text-align:left"><thead><tr>${headers.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${values(r).map(v=>`<td>${esc(v ?? '—')}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p>Sem registros neste período.</p>';
       const reviews = data.answer_reviews;
-      list.innerHTML = `<div class="panel"><h3>Avaliações humanas</h3><p>${reviews.total} avaliações · ${reviews.approved} aprovadas · ${reviews.corrected ?? '—'} corrigidas · ${reviews.rejected} rejeitadas</p></div>
+      const avgScoreText = reviews.average_score != null ? ` · Nota média (0–10): <b>${esc(reviews.average_score)}/10</b> (${reviews.scored_count || 0} com nota)` : '';
+      list.innerHTML = `<div class="panel"><h3>Avaliações humanas</h3><p>${reviews.total} avaliações · ${reviews.approved} aprovadas · ${reviews.corrected ?? '—'} corrigidas · ${reviews.rejected} rejeitadas${avgScoreText}</p></div>
         <div class="panel"><h3>Prazo médio até aprovação</h3><p>${data.approval_time.mean_seconds == null ? 'Sem aprovações registradas' : Math.round(data.approval_time.mean_seconds/60)+' minutos'} · ${data.approval_time.decided} decisões</p></div>
         <div class="panel"><h3>Fontes anexadas no assistente</h3><p>${data.evidence_coverage.assistant_messages} respostas · ${data.evidence_coverage.messages_without_attached_source} sem fonte anexada</p></div>
         <div class="panel"><h3>Cobertura por módulo</h3>${table(data.module_coverage,['Módulo','Procedimentos ativos'],r=>[modLabel(r.module_key),r.active_procedures])}</div>
@@ -197,7 +198,11 @@ async function renderList() {
     } else if (state.tab === 'reviews') {
       const reviews = await api('/avaliacoes');
       const rows = reviews.filter(r => !state.module || r.module_key === state.module);
-      list.innerHTML = rows.map(r => `<div class="row"><div class="grow"><div class="title">${r.rating > 0 ? 'Boa resposta' : 'Precisa melhorar'} · #${r.ticket_external_id} · ação ${esc(r.action_id)}</div><div class="meta">${esc(modLabel(r.module_key))} · ${esc(r.actor)} · ${fmt(r.updated_at)}${r.example_ticket_external_id ? ` · exemplo #${r.example_ticket_external_id}` : ''}</div><p>${esc(r.comment)}</p></div>${r.candidate_id ? `<button onclick="openCandidate(${r.candidate_id})">Ver revisão</button>` : ''}</div>`).join('') || '<div class="empty">Nenhuma avaliação neste filtro.</div>';
+      list.innerHTML = rows.map(r => {
+        const scoreTag = r.score != null ? `<span class="pill ${r.score >= 7 ? 'ok' : r.score >= 4 ? 'warn' : 'bad'}">Nota ${r.score}/10</span>` : '';
+        const draftTag = r.is_draft ? '<span class="pill info">Rascunho</span>' : '';
+        return `<div class="row"><div class="grow"><div class="title">${r.rating > 0 ? 'Boa resposta' : 'Precisa melhorar'} · #${r.ticket_external_id} · ação ${esc(r.action_id)}</div><div class="meta">${scoreTag}${draftTag}${esc(modLabel(r.module_key))}${r.subtopic_key ? ' › ' + esc(subLabel(r.module_key, r.subtopic_key)) : ''} · ${esc(r.actor)} · ${fmt(r.updated_at)}${r.example_ticket_external_id ? ` · exemplo #${r.example_ticket_external_id}` : ''}${r.source_answer_action_id ? ` · nota importada #${esc(r.source_answer_action_id)}` : ''}</div><p>${esc(r.comment)}</p></div>${r.candidate_id ? `<button onclick="openCandidate(${r.candidate_id})">Ver revisão</button>` : ''}</div>`;
+      }).join('') || '<div class="empty">Nenhuma avaliação neste filtro.</div>';
     } else if (state.tab === 'suggestions') {
       const rows = await api(`/sugestoes?${m}`);
       list.innerHTML = rows.length ? rows.map(r => `<div class="row">${scoreBadge(r.score)}
@@ -461,7 +466,7 @@ async function reviewTicket(ticket, marker = '') {
     if (!data.answers.length) return toast('Nenhuma resposta Cortex no histórico sincronizado deste ticket. Atualize a sincronização e tente novamente.');
     if (marker && !data.answers.some(a => a.text.includes(marker))) return toast('Esta resposta ainda não está no histórico sincronizado. Sincronize o ticket antes de avaliar.');
     const selected = data.answers.find(a => marker && a.text.includes(marker)) || data.answers[data.answers.length - 1];
-    dlg.innerHTML = `<div class="dlg-head"><h2>Preparar conhecimento · Ticket #${ticket}</h2><button id="closeReview">Fechar</button></div>
+    dlg.innerHTML = `<div class="dlg-head"><h2>Preparar conhecimento · Ticket #${ticket}</h2><div style="display:flex;gap:8px;align-items:center"><a href="/treinamento/tecnico?ticket=${ticket}${marker ? '&marker=' + encodeURIComponent(marker) : ''}" target="_blank" rel="noopener" style="text-decoration:none;padding:8px 12px;border-radius:8px;background:#eff6ff;color:#1d4ed8;font-weight:700;font-size:12px;border:1px solid #bfdbfe">Abrir Curadoria Técnica ↗</a><button id="closeReview">Fechar</button></div></div>
       <div style="padding:20px;max-height:75vh;overflow:auto"><p><b>Responsabilidade do técnico:</b> registrar abaixo a resolução correta e completa. O conteúdo será enviado para a fila e só entrará na IA depois da aprovação administrativa.</p>
       <label>Resposta do Cortex que originou a revisão</label><select id="answerSelect">${data.answers.map(a => `<option value="${esc(a.action_id)}" ${a === selected ? 'selected' : ''}>Ação ${esc(a.action_id)} · ${esc(a.created_at || '')}</option>`).join('')}</select>
       <pre id="answerPreview" class="panel"></pre>

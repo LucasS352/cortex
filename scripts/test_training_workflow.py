@@ -307,4 +307,144 @@ class TrainingWorkflowTests(unittest.TestCase):
         self.assertEqual(result.json()['id'],9)
         save.assert_called_once()
 
+    def test_refactored_technician_curation_screen_layout_and_exclusions(self):
+        html = (Path(__file__).parent / 'static' / 'treinamento_tecnico.html').read_text(encoding='utf-8')
+        # 3 áreas principais presentes
+        self.assertIn('Mensagem original do cliente', html)
+        self.assertIn('O que a IA analisou', html)
+        self.assertIn('Entendimento da IA', html)
+        self.assertIn('Resposta sugerida pela IA', html)
+        self.assertIn('Avaliação da resposta', html)
+        self.assertIn('Solução validada pelo técnico', html)
+        self.assertIn('Revise a resposta, faça ajustes se necessário e envie para a curadoria administrativa.', html)
+        self.assertIn('Importar última resposta do ticket', html)
+        self.assertIn('Salvar rascunho', html)
+        self.assertIn('Enviar para curadoria', html)
+        # Bloco descartado e elementos excluídos na imagem 2 NÃO devem existir
+        self.assertNotIn('Contexto e informações do chamado', html)
+        self.assertNotIn('Buscar chamados, conhecimento', html)
+        self.assertNotIn('2 de 15', html)
+
+    def test_parse_cortex_note_extracts_clean_reply_sources_and_confidence(self):
+        raw_note = (
+            '<div><b>CORTEX — Apoio automático ao atendimento</b></div>'
+            '<div><b>Especialista acionado:</b> Fiscal · <b>Decisão interna:</b> respond</div>'
+            '<div><b>Sugestão de resposta ao cliente:</b><br>'
+            'Olá! Para consultar produtos por fornecedor:<br>'
+            '1. Acesse Relatórios > Vendas > Histórico.<br>'
+            '2. Abra Produtos por Fabricante/Fornecedor.<br>'
+            '3. Selecione a aba Fornecedor.</div>'
+            '<div><b>Observação interna:</b> Cliente deseja localizar relatório de produtos filtrando pelo fornecedor.</div>'
+            '<div><b>Fontes usadas:</b> canon:14, #132084</div>'
+            '<div><b>Chamados semelhantes:</b><br>#132084 — Relatório por fornecedor (0.86)</div>'
+            '<!-- CORTEX-AI-NOTE:v1:132269:1 -->'
+        )
+        parsed = kt._parse_cortex_note(raw_note)
+        self.assertIn('1. Acesse Relatórios > Vendas > Histórico.', parsed['clean_reply'])
+        self.assertNotIn('CORTEX-AI-NOTE:', parsed['clean_reply'])
+        self.assertEqual(parsed['specialist'], 'Fiscal')
+        self.assertEqual(parsed['confidence'], 'Alta')
+        self.assertGreaterEqual(parsed['sources_count'], 2)
+        self.assertIn('Cliente deseja localizar relatório', parsed['internal_observation'])
+
+    def test_save_and_update_answer_score_0_to_10_without_auto_publishing(self):
+        conn = MagicMock()
+        conn.execute.return_value.fetchone.side_effect = [
+            None,
+            {'id': 41, 'score': 8, 'rating': 1, 'module_key': 'fiscal', 'updated_at': '2026-10-22T22:00:00Z'},
+            {'id': 41, 'score': 8, 'rating': 1, 'module_key': 'fiscal'},
+            {'id': 41, 'score': 4, 'rating': -1, 'module_key': 'fiscal', 'updated_at': '2026-10-22T22:05:00Z'},
+        ]
+        actions = [{'id': 9, 'description': 'CORTEX-AI-NOTE:v1:132269:1 Sugestão'}]
+        with patch.object(kt, 'ensure_schema'), patch.object(kt, 'connect') as connect, \
+             patch.object(kt, 'load_ticket', return_value=({'subject': 'Teste'}, actions)), \
+             patch.object(kt, 'taxonomy_options', return_value=[{'key': 'fiscal'}, {'key': 'geral'}]), \
+             patch.object(kt, 'create_candidate') as create_cand, \
+             patch.object(kt, 'audit') as audit_log:
+            connect.return_value.__enter__.return_value = conn
+            first = kt.save_answer_score(132269, '9', 8, 'Lucas', 'fiscal', 'Boa resposta inicial')
+            second = kt.save_answer_score(132269, '9', 4, 'Lucas', 'fiscal', 'Faltou detalhar o passo 2')
+            with self.assertRaisesRegex(ValueError, '0 a 10'):
+                kt.save_answer_score(132269, '9', 11, 'Lucas')
+        self.assertEqual(first['score'], 8)
+        self.assertEqual(first['rating'], 1)
+        self.assertEqual(second['score'], 4)
+        self.assertEqual(second['rating'], -1)
+        create_cand.assert_not_called()
+        self.assertEqual(audit_log.call_count, 2)
+
+    def test_import_last_technician_answer_supports_open_and_closed_tickets_and_prioritizes_public(self):
+        closed_ticket = {'subject': 'Relatório por fornecedor', 'status': 'Fechado', 'baseStatus': 'Closed'}
+        actions = [
+            {'id': 1, 'type': 2, 'createdDate': '2026-04-17T11:36:00',
+             'createdBy': {'profileType': 2, 'businessName': 'Cliente'},
+             'description': 'Bom dia, tem algum relatório de produtos por fornecedor?'},
+            {'id': 2, 'type': 1, 'createdDate': '2026-04-17T11:37:00',
+             'createdBy': {'profileType': 1, 'businessName': 'Cortex'},
+             'description': 'CORTEX-AI-NOTE:v1:132269:1 Resposta automática da IA que deve ser ignorada.'},
+            {'id': 3, 'type': 2, 'createdDate': '2026-04-17T11:38:00',
+             'createdBy': {'profileType': 1, 'businessName': 'Automação'},
+             'description': 'Olá, recebemos sua solicitação e em breve um atendente irá responder.'},
+            {'id': 4, 'type': 2, 'createdDate': '2026-04-17T11:45:00',
+             'createdBy': {'profileType': 1, 'businessName': 'Marília'},
+             'description': '<p><b>Sim!</b> Acesse 1. Relatórios > Vendas > Histórico. 2. Produtos por Fornecedor.</p>'},
+            {'id': 5, 'type': 1, 'createdDate': '2026-04-17T11:50:00',
+             'createdBy': {'profileType': 1, 'businessName': 'Lucas'},
+             'description': 'Nota interna técnica: cliente usa versão atualizada do Master no servidor local.'},
+        ]
+        with patch.object(kt, 'ensure_schema'), patch.object(kt, 'connect'), \
+             patch.object(kt, 'load_ticket', return_value=(closed_ticket, actions)):
+            res = kt.ticket_technician_answers(132269)
+            res_public_only = kt.ticket_technician_answers(132269, allow_internal=False)
+        self.assertEqual(res['status'], 'Fechado')
+        self.assertEqual([a['action_id'] for a in res['answers']], ['4', '5'])
+        # Prioriza a última resposta pública ('4') como recomendada mesmo havendo nota interna posterior ('5')
+        self.assertEqual(res['recommended_action_id'], '4')
+        self.assertEqual(res['answers'][0]['author'], 'Marília')
+        self.assertEqual(res['answers'][0]['visibility'], 'public')
+        self.assertEqual(res['answers'][1]['visibility'], 'internal')
+        self.assertEqual([a['action_id'] for a in res_public_only['answers']], ['4'])
+
+    def test_save_review_draft_and_submit_proposal_with_classification_and_score(self):
+        import os
+        app = FastAPI()
+        app.include_router(router)
+        with TestClient(app, base_url='https://cortex.example') as client, \
+             patch.dict(os.environ, {'CORTEX_PUBLIC_URL': 'https://cortex.example', 'CORTEX_TECHNICIAN_PINS': '1234:Lucas'}), \
+             patch.object(kt, 'save_answer_score', return_value={'id': 10, 'score': 7, 'rating': 1}) as score_fn, \
+             patch.object(kt, 'save_review_draft', return_value={'id': 10, 'is_draft': True}) as draft_fn, \
+             patch.object(kt, 'review_answer', return_value={'id': 10, 'candidate_id': 77, 'example_ticket_id': 132269}) as review_fn:
+            headers = {'Origin': 'https://cortex.example', 'X-Cortex-Technician-Pin': '1234'}
+            score_res = client.post('/api/treinamento/tecnico/tickets/132269/nota', headers=headers,
+                                    json={'action_id': '2', 'score': 7, 'module_key': 'relatorios'})
+            self.assertEqual(score_res.status_code, 200)
+            score_fn.assert_called_once_with(132269, '2', 7, 'Lucas', 'relatorios', None)
+
+            draft_res = client.post('/api/treinamento/tecnico/tickets/132269/rascunho', headers=headers,
+                                    json={'action_id': '2', 'score': 7, 'module_key': 'relatorios',
+                                          'subtopic_key': 'vendas', 'keywords': ['fornecedor', 'historico'],
+                                          'title': 'Relatório de produtos por fornecedor',
+                                          'answer': 'Acesse o menu Relatórios > Vendas > Histórico.',
+                                          'procedure': '1. Acesse Relatórios > Vendas.\n2. Clique em Fornecedor.',
+                                          'source_answer_action_id': '4'})
+            self.assertEqual(draft_res.status_code, 200)
+            draft_fn.assert_called_once()
+
+            prop_res = client.post('/api/treinamento/tecnico/tickets/132269/propostas', headers=headers,
+                                   json={'action_id': '2', 'question_action_id': '1',
+                                         'module_key': 'relatorios', 'subtopic_key': 'vendas',
+                                         'keywords': ['fornecedor', 'historico'], 'score': 7,
+                                         'title': 'Relatório de produtos por fornecedor',
+                                         'answer': 'Sim, o relatório está disponível no menu Relatórios > Vendas.',
+                                         'procedure': '1. Acesse Relatórios > Vendas > Histórico.\n2. Selecione Fornecedor.',
+                                         'validated_html': '<p>Sim, o relatório está disponível.</p><ol><li>Acesse Relatórios</li></ol>',
+                                         'source_answer_action_id': '4', 'comment': 'Validado no atendimento', 'images': []})
+            self.assertEqual(prop_res.status_code, 200)
+            self.assertEqual(prop_res.json()['candidate_id'], 77)
+            self.assertEqual(review_fn.call_args.args[5], 'Lucas')
+            self.assertEqual(review_fn.call_args.args[12], '4')
+            self.assertEqual(review_fn.call_args.kwargs['subtopic_key'], 'vendas')
+            self.assertEqual(review_fn.call_args.kwargs['keywords'], ['fornecedor', 'historico'])
+            self.assertEqual(review_fn.call_args.kwargs['score'], 7)
+
 if __name__ == '__main__': unittest.main()

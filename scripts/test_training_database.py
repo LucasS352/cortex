@@ -110,4 +110,82 @@ class TrainingDatabaseTests(unittest.TestCase):
             conn.rollback()
             conn.close()
 
+    def test_score_0_to_10_draft_and_curation_submission_in_db(self):
+        conn = kt.connect()
+        @contextmanager
+        def shared():
+            yield conn
+        try:
+            conn.execute(kt.MIGRATION.read_text(encoding='utf-8'))
+            ticket = {'external_id': 2147480099, 'subject': 'Relatório de produtos por fornecedor', 'base_status': 'Closed',
+                      'solution_statement': '1. Acesse Relatórios > Vendas > Histórico. 2. Abra Produtos por Fornecedor.'}
+            actions = [
+                {'id': 1, 'type': 2, 'createdDate': '2026-04-17T11:36:00',
+                 'createdBy': {'profileType': 2, 'businessName': 'Cliente'},
+                 'description': 'Bom dia, onde tiro o relatório de produtos por fornecedor?'},
+                {'id': 2, 'type': 1, 'createdDate': '2026-04-17T11:37:00',
+                 'createdBy': {'profileType': 1, 'businessName': 'Cortex'},
+                 'description': 'CORTEX-AI-NOTE:v1:2147480099:1 1. Acesse Relatórios > Vendas.'},
+                {'id': 3, 'type': 2, 'createdDate': '2026-04-17T11:45:00',
+                 'createdBy': {'profileType': 1, 'businessName': 'Lucas'},
+                 'description': '<p>1. Acesse Relatórios > Vendas > Histórico.<br>2. Abra Produtos por Fabricante/Fornecedor.</p>'},
+            ]
+            extraction = kt.parse_extraction({
+                'title': 'Relatório de produtos por fornecedor',
+                'symptom': 'Dúvida sobre relatório de produtos por fornecedor',
+                'root_cause': 'Funcionalidade localizada no menu de Histórico de Vendas',
+                'procedure': '1. Acesse Relatórios > Vendas > Histórico.\n2. Abra Produtos por Fabricante/Fornecedor.',
+                'module_hint': 'registration',
+                'confidence': 'HIGH',
+            })
+            with patch.object(kt, 'connect', shared), patch.object(kt, '_schema_ready', True), \
+                 patch.object(kt, 'load_ticket', return_value=(ticket, actions)), \
+                 patch.object(kt, 'extract', return_value=(extraction, 'Texto de teste', 'heuristic')), \
+                 patch.object(kt, '_embed', return_value=None):
+                kt.save_module('relatorios', 'Relatórios', 'Módulo de relatórios', 'tester')
+                # 1. Persistir nota 0 a 10 e atualizá-la mantendo auditoria
+                s1 = kt.save_answer_score(ticket['external_id'], '2', 8, 'Lucas', 'relatorios')
+                self.assertEqual(s1['score'], 8)
+                s2 = kt.save_answer_score(ticket['external_id'], '2', 5, 'Lucas', 'relatorios', 'Faltou o caminho completo')
+                self.assertEqual(s2['score'], 5)
+                # 2. Salvar rascunho
+                draft = kt.save_review_draft(
+                    ticket['external_id'], '2', 'Lucas', score=5, module_key='relatorios',
+                    subtopic_key='geral', keywords=['fornecedor', 'historico'],
+                    proposed_title='Relatório de produtos por fornecedor',
+                    proposed_answer='Sim, acesse Relatórios > Vendas > Histórico.',
+                    proposed_procedure='1. Acesse Relatórios > Vendas > Histórico.\n2. Clique na aba Fornecedor.',
+                    validated_html='<p>Sim, acesse Relatórios &gt; Vendas &gt; Histórico.</p>',
+                    question_action_id='1', source_answer_action_id='3'
+                )
+                self.assertTrue(draft['is_draft'])
+                saved = kt.ticket_saved_reviews(ticket['external_id'], actor='Lucas')
+                self.assertEqual(len(saved), 1)
+                self.assertEqual(saved[0]['score'], 5)
+                self.assertTrue(saved[0]['is_draft'])
+                self.assertEqual(saved[0]['keywords'], ['fornecedor', 'historico'])
+                # 3. Enviar para curadoria administrativa (cria candidato pending, não publica automaticamente)
+                submitted = kt.review_answer(
+                    ticket['external_id'], '2', -1, 'relatorios', 'Validado pelo técnico', 'Lucas',
+                    ticket['external_id'], 'Relatório de produtos por fornecedor',
+                    'Sim, acesse Relatórios > Vendas > Histórico e abra Produtos por Fornecedor.',
+                    '1. Acesse Relatórios > Vendas > Histórico.\n2. Abra Produtos por Fabricante/Fornecedor.',
+                    [], '1', '3', subtopic_key='geral', keywords=['fornecedor', 'historico'],
+                    score=5, validated_html='<p>Sim, acesse Relatórios.</p>'
+                )
+                self.assertIsNotNone(submitted['candidate_id'])
+                cand = kt.get_candidate(submitted['candidate_id'])
+                self.assertEqual(cand['status'], 'pending')
+                self.assertEqual(cand['suggested_subtopic'], 'geral')
+                self.assertIn('fornecedor', cand['extraction']['keywords'])
+                # Garante que NÃO foi publicado automaticamente em cortex_kb.items nem em ticket_knowledge_nodes
+                published_count = conn.execute(
+                    'SELECT count(*) AS n FROM cortex_kb.items WHERE title=%s',
+                    ('Relatório de produtos por fornecedor',)
+                ).fetchone()['n']
+                self.assertEqual(published_count, 0)
+        finally:
+            conn.rollback()
+            conn.close()
+
 if __name__ == '__main__': unittest.main()
