@@ -327,9 +327,58 @@ aside h2 {
   box-shadow: inset 3px 0 0 var(--brand);
 }
 
+.tree-arrow {
+  display: inline-block;
+  font-size: 10px;
+  width: 12px;
+  text-align: center;
+  color: var(--muted);
+  user-select: none;
+}
+
+.tree-arrow-sub {
+  font-size: 9px;
+  width: 10px;
+}
+
+.sub-sub {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 12px 5px 38px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--muted);
+  transition: all 0.14s ease;
+  margin-bottom: 2px;
+  position: relative;
+}
+
+.sub-sub::before {
+  content: "↳";
+  position: absolute;
+  left: 24px;
+  color: var(--line-strong);
+  font-size: 11px;
+}
+
+.sub-sub:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+
+.sub-sub.active {
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--accent-teal);
+}
+
 .mod small,
 .mod .pill,
-.sub .pill {
+.sub .pill,
+.sub-sub .pill {
   font-weight: 600;
   font-size: 11px;
   font-family: 'JetBrains Mono', monospace;
@@ -863,7 +912,7 @@ html[data-theme="dark"] a { color: #7ab3ff; }
 
 <script>
 const API = '/api/treinamento';
-const state = { tab: 'queue', module: null, subtopic: null, q: '', taxonomy: [], overview: null, images: [], staging: [], releases: [] };
+const state = { tab: 'queue', module: null, subtopic: null, expandedSubs: {}, q: '', taxonomy: [], overview: null, images: [], staging: [], releases: [] };
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
@@ -897,20 +946,84 @@ async function loadOverview() {
   ].map(([l, v]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
 
   $('#tree').innerHTML = `<h2>Módulos do Master</h2><div class="mod ${!state.module ? 'active' : ''}" data-m=""><span>Todos os módulos</span><span class="pill">${t.active || 0}</span></div>` +
-    (o.modules || []).map(m => `
-      <div class="mod ${state.module === m.key && !state.subtopic ? 'active' : ''}" data-m="${m.key}" title="${esc(m.description)}">
-        <span>${esc(m.label)}</span>
-        <span>${m.pending ? `<span class="pill warn">${m.pending} fila</span> ` : ''}<span class="pill">${m.items}</span></span>
-      </div>
-      ${state.module === m.key ? (m.subtopics || []).map(s => `
-        <div class="sub ${state.subtopic === s.key ? 'active' : ''}" data-m="${m.key}" data-s="${s.key}">
-          <span>${esc(s.label)}</span><span class="pill">${s.items}</span>
-        </div>`).join('') : ''}`).join('');
+    (o.modules || []).map(m => {
+      const isModOpen = state.module === m.key;
+      const modActive = isModOpen && !state.subtopic ? 'active' : '';
+      const modArrow = `<span class="tree-arrow">${isModOpen ? '▾' : '▸'}</span>`;
+      const subtopicsHtml = isModOpen ? (m.subtopics || []).map(s => {
+        const hasChildren = s.children && s.children.length > 0;
+        const isSubExpanded = !!state.expandedSubs[s.key] || (state.subtopic && state.subtopic.startsWith(s.key + ':'));
+        const isSubActive = state.subtopic === s.key;
+        const subArrow = hasChildren ? `<span class="tree-arrow tree-arrow-sub">${isSubExpanded ? '▾' : '▸'}</span>` : '';
+        const childrenHtml = (hasChildren && isSubExpanded) ? (s.children || []).map(c => {
+          const isChildActive = state.subtopic === c.key;
+          return `
+            <div class="sub-sub ${isChildActive ? 'active' : ''}" data-m="${m.key}" data-s="${c.key}">
+              <span>${esc(c.label)}</span><span class="pill">${c.items}</span>
+            </div>`;
+        }).join('') : '';
+
+        return `
+          <div class="sub ${isSubActive ? 'active' : ''}" data-m="${m.key}" data-s="${s.key}" ${hasChildren ? 'data-parent="1"' : ''}>
+            <span style="display:flex;align-items:center;gap:5px">${subArrow}<span>${esc(s.label)}</span></span>
+            <span class="pill">${s.items}</span>
+          </div>
+          ${childrenHtml}`;
+      }).join('') : '';
+
+      return `
+        <div class="mod ${modActive}" data-m="${m.key}" title="${esc(m.description)}">
+          <span style="display:flex;align-items:center;gap:6px">${modArrow}<span>${esc(m.label)}</span></span>
+          <span>${m.pending ? `<span class="pill warn">${m.pending} fila</span> ` : ''}<span class="pill">${m.items}</span></span>
+        </div>
+        ${subtopicsHtml}`;
+    }).join('');
 }
 
 $('#tree').addEventListener('click', (e) => {
   const el = e.target.closest('[data-m]'); if (!el) return;
-  state.module = el.dataset.m || null; state.subtopic = el.dataset.s || null;
+  const m = el.dataset.m || null;
+  const s = el.dataset.s || null;
+  const isParent = el.dataset.parent === '1';
+
+  if (!m) {
+    state.module = null;
+    state.subtopic = null;
+    refresh();
+    return;
+  }
+
+  if (!s) {
+    if (state.module === m) {
+      // Toggle accordion: collapse back inside the module
+      state.module = null;
+      state.subtopic = null;
+    } else {
+      state.module = m;
+      state.subtopic = null;
+    }
+    refresh();
+    return;
+  }
+
+  if (isParent) {
+    const isExpanded = !!state.expandedSubs[s] || (state.subtopic && state.subtopic.startsWith(s + ':'));
+    if (isExpanded && state.subtopic === s) {
+      delete state.expandedSubs[s];
+      state.subtopic = null;
+    } else {
+      state.expandedSubs[s] = true;
+      state.subtopic = s;
+    }
+    refresh();
+    return;
+  }
+
+  if (state.subtopic === s) {
+    state.subtopic = s.includes(':') ? s.split(':')[0] : null;
+  } else {
+    state.subtopic = s;
+  }
   refresh();
 });
 
@@ -955,7 +1068,10 @@ async function renderList() {
         <div class="panel"><h3>Procedimentos usados nas notas e no assistente</h3>${table(data.operational?.procedures || [],['Fonte','Versão','Usos'],r=>[r.source_id,r.source_version,r.events])}</div>` +
         `<div class="panel"><h3>Limites destas métricas</h3>${(data.limitations || []).map(v => `<p class="muted">${esc(v)}</p>`).join('')}</div>`;
     } else if (state.tab === 'queue') {
-      const rows = await api(`/candidatos?${m}`);
+      const qp = new URLSearchParams({ status: 'open' });
+      if (state.module) qp.set('module', state.module);
+      if (state.subtopic) qp.set('subtopic', state.subtopic);
+      const rows = await api(`/candidatos?${qp}`);
       list.innerHTML = rows.length ? rows.map(r => {
         const ok = (r.quality_checks || []).filter(c => c.ok).length;
         const rel = (r.similar_items || [])[0];
@@ -1089,7 +1205,15 @@ $('#transformBtn').onclick = () => {
 };
 
 function moduleOptions(sel) { return state.taxonomy.map(m => `<option value="${m.key}" ${m.key === sel ? 'selected' : ''}>${esc(m.label)}</option>`).join(''); }
-function subOptions(mod, sel) { return ((state.taxonomy.find(m => m.key === mod) || {}).subtopics || []).map(([k, l]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(l)}</option>`).join(''); }
+function subOptions(mod, sel) {
+  const m = state.taxonomy.find(x => x.key === mod);
+  if (!m || !m.subtopics) return '';
+  return m.subtopics.map(([k, l]) => {
+    const isChild = k.includes(':');
+    const displayLabel = isChild ? `  ↳ ${l.replace(/^.*? > /, '')}` : l;
+    return `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(displayLabel)}</option>`;
+  }).join('');
+}
 
 function contentForm(c, onlySelected = false) {
   const a = c.applicability || {};

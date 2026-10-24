@@ -53,6 +53,55 @@ SUBTOPICS = {
     'logistics': [('labels','Etiquetas',('etiqueta',)),('tracking','Rastreamento',('rastreio','rastreamento','objeto')),
                   ('carriers','Transportadoras',('transportadora','frete','correios','sigep'))],
 }
+SUB_SUBTOPICS = {
+    'anymarket': [
+        ('anymarket:pedidos', 'Pedidos e faturamento', ('pedido', 'faturar', 'faturamento', 'cancelamento', 'ordem', 'order', 'status do pedido')),
+        ('anymarket:produtos', 'Produtos e anúncios', ('produto', 'anuncio', 'publicacao', 'variacao', 'sku', 'catalogo', 'codigo de barras')),
+        ('anymarket:estoque_preco', 'Estoque e preços', ('estoque', 'preco', 'saldo', 'atualizacao de estoque', 'tabela de preco')),
+        ('anymarket:transportadora', 'Transportadoras e frete', ('transportadora', 'frete', 'carrier', 'rastreio', 'tracking', 'envio')),
+        ('anymarket:atributos', 'Atributos obrigatórios', ('atributo', 'caracteristica', 'campo obrigatorio', 'ficha tecnica', 'categoria')),
+        ('anymarket:auth', 'Token e autenticação', ('token', 'autenticacao', 'credencial', 'chave', 'conexao', 'autorizacao', 'login')),
+        ('anymarket:callbacks', 'Callbacks e webhooks', ('callback', 'webhook', 'notificacao', 'fila de sincronizacao')),
+    ],
+    'mercadolivre': [
+        ('mercadolivre:pedidos', 'Pedidos e vendas', ('pedido', 'faturamento', 'cancelamento', 'venda')),
+        ('mercadolivre:anuncios', 'Anúncios e produtos', ('anuncio', 'publicacao', 'variacao', 'sku')),
+        ('mercadolivre:envios', 'Mercado Envios e frete', ('envio', 'mercado envios', 'frete', 'etiqueta', 'coleta')),
+        ('mercadolivre:perguntas', 'Perguntas e mensagens', ('pergunta', 'mensagem', 'pos-venda')),
+        ('mercadolivre:auth', 'Token e conexão', ('token', 'autenticacao', 'conexao')),
+    ],
+    'tray': [
+        ('tray:pedidos', 'Pedidos e faturamento', ('pedido', 'faturar', 'faturamento')),
+        ('tray:produtos', 'Produtos e variações', ('produto', 'variacao', 'sku', 'preco')),
+        ('tray:frete', 'Frete e envio', ('frete', 'envio', 'transportadora')),
+        ('tray:auth', 'Token e conexão', ('token', 'api key', 'autenticacao')),
+    ],
+    'vtex': [
+        ('vtex:pedidos', 'Pedidos (OMS)', ('pedido', 'oms', 'faturamento')),
+        ('vtex:catalogo', 'Catálogo e SKU', ('catalogo', 'sku', 'produto', 'especificacao')),
+        ('vtex:estoque_preco', 'Estoque e preço', ('estoque', 'preco', 'inventario')),
+        ('vtex:logistica', 'Logística e doca', ('logistica', 'doca', 'transportadora')),
+    ],
+    'rejections': [
+        ('rejections:icms', 'ICMS e DIFAL', ('icms', 'difal', 'partilha', 'fcp')),
+        ('rejections:dados', 'Dados Emitente / Destinatário', ('destinatario', 'emitente', 'cnpj', 'ie', 'endereco', 'cep')),
+        ('rejections:sefaz', 'Sefaz indisponível / timeout', ('sefaz', 'indisponivel', 'timeout', 'comunicacao')),
+        ('rejections:duplicidade', 'Duplicidade de NF-e', ('duplicidade', 'duplicada')),
+        ('rejections:total', 'Total e fechamento de valores', ('total', 'valor', 'base de calculo', 'soma')),
+    ],
+    'grades': [
+        ('grades:estrutura', 'Estrutura e tamanhos', ('tamanho', 'cor', 'grade', 'estrutura')),
+        ('grades:ean', 'Código de barras e EAN', ('ean', 'codigo de barras', 'gtin')),
+    ],
+    'prices': [
+        ('prices:tabelas', 'Tabelas e regras atacado/varejo', ('tabela', 'atacado', 'varejo', 'markup')),
+        ('prices:promocoes', 'Preços promocionais', ('promocao', 'promocional', 'desconto')),
+    ],
+    'inventory': [
+        ('inventory:saldo', 'Saldo e movimentação', ('saldo', 'movimentacao', 'ajuste', 'kardex')),
+        ('inventory:lote', 'Lote e validade', ('lote', 'validade', 'vencimento')),
+    ],
+}
 STATUSES = {'draft', 'approved', 'excluded'}
 _schema_ready = False
 _schema_lock = RLock()
@@ -91,15 +140,26 @@ def classify(title, modules, category=''):
     return 'unclassified'
 
 
-def subtopic(module_key,title,modules):
+def subtopic(module_key,title,modules,deep=False):
     for text in (normalize(title),normalize(' '.join(modules or []))):
         for key,_,terms in SUBTOPICS.get(module_key,[]):
-            if any(term in text for term in terms): return key
+            if any(term in text for term in terms):
+                if deep and key in SUB_SUBTOPICS:
+                    for sub_key,_,sub_terms in SUB_SUBTOPICS[key]:
+                        if any(term in text for term in sub_terms):
+                            return sub_key
+                return key
     return 'general'
 
 
 def subtopic_options(module_key):
-    return [(key,label) for key,label,_ in SUBTOPICS.get(module_key,[])] + [('general','Geral / outros')]
+    options = []
+    for key,label,_ in SUBTOPICS.get(module_key,[]):
+        options.append((key,label))
+        for sub_key,sub_label,_ in SUB_SUBTOPICS.get(key,[]):
+            options.append((sub_key, f"{label} > {sub_label}"))
+    options.append(('general','Geral / outros'))
+    return options
 
 
 def connect(read_only=False):

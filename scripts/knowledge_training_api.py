@@ -207,9 +207,9 @@ def suggestions(module: str | None = None, limit: int = Query(30, ge=1, le=100))
 
 
 @router.get('/candidatos')
-def candidates(module: str | None = None, status: str = 'open'):
+def candidates(module: str | None = None, subtopic: str | None = None, status: str = 'open'):
     statuses = ('pending', 'conflict') if status == 'open' else (status,)
-    return _guard(kt.list_candidates, statuses, module)
+    return _guard(kt.list_candidates, statuses, module, subtopic)
 
 
 @router.post('/candidatos')

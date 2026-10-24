@@ -566,15 +566,16 @@ def get_candidate(candidate_id):
     return {**dict(row), 'answer_reviews': reviews}
 
 
-def list_candidates(status=('pending', 'conflict'), module=None, limit=100):
+def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, limit=100):
     ensure_schema()
     with connect() as conn:
         return conn.execute('''SELECT id,ticket_external_id,status,usefulness_score,suggested_module,suggested_subtopic,
                    extraction->>'title' AS title, extraction->>'confidence' AS confidence, quality_checks, similar_items,
                    extractor, created_by, created_at
             FROM cortex_kb.candidates WHERE status = ANY(%s) AND (%s::text IS NULL OR suggested_module=%s)
+              AND (%s::text IS NULL OR suggested_subtopic=%s OR suggested_subtopic LIKE (%s || ':%'))
             ORDER BY (status='conflict') DESC, usefulness_score DESC, created_at LIMIT %s''',
-            (list(status), module, module, limit)).fetchall()
+            (list(status), module, module, subtopic, subtopic, subtopic, limit)).fetchall()
 
 
 def suggest_tickets(limit=30, module=None):
@@ -901,14 +902,35 @@ def overview():
     tree = []
     for mod in taxonomy_options():
         key, label, description = mod['key'], mod['label'], mod['description']
-        subs = {s: 0 for s, _ in taxonomy.subtopic_options(key)}
-        for r in items:
-            if r['module_key'] == key:
-                subs[r['subtopic_key']] = subs.get(r['subtopic_key'], 0) + r['n']
+        mod_counts = {r['subtopic_key']: r['n'] for r in items if r['module_key'] == key}
+        subs_list = []
+        for skey, slabel, _ in taxonomy.SUBTOPICS.get(key, []):
+            children = []
+            for ckey, clabel, _ in getattr(taxonomy, 'SUB_SUBTOPICS', {}).get(skey, []):
+                children.append({
+                    'key': ckey,
+                    'label': clabel,
+                    'items': mod_counts.get(ckey, 0)
+                })
+            total_sub_items = mod_counts.get(skey, 0) + sum(c['items'] for c in children)
+            subs_list.append({
+                'key': skey,
+                'label': slabel,
+                'items': total_sub_items,
+                'children': children
+            })
+        known_keys = {s['key'] for s in subs_list} | {c['key'] for s in subs_list for c in s.get('children', [])}
+        general_n = sum(n for k, n in mod_counts.items() if k not in known_keys)
+        subs_list.append({
+            'key': 'general',
+            'label': 'Geral / outros',
+            'items': general_n,
+            'children': []
+        })
         tree.append({'key': key, 'label': label, 'description': description,
-                     'items': sum(subs.values()), 'pending': next((p['n'] for p in pending if p['module_key'] == key), 0),
-                     'subtopics': [{'key': s, 'label': dict(taxonomy.subtopic_options(key)).get(s, s), 'items': n}
-                                   for s, n in subs.items()]})
+                     'items': sum(r['n'] for r in items if r['module_key'] == key),
+                     'pending': next((p['n'] for p in pending if p['module_key'] == key), 0),
+                     'subtopics': subs_list})
     return {'totals': dict(totals), 'modules': tree}
 
 
@@ -921,7 +943,8 @@ def list_items(module=None, subtopic=None, status='active', q=None, limit=200):
                    (SELECT count(*) FROM cortex_kb.conflicts c WHERE c.item_id=i.id AND c.status='open') AS open_conflicts,
                    (SELECT coalesce(sum(rating),0) FROM cortex_kb.feedback f WHERE f.version_id=v.id) AS feedback
             FROM cortex_kb.items i LEFT JOIN cortex_kb.versions v ON v.id=i.current_version_id
-            WHERE i.status=%(st)s AND (%(m)s::text IS NULL OR i.module_key=%(m)s) AND (%(s)s::text IS NULL OR i.subtopic_key=%(s)s)
+            WHERE i.status=%(st)s AND (%(m)s::text IS NULL OR i.module_key=%(m)s)
+              AND (%(s)s::text IS NULL OR i.subtopic_key=%(s)s OR i.subtopic_key LIKE (%(s)s || ':%'))
               AND (%(q)s::text IS NULL OR i.title ILIKE '%%'||%(q)s||'%%' OR v.procedure ILIKE '%%'||%(q)s||'%%'
                    OR array_to_string(v.error_messages,' ') ILIKE '%%'||%(q)s||'%%')
             ORDER BY open_conflicts DESC, i.updated_at DESC LIMIT %(l)s''',
