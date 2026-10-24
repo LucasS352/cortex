@@ -573,7 +573,7 @@ def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, 
                    extraction->>'title' AS title, extraction->>'confidence' AS confidence, quality_checks, similar_items,
                    extractor, created_by, created_at
             FROM cortex_kb.candidates WHERE status = ANY(%s) AND (%s::text IS NULL OR suggested_module=%s)
-              AND (%s::text IS NULL OR suggested_subtopic=%s OR suggested_subtopic LIKE (%s || ':%'))
+              AND (%s::text IS NULL OR suggested_subtopic=%s OR suggested_subtopic LIKE (%s || ':%%'))
             ORDER BY (status='conflict') DESC, usefulness_score DESC, created_at LIMIT %s''',
             (list(status), module, module, subtopic, subtopic, subtopic, limit)).fetchall()
 
@@ -899,12 +899,24 @@ def overview():
             (SELECT count(*) FROM cortex_kb.candidates WHERE status IN ('pending','conflict')) AS pending,
             (SELECT count(*) FROM cortex_kb.conflicts WHERE status='open') AS conflicts,
             (SELECT count(*) FROM cortex_kb.versions WHERE status='published' AND NOT embedding_ok) AS without_vector''').fetchone()
+        custom_tax = conn.execute('SELECT key, label, description, parent_key FROM cortex_kb.taxonomy ORDER BY label').fetchall()
+
+    children_by_parent = {}
+    for r in custom_tax:
+        if r.get('parent_key'):
+            children_by_parent.setdefault(r['parent_key'], []).append(dict(r))
+
     tree = []
     for mod in taxonomy_options():
         key, label, description = mod['key'], mod['label'], mod['description']
         mod_counts = {r['subtopic_key']: r['n'] for r in items if r['module_key'] == key}
         subs_list = []
-        for skey, slabel, _ in taxonomy.SUBTOPICS.get(key, []):
+        all_sub_entries = [(k, l) for k, l, _ in taxonomy.SUBTOPICS.get(key, [])]
+        for sr in children_by_parent.get(key, []):
+            if sr['key'] not in {k for k, _ in all_sub_entries}:
+                all_sub_entries.append((sr['key'], sr['label']))
+
+        for skey, slabel in all_sub_entries:
             children = []
             for ckey, clabel, _ in getattr(taxonomy, 'SUB_SUBTOPICS', {}).get(skey, []):
                 children.append({
@@ -912,6 +924,13 @@ def overview():
                     'label': clabel,
                     'items': mod_counts.get(ckey, 0)
                 })
+            for cr in children_by_parent.get(skey, []):
+                if cr['key'] not in {c['key'] for c in children}:
+                    children.append({
+                        'key': cr['key'],
+                        'label': cr['label'],
+                        'items': mod_counts.get(cr['key'], 0)
+                    })
             total_sub_items = mod_counts.get(skey, 0) + sum(c['items'] for c in children)
             subs_list.append({
                 'key': skey,
@@ -944,7 +963,7 @@ def list_items(module=None, subtopic=None, status='active', q=None, limit=200):
                    (SELECT coalesce(sum(rating),0) FROM cortex_kb.feedback f WHERE f.version_id=v.id) AS feedback
             FROM cortex_kb.items i LEFT JOIN cortex_kb.versions v ON v.id=i.current_version_id
             WHERE i.status=%(st)s AND (%(m)s::text IS NULL OR i.module_key=%(m)s)
-              AND (%(s)s::text IS NULL OR i.subtopic_key=%(s)s OR i.subtopic_key LIKE (%(s)s || ':%'))
+              AND (%(s)s::text IS NULL OR i.subtopic_key=%(s)s OR i.subtopic_key LIKE (%(s)s || ':%%'))
               AND (%(q)s::text IS NULL OR i.title ILIKE '%%'||%(q)s||'%%' OR v.procedure ILIKE '%%'||%(q)s||'%%'
                    OR array_to_string(v.error_messages,' ') ILIKE '%%'||%(q)s||'%%')
             ORDER BY open_conflicts DESC, i.updated_at DESC LIMIT %(l)s''',
@@ -1012,31 +1031,71 @@ def resolve_conflict(conflict_id, actor, note, dismiss=False):
 def taxonomy_options():
     ensure_schema()
     with connect() as conn:
-        overrides = {r['key']: dict(r) for r in conn.execute('SELECT * FROM cortex_kb.taxonomy ORDER BY label')}
+        all_tax = conn.execute('SELECT key, label, description, parent_key FROM cortex_kb.taxonomy ORDER BY label').fetchall()
+
+    roots_by_key = {r['key']: dict(r) for r in all_tax if not r.get('parent_key')}
+    children_by_parent = {}
+    for r in all_tax:
+        if r.get('parent_key'):
+            children_by_parent.setdefault(r['parent_key'], []).append(dict(r))
+
     result = []
     for key, label, description in taxonomy.MODULES:
-        row = overrides.pop(key, {})
+        row = roots_by_key.pop(key, {})
+        subs = []
+        for skey, slabel, _ in taxonomy.SUBTOPICS.get(key, []):
+            subs.append((skey, slabel))
+            for ckey, clabel, _ in getattr(taxonomy, 'SUB_SUBTOPICS', {}).get(skey, []):
+                subs.append((ckey, f"{slabel} > {clabel}"))
+            for cr in children_by_parent.get(skey, []):
+                subs.append((cr['key'], f"{slabel} > {cr['label']}"))
+        for sr in children_by_parent.get(key, []):
+            subs.append((sr['key'], sr['label']))
+            for cr in children_by_parent.get(sr['key'], []):
+                subs.append((cr['key'], f"{sr['label']} > {cr['label']}"))
+        subs.append(('general', 'Geral / outros'))
         result.append({'key': key, 'label': row.get('label', label), 'description': row.get('description', description),
-                       'subtopics': taxonomy.subtopic_options(key)})
-    result.extend({'key': k, 'label': r['label'], 'description': r['description'],
-                   'subtopics': [('general', 'Geral / outros')]} for k, r in overrides.items())
+                       'subtopics': subs})
+
+    for k, r in roots_by_key.items():
+        subs = []
+        for sr in children_by_parent.get(k, []):
+            subs.append((sr['key'], sr['label']))
+            for cr in children_by_parent.get(sr['key'], []):
+                subs.append((cr['key'], f"{sr['label']} > {cr['label']}"))
+        subs.append(('general', 'Geral / outros'))
+        result.append({'key': k, 'label': r['label'], 'description': r['description'],
+                       'subtopics': subs})
     return result
 
 
-def save_module(key, label, description, actor):
-    if not re.fullmatch(r'[a-z][a-z0-9_]{1,49}', key) or key == 'unclassified':
-        raise ValueError('Use uma chave de 2 a 50 letras minúsculas, números ou _. A classificar é reservado.')
+def save_module(key, label, description, actor, parent_key=None):
+    if not re.fullmatch(r'[a-z][a-z0-9_:]{1,59}', str(key or '')) or key == 'unclassified':
+        raise ValueError('Use uma chave de 2 a 60 letras minúsculas, números, _ ou :. A classificar é reservado.')
     label = label.strip()
     if not 2 <= len(label) <= 80:
-        raise ValueError('Nome do módulo deve ter de 2 a 80 caracteres.')
+        raise ValueError('Nome deve ter de 2 a 80 caracteres.')
+    parent = (parent_key or '').strip() or None
     ensure_schema()
     with connect() as conn:
         before = conn.execute('SELECT * FROM cortex_kb.taxonomy WHERE key=%s', (key,)).fetchone()
-        conn.execute("""INSERT INTO cortex_kb.taxonomy(key,label,description,updated_by) VALUES (%s,%s,%s,%s)
+        conn.execute("""INSERT INTO cortex_kb.taxonomy(key,label,description,parent_key,updated_by) VALUES (%s,%s,%s,%s,%s)
             ON CONFLICT(key) DO UPDATE SET label=excluded.label, description=excluded.description,
-            updated_by=excluded.updated_by, updated_at=now()""", (key,label,description[:500],actor))
-        audit(conn, 'taxonomy', 0, 'module_saved', actor, before=before,
-              after={'key': key, 'label': label, 'description': description})
+            parent_key=excluded.parent_key, updated_by=excluded.updated_by, updated_at=now()""",
+            (key, label, (description or '')[:500], parent, actor))
+        audit(conn, 'taxonomy', 0, 'node_saved', actor, before=before,
+              after={'key': key, 'label': label, 'description': description, 'parent_key': parent})
+    return taxonomy_options()
+
+
+def delete_taxonomy_node(key, actor):
+    ensure_schema()
+    with connect() as conn:
+        before = conn.execute('SELECT * FROM cortex_kb.taxonomy WHERE key=%s', (key,)).fetchone()
+        if not before:
+            raise LookupError('Registro não encontrado na base customizada.')
+        conn.execute('DELETE FROM cortex_kb.taxonomy WHERE key=%s OR parent_key=%s', (key, key))
+        audit(conn, 'taxonomy', 0, 'node_deleted', actor, before=before)
     return taxonomy_options()
 
 

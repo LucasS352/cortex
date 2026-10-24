@@ -285,9 +285,10 @@ def taxonomy():
 
 
 class ModuleEdit(BaseModel):
-    key: str = Field(min_length=2, max_length=50)
+    key: str = Field(min_length=2, max_length=60)
     label: str = Field(min_length=2, max_length=80)
     description: str = Field(default='', max_length=500)
+    parent_key: str | None = Field(default=None, max_length=60)
 
 
 class AnswerReview(BaseModel):
@@ -356,7 +357,12 @@ class TechnicianProposal(BaseModel):
 
 @router.post('/taxonomia')
 def save_module(body: ModuleEdit, request: Request):
-    return _guard(kt.save_module, body.key, body.label, body.description, actor(request))
+    return _guard(kt.save_module, body.key, body.label, body.description, actor(request), body.parent_key)
+
+
+@router.delete('/taxonomia/{key}')
+def delete_taxonomy(key: str, request: Request):
+    return _guard(kt.delete_taxonomy_node, key, actor(request))
 
 
 @router.get('/tickets/{ticket_id}/respostas')

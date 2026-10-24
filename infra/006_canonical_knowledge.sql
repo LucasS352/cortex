@@ -132,8 +132,10 @@ CREATE INDEX IF NOT EXISTS idx_kb_audit_entity ON cortex_kb.audit (entity, entit
 -- Human feedback is scoped to one exact answer, never a whole conversation.
 CREATE TABLE IF NOT EXISTS cortex_kb.taxonomy (
     key text PRIMARY KEY, label text NOT NULL, description text NOT NULL DEFAULT '',
+    parent_key text,
     updated_by text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE cortex_kb.taxonomy ADD COLUMN IF NOT EXISTS parent_key text;
 CREATE TABLE IF NOT EXISTS cortex_kb.answer_reviews (
     id bigserial PRIMARY KEY, ticket_external_id integer NOT NULL, action_id text NOT NULL,
     answer_text text NOT NULL, rating smallint NOT NULL CHECK (rating IN (-1,1)),
