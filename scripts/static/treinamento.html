@@ -900,6 +900,7 @@ dialog.candidate-dialog { width: min(1600px, 98vw); max-height: 96vh; }
 .subtree-option { display: block; width: 100%; text-align: left; border: 0; background: none; border-radius: 5px; padding: 7px 8px 7px 24px; font-weight: 500; }
 .subtree-option.active { color: var(--brand); font-weight: 800; }
 .subtree-parent-option { padding-left: 12px; font-size: 11px; }
+.ticket-image-select { margin-top: 7px; padding: 5px 8px; font-size: 11px; white-space: normal; }
 .candidate-dialog .dlg-foot { padding: 10px 14px; }
 @media (max-width: 1120px) { .dlg-body.candidate-body { grid-template-columns: minmax(230px, .8fr) minmax(390px, 1.4fr); } .review-side { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .review-side .review-card { margin: 0; } }
 @media (max-width: 760px) { .dlg-body.candidate-body { grid-template-columns: 1fr; } .review-side { display: block; } .review-field-pair { grid-template-columns: 1fr; } .candidate-dialog .dlg-body { max-height: calc(96vh - 190px); } }
@@ -1327,10 +1328,10 @@ function bindCandidateForm() {
   bindCandidateSubtree();
 }
 
-function candidateForm(c, content, related) {
+function candidateForm(c, content, related, imported = new Map()) {
   const x = c.extraction || {}, context = c.ticket_context || {}, a = content.applicability || {};
   const history = context.history || [];
-  const ownUploads = new Set((content.images || []).map(image => image.file));
+  const ownUploads = new Set([...(content.images || []).map(image => image.file), ...imported.values()]);
   const images = state.images.filter(image => ownUploads.has(image.file));
   const question = context.question || content.symptom || '';
   const techValidated = c.extractor === 'technician_proposal' || (c.answer_reviews || []).some(r => r.rating > 0);
@@ -1339,7 +1340,7 @@ function candidateForm(c, content, related) {
       <div class="review-card"><h3>Ticket #${esc(c.ticket_external_id)}</h3><p class="review-muted">${esc(context.subject || 'Chamado Movidesk')} · ${esc(context.status || 'Status não disponível')}</p>
         <h3>Pergunta do cliente</h3><div class="review-question">${esc(question || 'Pergunta não disponível neste snapshot. Confira o ticket original.')}</div></div>
       <div class="review-card"><h3>Imagens do ticket <span class="pill">${(context.images || []).length}</span></h3>
-        ${(context.images || []).length ? (context.images || []).map(image => `<div class="review-image"><a href="${esc(image.url)}" target="_blank" rel="noopener" title="Abrir print original"><img src="${esc(image.url)}" alt="${esc(image.name)}" loading="lazy"></a><div><b>${image.role === 'technician' ? 'Técnico' : 'Cliente'}</b><br><span class="review-muted">${esc(image.name)}</span></div></div>`).join('') : '<p class="review-muted">Nenhum print encontrado no histórico sincronizado.</p>'}
+        ${(context.images || []).length ? (context.images || []).map(image => `<div class="review-image"><a href="${esc(image.url)}" target="_blank" rel="noopener" title="Abrir print original"><img src="${esc(image.url)}" alt="${esc(image.name)}" loading="lazy"></a><div><b>${image.role === 'technician' ? 'Técnico' : 'Cliente'}</b><br><span class="review-muted">${esc(image.name)}</span><br><button type="button" class="ticket-image-select" data-action="${esc(image.action_id)}" data-index="${esc(image.index)}" data-url="${esc(image.url)}" data-role="${esc(image.role)}" ${imported.has(image.url) ? 'disabled' : ''}>${imported.has(image.url) ? 'Selecionado' : 'Usar no procedimento'}</button></div></div>`).join('') : '<p class="review-muted">Nenhum print encontrado no histórico sincronizado.</p>'}
         <p class="review-muted">Prints originais para conferência. Somente imagens revisadas e vinculadas abaixo serão publicadas.</p></div>
       <div class="review-card"><h3>Histórico relevante</h3><div class="review-history">
         ${history.length ? history.map(h => `<div class="review-event ${h.role === 'technician' ? 'technician' : 'customer'}"><div class="review-event-head"><b>${h.role === 'technician' ? 'Técnico' : 'Cliente'}${h.author ? ' · ' + esc(h.author) : ''}</b><time>${fmt(h.at)}</time></div><p>${esc(h.text)}</p>${h.attachments?.length ? `<small class="review-muted">Anexos: ${esc(h.attachments.join(', '))}</small>` : ''}</div>`).join('') : '<p class="review-muted">Histórico não disponível neste snapshot. Abra o ticket para confirmar a sequência completa.</p>'}
@@ -1449,6 +1450,7 @@ async function openCandidate(id) {
   const c = await api(`/candidatos/${id}`); const x = c.extraction;
   const content = { ...x, module_key: c.suggested_module, subtopic_key: c.suggested_subtopic };
   const related = c.similar_items || [];
+  const imported = new Map();
   const dlg = $('#dlg');
   if (dlg.open) dlg.close();
   dlg.classList.add('candidate-dialog');
@@ -1465,7 +1467,7 @@ async function openCandidate(id) {
         <button onclick="dlg.close()" title="Fechar janela">✕</button>
       </div>
     </div>
-    ${candidateForm(c, content, related)}
+    ${candidateForm(c, content, related, imported)}
     <div class="dlg-foot">
       <div class="dlg-foot-inputs">
         <input type="text" id="reason" placeholder="Motivo da decisão (obrigatório, fica na auditoria)" style="flex:1;min-width:240px">
@@ -1480,7 +1482,28 @@ async function openCandidate(id) {
         <button class="primary" data-act="new">Publicar como novo</button>
       </div>
     </div>`;
-  bindCandidateForm(); dlg.showModal();
+  function bindTicketImageSelection() {
+    dlg.querySelectorAll('.ticket-image-select').forEach(button => button.onclick = async () => {
+      const draft = readForm();
+      if (draft.images.length >= 5) return toast('Selecione no máximo 5 prints para o procedimento.');
+      button.disabled = true;
+      try {
+        const image = await api(`/candidatos/${id}/imagens/${button.dataset.action}/${button.dataset.index}/preparar`, {method:'POST'});
+        if (!state.images.some(item => item.file === image.file)) state.images.push(image);
+        imported.set(button.dataset.url, image.file);
+        const role = button.dataset.role === 'technician' ? 'técnico' : 'cliente';
+        const name = `Print do ${role} ${button.dataset.action}-${Number(button.dataset.index) + 1}`;
+        const hasSteps = /^\s*1\.\s/m.test(draft.procedure);
+        draft.images.push({file:image.file,name,caption:name,placement:hasSteps ? 'procedure' : 'answer',after_step:hasSteps ? 1 : null});
+        const oldBody = dlg.querySelector('.candidate-body'), scroll = oldBody.scrollTop;
+        oldBody.outerHTML = candidateForm(c, draft, related, imported);
+        dlg.querySelector('.candidate-body').scrollTop = scroll;
+        bindCandidateForm(); bindTicketImageSelection();
+        toast('Print vinculado ao rascunho. Confira a legenda e o passo antes de publicar.');
+      } catch(error) { toast(error.message); button.disabled = false; }
+    });
+  }
+  bindCandidateForm(); bindTicketImageSelection(); dlg.showModal();
   dlg.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
     const reason = $('#reason').value.trim(); const act = b.dataset.act; const target = parseInt($('#target').value, 10) || null;
     if (reason.length < 5) return toast('Informe o motivo da decisão.');

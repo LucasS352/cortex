@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import base64
 import io
+import hashlib
 import re
 import unicodedata
 import urllib.request
@@ -640,6 +641,30 @@ def candidate_ticket_image(candidate_id, action_id, index):
     if not mime:
         raise LookupError('O anexo não é uma imagem compatível.')
     return raw, mime
+
+
+def prepare_candidate_image(candidate_id, action_id, index, actor):
+    """Copy a selected ticket print into the review library; publication still needs approval."""
+    raw, _ = candidate_ticket_image(candidate_id, action_id, index)
+    if len(raw) > 5 * 1024 * 1024:
+        raise ValueError('O print deve ter no máximo 5 MB.')
+    try:
+        with Image.open(io.BytesIO(raw)) as source:
+            if source.width * source.height > 25_000_000:
+                raise ValueError('A resolução do print é muito grande.')
+            source.load()
+            image = source.convert('RGBA' if source.mode in ('RGBA', 'LA') else 'RGB')
+            image.thumbnail((2400, 2400))
+            digest = hashlib.sha256(f'{candidate_id}:{action_id}:{index}:'.encode() + raw).hexdigest()[:32]
+            file_name = digest + '.png'
+            TRAINING_MEDIA.mkdir(parents=True, exist_ok=True)
+            image.save(TRAINING_MEDIA / file_name, 'PNG', optimize=True)
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+        raise ValueError('O print do ticket não é uma imagem válida.') from exc
+    with connect() as conn:
+        audit(conn, 'candidate', candidate_id, 'image_prepared', actor,
+              after={'action_id': action_id, 'index': index, 'file': file_name})
+    return {'file': file_name, 'label': 'Print do ticket', 'url': '/training-media/' + file_name}
 
 
 def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, limit=100):

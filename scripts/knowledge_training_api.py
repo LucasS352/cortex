@@ -231,6 +231,11 @@ def candidate_image(candidate_id: int, action_id: int, index: int):
                     headers={'Cache-Control': 'private, max-age=300', 'X-Content-Type-Options': 'nosniff'})
 
 
+@router.post('/candidatos/{candidate_id}/imagens/{action_id}/{index}/preparar')
+def prepare_candidate_image(candidate_id: int, action_id: int, index: int, request: Request):
+    return _guard(kt.prepare_candidate_image, candidate_id, action_id, index, actor(request))
+
+
 @router.post('/candidatos/{candidate_id}/aprovar')
 def approve(candidate_id: int, body: Decision, request: Request):
     if body.decision != 'attach' and body.content is None:

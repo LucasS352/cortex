@@ -56,6 +56,21 @@ class TrainingWorkflowTests(unittest.TestCase):
                 kt.candidate_ticket_image(7,2,0)
         api.return_value.image.assert_called_once()
 
+    def test_selected_ticket_print_is_prepared_without_publishing(self):
+        raw = io.BytesIO(); Image.new('RGB', (20, 10), 'white').save(raw, 'PNG')
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(kt, 'TRAINING_MEDIA', Path(folder)), \
+             patch.object(kt, 'candidate_ticket_image', return_value=(raw.getvalue(), 'image/png')), \
+             patch.object(kt, 'connect') as connect, \
+             patch.object(kt, 'audit') as audit:
+            result = kt.prepare_candidate_image(7, 2, 0, 'Lucas')
+            self.assertTrue((Path(folder) / result['file']).is_file())
+            self.assertRegex(result['file'], r'^[0-9a-f]{32}\.png$')
+            self.assertEqual(result['url'], '/training-media/' + result['file'])
+            connect.assert_called_once()
+            self.assertEqual(audit.call_args.args[3], 'image_prepared')
+            self.assertEqual(audit.call_args.args[4], 'Lucas')
+
     def test_existing_training_rules(self):
         for name in dir(legacy):
             if name.startswith('test_'):
@@ -216,9 +231,11 @@ class TrainingWorkflowTests(unittest.TestCase):
     def test_candidate_screen_does_not_mix_global_image_library(self):
         page=Path(__file__).parent/'static'/'treinamento.html'
         text=page.read_text(encoding='utf-8')
-        self.assertIn('candidateForm(c, content, related)',text)
+        self.assertIn('candidateForm(c, content, related, imported)',text)
         self.assertIn('state.images.filter(image => ownUploads.has(image.file))',text)
+        self.assertIn('...imported.values()',text)
         self.assertIn('Somente imagens revisadas e vinculadas abaixo serão publicadas.',text)
+        self.assertIn('Usar no procedimento',text)
 
     def test_candidate_subcategories_use_collapsed_parent_tree(self):
         page=Path(__file__).parent/'static'/'treinamento.html'
