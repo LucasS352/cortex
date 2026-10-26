@@ -15,6 +15,47 @@ import test_knowledge_training as legacy
 
 
 class TrainingWorkflowTests(unittest.TestCase):
+    def test_candidate_context_distinguishes_customer_question_and_technician_history(self):
+        db=MagicMock()
+        db.__enter__.return_value.execute.return_value.fetchone.return_value={
+            'id': 7, 'ticket_external_id': 132176, 'source_question_action_id': 1}
+        db.__enter__.return_value.execute.return_value.fetchall.return_value=[]
+        actions=[
+            {'id':1,'type':2,'createdDate':'2026-10-23T08:00:00',
+             'createdBy':{'profileType':2,'businessName':'Cliente'},
+             'description':'<p>Produto não integra. Qual cadastro devo abrir?</p>',
+             'htmlDescription':'<p>Pergunta</p><img src="https://s3.amazonaws.com/movidesk-files/ABCDEF0123456789ABCDEF0123456789">'},
+            {'id':2,'type':1,'createdDate':'2026-10-23T09:00:00',
+             'createdBy':{'profileType':1,'businessName':'Técnico'},
+             'description':'<p>Abra o cadastro e relacione o código externo.</p>'},
+        ]
+        with patch.object(kt,'connect',return_value=db), \
+             patch.object(kt,'load_ticket',return_value=({'subject':'Produto não integra','status':'Fechado'},actions)):
+            result=kt.get_candidate(7)
+        context=result['ticket_context']
+        self.assertIn('Qual cadastro',context['question'])
+        self.assertEqual([a['role'] for a in context['history']],['customer','technician'])
+        self.assertIn('código externo',context['history'][1]['text'])
+        self.assertIn('código externo',context['technician_reply'])
+        self.assertEqual(len(context['images']),1)
+        self.assertEqual(context['images'][0]['url'],'/api/treinamento/candidatos/7/imagens/1/0')
+
+    def test_candidate_image_is_bound_to_original_ticket_action(self):
+        db=MagicMock()
+        db.__enter__.return_value.execute.return_value.fetchone.return_value={'ticket_external_id':132176}
+        actions=[{'id':1,'type':2,'description':'Veja o print',
+                  'htmlDescription':'<img src="https://s3.amazonaws.com/movidesk-files/ABCDEF0123456789ABCDEF0123456789">'}]
+        with patch.object(kt,'connect',return_value=db), \
+             patch.object(kt,'load_ticket',return_value=({},actions)), \
+             patch('movidesk_note_worker.Api') as api:
+            api.return_value.image.return_value=b'\x89PNG\r\n\x1a\nmock'
+            raw,mime=kt.candidate_ticket_image(7,1,0)
+            self.assertEqual(mime,'image/png')
+            self.assertEqual(raw[:8],b'\x89PNG\r\n\x1a\n')
+            with self.assertRaises(LookupError):
+                kt.candidate_ticket_image(7,2,0)
+        api.return_value.image.assert_called_once()
+
     def test_existing_training_rules(self):
         for name in dir(legacy):
             if name.startswith('test_'):
@@ -175,8 +216,16 @@ class TrainingWorkflowTests(unittest.TestCase):
     def test_candidate_screen_does_not_mix_global_image_library(self):
         page=Path(__file__).parent/'static'/'treinamento.html'
         text=page.read_text(encoding='utf-8')
-        self.assertIn('contentForm(content,true)',text)
-        self.assertIn('A biblioteca global não é misturada ao chamado.',text)
+        self.assertIn('candidateForm(c, content, related)',text)
+        self.assertIn('state.images.filter(image => ownUploads.has(image.file))',text)
+        self.assertIn('Somente imagens revisadas e vinculadas abaixo serão publicadas.',text)
+
+    def test_candidate_subcategories_use_collapsed_parent_tree(self):
+        page=Path(__file__).parent/'static'/'treinamento.html'
+        text=page.read_text(encoding='utf-8')
+        self.assertIn('<details class="subtree-group"><summary>',text)
+        self.assertIn("if (open) menu.querySelectorAll('details').forEach(d => d.open = false)",text)
+        self.assertIn('id="f_sub" type="hidden"',text)
 
     def test_review_api_forwards_example_ticket(self):
         app=FastAPI(); app.include_router(router)

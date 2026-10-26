@@ -856,6 +856,54 @@ pre {
   border: 1px solid var(--line-strong);
 }
 
+dialog.candidate-dialog { width: min(1600px, 98vw); max-height: 96vh; }
+.candidate-dialog .dlg-body { max-height: calc(96vh - 156px); padding: 14px; }
+.dlg-body.candidate-body { grid-template-columns: minmax(240px, .86fr) minmax(430px, 1.9fr) minmax(270px, .96fr); gap: 12px; align-items: start; }
+.candidate-body > section { min-width: 0; }
+.review-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+.review-card h3 { margin: 0 0 10px; color: var(--ink); font-size: 13px; font-weight: 800; }
+.review-card p { margin: 7px 0; }
+.review-muted { font-size: 12px; color: var(--muted); }
+.review-question { padding: 12px; background: var(--surface-2); border-radius: 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-history { display: grid; gap: 10px; }
+.review-event { border-left: 2px solid var(--line-strong); padding-left: 10px; }
+.review-event.customer { border-color: var(--brand); }
+.review-event.technician { border-color: var(--ok); }
+.review-event-head { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
+.review-event p { max-height: 105px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-step-title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 800; }
+.review-step-title b { width: 24px; height: 24px; display: inline-grid; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand); }
+.review-editor #f_answer { min-height: 210px; font-size: 14px; line-height: 1.65; }
+.review-editor #f_proc { min-height: 180px; font-family: inherit; font-size: 13px; }
+.review-editor .review-card { padding: 16px; }
+.review-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.review-extra { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.review-extra summary { cursor: pointer; font-weight: 700; color: var(--brand); }
+.review-image { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.review-image img { width: 110px; height: 75px; object-fit: contain; border: 1px solid var(--line); border-radius: 8px; }
+.review-image .review-field-pair { gap: 6px; }
+.review-image label { margin-top: 3px; }
+.review-side .review-card { padding: 13px; }
+.review-side textarea { min-height: 72px; }
+.review-check { display: flex; align-items: flex-start; gap: 8px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 8px; margin: 5px 0; font-size: 12px; }
+.review-check.ok { color: var(--ok); }
+.review-check.warn { color: var(--warn); }
+.review-check span { color: var(--ink); }
+.subtree-picker { position: relative; }
+.subtree-trigger { display: flex; justify-content: space-between; align-items: center; width: 100%; text-align: left; background: var(--surface); font-size: 13px; }
+.subtree-menu { max-height: 280px; overflow: auto; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); margin-top: 5px; padding: 5px; }
+.subtree-menu[hidden] { display: none; }
+.subtree-group { border-bottom: 1px solid var(--line); }
+.subtree-group:last-child { border: none; }
+.subtree-group summary { padding: 8px; cursor: pointer; font-weight: 700; }
+.subtree-group summary:hover, .subtree-option:hover { background: var(--brand-soft); }
+.subtree-option { display: block; width: 100%; text-align: left; border: 0; background: none; border-radius: 5px; padding: 7px 8px 7px 24px; font-weight: 500; }
+.subtree-option.active { color: var(--brand); font-weight: 800; }
+.subtree-parent-option { padding-left: 12px; font-size: 11px; }
+.candidate-dialog .dlg-foot { padding: 10px 14px; }
+@media (max-width: 1120px) { .dlg-body.candidate-body { grid-template-columns: minmax(230px, .8fr) minmax(390px, 1.4fr); } .review-side { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .review-side .review-card { margin: 0; } }
+@media (max-width: 760px) { .dlg-body.candidate-body { grid-template-columns: 1fr; } .review-side { display: block; } .review-field-pair { grid-template-columns: 1fr; } .candidate-dialog .dlg-body { max-height: calc(96vh - 190px); } }
+
 html[data-theme="dark"] .external-ticket-link {
   color: #8abfff;
 }
@@ -940,6 +988,7 @@ html[data-theme="dark"] a { color: #7ab3ff; }
 const API = '/api/treinamento';
 const state = { tab: 'queue', module: null, subtopic: null, expandedSubs: {}, q: '', taxonomy: [], overview: null, images: [], staging: [], releases: [] };
 const $ = (s, r = document) => r.querySelector(s);
+$('#dlg').addEventListener('close', () => $('#dlg').classList.remove('candidate-dialog'));
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
 const REL = { duplicate: ['warn', 'Duplicado'], evolution: ['ok', 'Evolução'], different_context: ['ok', 'Outro contexto'], conflict: ['bad', 'Conflito'] };
@@ -1241,6 +1290,92 @@ function subOptions(mod, sel) {
   }).join('');
 }
 
+function candidateSubtree(mod, selected) {
+  const m = state.taxonomy.find(x => x.key === mod);
+  const topics = m?.subtopics || [];
+  const parents = topics.filter(([key]) => !key.includes(':'));
+  const label = topics.find(([key]) => key === selected)?.[1] || 'Escolha uma subcategoria';
+  return `<input id="f_sub" type="hidden" value="${esc(selected || '')}">
+    <div class="subtree-picker"><button type="button" class="subtree-trigger" id="subtree-trigger" aria-expanded="false" aria-controls="subtree-menu">${esc(label)} <span>▾</span></button>
+    <div class="subtree-menu" id="subtree-menu" hidden>
+      ${parents.map(([key, name]) => {
+        const children = topics.filter(([child]) => child.startsWith(key + ':'));
+        if (!children.length) return `<button type="button" class="subtree-option ${selected === key ? 'active' : ''}" data-subchoice="${esc(key)}">${esc(name)}</button>`;
+        return `<details class="subtree-group"><summary>${esc(name)}</summary>
+          <button type="button" class="subtree-option subtree-parent-option ${selected === key ? 'active' : ''}" data-subchoice="${esc(key)}">Selecionar ${esc(name)} (geral)</button>
+          ${children.map(([child, childName]) => `<button type="button" class="subtree-option ${selected === child ? 'active' : ''}" data-subchoice="${esc(child)}">${esc(childName.replace(/^.*? > /, ''))}</button>`).join('')}</details>`;
+      }).join('')}
+    </div></div>`;
+}
+
+function bindCandidateSubtree() {
+  const trigger = $('#subtree-trigger'), menu = $('#subtree-menu');
+  trigger.onclick = () => { const open = menu.hidden; menu.hidden = !open; trigger.setAttribute('aria-expanded', String(open)); if (open) menu.querySelectorAll('details').forEach(d => d.open = false); };
+  menu.onclick = e => {
+    const option = e.target.closest('[data-subchoice]'); if (!option) return;
+    const key = option.dataset.subchoice;
+    $('#f_sub').value = key;
+    const m = state.taxonomy.find(x => x.key === $('#f_module').value);
+    trigger.firstChild.textContent = (m?.subtopics || []).find(([k]) => k === key)?.[1] || key;
+    menu.hidden = true; trigger.setAttribute('aria-expanded', 'false');
+    menu.querySelectorAll('.subtree-option').forEach(el => el.classList.toggle('active', el.dataset.subchoice === key));
+  };
+}
+
+function bindCandidateForm() {
+  $('#f_module').onchange = e => { $('#candidate-subtree').innerHTML = candidateSubtree(e.target.value, ''); bindCandidateSubtree(); };
+  bindCandidateSubtree();
+}
+
+function candidateForm(c, content, related) {
+  const x = c.extraction || {}, context = c.ticket_context || {}, a = content.applicability || {};
+  const history = context.history || [];
+  const ownUploads = new Set((content.images || []).map(image => image.file));
+  const images = state.images.filter(image => ownUploads.has(image.file));
+  const question = context.question || content.symptom || '';
+  const techValidated = c.extractor === 'technician_proposal' || (c.answer_reviews || []).some(r => r.rating > 0);
+  return `<div class="dlg-body candidate-body">
+    <section class="review-context" aria-label="Contexto do chamado">
+      <div class="review-card"><h3>Ticket #${esc(c.ticket_external_id)}</h3><p class="review-muted">${esc(context.subject || 'Chamado Movidesk')} · ${esc(context.status || 'Status não disponível')}</p>
+        <h3>Pergunta do cliente</h3><div class="review-question">${esc(question || 'Pergunta não disponível neste snapshot. Confira o ticket original.')}</div></div>
+      <div class="review-card"><h3>Imagens do ticket <span class="pill">${(context.images || []).length}</span></h3>
+        ${(context.images || []).length ? (context.images || []).map(image => `<div class="review-image"><a href="${esc(image.url)}" target="_blank" rel="noopener" title="Abrir print original"><img src="${esc(image.url)}" alt="${esc(image.name)}" loading="lazy"></a><div><b>${image.role === 'technician' ? 'Técnico' : 'Cliente'}</b><br><span class="review-muted">${esc(image.name)}</span></div></div>`).join('') : '<p class="review-muted">Nenhum print encontrado no histórico sincronizado.</p>'}
+        <p class="review-muted">Prints originais para conferência. Somente imagens revisadas e vinculadas abaixo serão publicadas.</p></div>
+      <div class="review-card"><h3>Histórico relevante</h3><div class="review-history">
+        ${history.length ? history.map(h => `<div class="review-event ${h.role === 'technician' ? 'technician' : 'customer'}"><div class="review-event-head"><b>${h.role === 'technician' ? 'Técnico' : 'Cliente'}${h.author ? ' · ' + esc(h.author) : ''}</b><time>${fmt(h.at)}</time></div><p>${esc(h.text)}</p>${h.attachments?.length ? `<small class="review-muted">Anexos: ${esc(h.attachments.join(', '))}</small>` : ''}</div>`).join('') : '<p class="review-muted">Histórico não disponível neste snapshot. Abra o ticket para confirmar a sequência completa.</p>'}
+      </div></div>
+    </section>
+    <section class="review-editor" aria-label="Resposta e procedimento">
+      <div class="review-card"><div class="review-step-title"><b>1</b> Resposta ao cliente <span class="pill ${techValidated ? 'ok' : 'warn'}">${techValidated ? 'Proposta do técnico' : context.technician_reply ? 'Extraída do histórico · revisar' : 'Rascunho para revisão'}</span></div>
+        <p class="review-muted">Edite o texto que a IA poderá usar após a publicação. Confira cada passo no histórico e nas evidências.</p>
+        <label for="f_answer">Resposta pronta ao cliente</label><textarea id="f_answer" placeholder="Escreva a orientação validada para o cliente">${esc(content.customer_answer || context.technician_reply || '')}</textarea>
+        <label for="f_proc">Passo a passo reproduzível</label><textarea id="f_proc" placeholder="Onde acessar, o que preencher e como validar o resultado">${esc(content.procedure || '')}</textarea>
+        <details class="review-extra"><summary>Pré-requisitos, resultado e aplicabilidade</summary>
+          <div class="review-field-pair"><div><label>Pré-requisitos</label><textarea id="f_pre">${esc(content.prerequisites || '')}</textarea></div><div><label>Resultado esperado</label><textarea id="f_exp">${esc(content.expected_result || '')}</textarea></div></div>
+          <div class="review-field-pair"><div><label>Versão do Master</label><input type="text" id="a_ver" value="${esc(a.master_version)}"></div><div><label>Regime tributário</label><input type="text" id="a_reg" value="${esc(a.tax_regime)}"></div><div><label>UFs (vírgula)</label><input type="text" id="a_ufs" value="${esc((a.ufs || []).join(', '))}"></div><div><label>Integrações (vírgula)</label><input type="text" id="a_int" value="${esc((a.integrations || []).join(', '))}"></div><div><label>Válido a partir de</label><input type="text" id="a_from" placeholder="AAAA-MM-DD" value="${esc(a.valid_from)}"></div><div><label>Válido até</label><input type="text" id="a_until" placeholder="AAAA-MM-DD" value="${esc(a.valid_until)}"></div></div>
+        </details></div>
+      <div class="review-card"><div class="review-step-title"><b>2</b> Imagens do procedimento</div>
+        <p class="review-muted">Somente imagens vinculadas a esta proposta podem ser publicadas. Escolha o passo e confira a legenda.</p>
+        ${images.length ? images.map((image, i) => { const chosen = (content.images || []).find(x => x.file === image.file); return `<div class="review-image"><div><img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}"><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''}> Usar</label></div><div><label>Nome</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><div class="review-field-pair"><div><label>Posição</label><select id="img_place_${i}"><option value="answer" ${chosen?.placement === 'answer' ? 'selected' : ''}>Após resposta</option><option value="procedure" ${chosen?.placement !== 'answer' ? 'selected' : ''}>Após passo</option></select></div><div><label>Passo</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || 1}"></div></div><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"></div></div>`; }).join('') : '<p class="review-muted">Sem imagem revisada para publicar nesta proposta.</p>'}</div>
+    </section>
+    <section class="review-side" aria-label="Classificação e conferência">
+      <div class="review-card"><div class="review-step-title"><b>3</b> Classificação do conhecimento</div>
+        <div class="review-field-pair"><div><label for="f_module">Categoria principal</label><select id="f_module">${moduleOptions(content.module_key)}</select></div><div><label>Subcategoria</label><div id="candidate-subtree">${candidateSubtree(content.module_key, content.subtopic_key)}</div></div></div>
+        <label for="f_title">Título do procedimento</label><input type="text" id="f_title" value="${esc(content.title)}">
+        <label for="f_kw">Tags e palavras-chave (vírgula)</label><input type="text" id="f_kw" value="${esc((content.keywords || []).join(', '))}"></div>
+      <div class="review-card"><div class="review-step-title"><b>4</b> Resumo do diagnóstico</div>
+        <label for="f_symptom">Sintoma</label><textarea id="f_symptom">${esc(content.symptom || '')}</textarea><label for="f_errors">Mensagens de erro (uma por linha)</label><textarea id="f_errors">${esc((content.error_messages || []).join('\n'))}</textarea><label for="f_cause">Causa raiz, se identificada</label><textarea id="f_cause">${esc(content.root_cause || '')}</textarea></div>
+      <div class="review-card"><div class="review-step-title"><b>5</b> Evidências e referências</div>
+        ${Object.entries(x.evidence || {}).filter(([, v]) => v).map(([key, value]) => `<label>${esc(({root_cause_quote:'Causa',procedure_quote:'Procedimento',confirmation_quote:'Confirmação'})[key] || key)}</label><pre>${esc(value)}</pre>`).join('') || '<p class="review-muted">O extrator não citou trechos. Confirme o procedimento no histórico original.</p>'}
+        ${(c.answer_reviews || []).map(r => `<p class="review-muted">${r.candidate_id ? 'Proposta técnica' : r.rating > 0 ? 'Resposta confirmada' : 'Correção registrada'} · ${esc(r.actor)} · ${fmt(r.updated_at)}${r.comment ? '<br>' + esc(r.comment) : ''}</p>`).join('')}
+        <details class="review-extra"><summary>Procedimentos relacionados (${related.length})</summary>${related.length ? related.map(r => `<div class="rel ${esc(r.relation)}"><b>${esc(REL[r.relation]?.[1] || r.relation)}</b> · <a href="#" onclick="openItem(${Number(r.item_id)});return false">${esc(r.title)}</a> (v${esc(r.version_no)})<br><small>${esc((r.reasons || []).join('; '))}</small></div>`).join('') : '<p class="review-muted">Nenhum procedimento semelhante localizado.</p>'}</details></div>
+      <div class="review-card"><div class="review-step-title"><b>6</b> Checklist de qualidade</div>
+        ${(c.quality_checks || []).map(q => `<div class="review-check ${q.ok ? 'ok' : 'warn'}">${q.ok ? '✓' : '⚠'} <span>${esc(q.label)}</span></div>`).join('')}
+        <details class="review-extra"><summary>Critérios de seleção · ${esc(c.usefulness_score)}/100</summary>${(c.usefulness_signals || []).map(s => `<p class="review-muted">${s.weight > 0 ? '+' : ''}${s.weight} · ${esc(s.label)}</p>`).join('')}</details></div>
+    </section>
+  </div>`;
+}
+
 function contentForm(c, onlySelected = false) {
   const a = c.applicability || {};
   const ownUploads = new Set((c.images || []).map(x => x.file));
@@ -1315,11 +1450,13 @@ async function openCandidate(id) {
   const content = { ...x, module_key: c.suggested_module, subtopic_key: c.suggested_subtopic };
   const related = c.similar_items || [];
   const dlg = $('#dlg');
+  if (dlg.open) dlg.close();
+  dlg.classList.add('candidate-dialog');
   dlg.innerHTML = `
     <div class="dlg-head">
       <div class="dlg-head-title">
         <span class="dlg-kicker">Curadoria de Conhecimento · Revisão Administrativa</span>
-        <h2>Sugestão de conhecimento · Ticket #${c.ticket_external_id}${c.source_question_action_id ? ' · pergunta ' + esc(c.source_question_action_id) : ''}${c.source_answer_action_id ? ' → resposta ' + esc(c.source_answer_action_id) : c.source_question_action_id ? ' → resposta redigida pelo técnico' : c.source_action_id ? ' · resposta ' + esc(c.source_action_id) : ''}</h2>
+        <h2>Curadoria de conhecimento · Ticket #${c.ticket_external_id}</h2>
       </div>
       <div class="dlg-head-actions">
         <a class="external-ticket-link" href="${'https://helpdesk.alternativasistemas.com.br/Ticket/Edit/' + c.ticket_external_id}" target="_blank" rel="noopener">Abrir ticket #${c.ticket_external_id} no Movidesk ↗</a>
@@ -1328,18 +1465,7 @@ async function openCandidate(id) {
         <button onclick="dlg.close()" title="Fechar janela">✕</button>
       </div>
     </div>
-    <div class="dlg-body"><div>${contentForm(content,true)}</div>
-      <div>
-        <div class="panel"><h3>Envio do técnico</h3>${(c.answer_reviews || []).map(r => `<p><b>${r.candidate_id ? "Proposta técnica para curadoria" : r.rating > 0 ? "Resposta confirmada" : "Correção registrada"}</b> · ticket #${r.ticket_external_id} · resposta Cortex ${esc(r.action_id)}${r.question_action_id ? ` · pergunta ${esc(r.question_action_id)}${r.source_answer_action_id ? ` → resposta técnica ${esc(r.source_answer_action_id)}` : ' → conteúdo redigido no formulário'}` : ''} · ${esc(r.actor)} · ${fmt(r.updated_at)}${r.comment ? `<br>${esc(r.comment)}` : ''}</p>`).join('') || '<p class="muted">Sem envio técnico associado.</p>'}</div>
-        <div class="panel"><h3>Verificação de qualidade</h3>${c.quality_checks.map(q => `<div class="check">${q.ok ? '✅' : '⚠️'} <span>${esc(q.label)}</span></div>`).join('')}</div>
-        <div class="panel"><h3>Evidências citadas do ticket</h3>
-          ${Object.entries(x.evidence || {}).filter(([, v]) => v).map(([k, v]) => `<label>${({root_cause_quote:'Causa',procedure_quote:'Procedimento',confirmation_quote:'Confirmação'})[k]}</label><pre>“${esc(v)}”</pre>`).join('') || '<span class="pill warn">O extrator não citou trechos — revise com atenção.</span>'}</div>
-        <div class="panel"><h3>Procedimentos relacionados na base</h3>
-          ${related.length ? related.map(r => `<div class="rel ${r.relation}"><b>${REL[r.relation][1]}</b> · <a href="#" onclick="openItem(${r.item_id});return false">${esc(r.title)}</a> (v${r.version_no})<br><small>${esc(r.reasons.join('; '))}</small></div>`).join('') : '<p class="muted">Nenhum procedimento semelhante — será um conhecimento novo.</p>'}</div>
-        <div class="panel"><h3>Por que este ticket foi considerado útil</h3>
-          ${c.usefulness_signals.map(s => `<div class="check">${s.weight > 0 ? '➕' : '➖'} <span>${esc(s.label)} (${s.weight > 0 ? '+' : ''}${s.weight})</span></div>`).join('')}
-          <div style="margin-top:8px"><b>Pontuação: ${c.usefulness_score}/100</b></div></div>
-      </div></div>
+    ${candidateForm(c, content, related)}
     <div class="dlg-foot">
       <div class="dlg-foot-inputs">
         <input type="text" id="reason" placeholder="Motivo da decisão (obrigatório, fica na auditoria)" style="flex:1;min-width:240px">
@@ -1354,7 +1480,7 @@ async function openCandidate(id) {
         <button class="primary" data-act="new">Publicar como novo</button>
       </div>
     </div>`;
-  bindForm(); dlg.showModal();
+  bindCandidateForm(); dlg.showModal();
   dlg.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
     const reason = $('#reason').value.trim(); const act = b.dataset.act; const target = parseInt($('#target').value, 10) || null;
     if (reason.length < 5) return toast('Informe o motivo da decisão.');

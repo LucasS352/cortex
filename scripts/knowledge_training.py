@@ -558,12 +558,88 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
 def get_candidate(candidate_id):
     with connect() as conn:
         row = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s', (candidate_id,)).fetchone()
+        if not row:
+            raise LookupError('Sugestão não encontrada.')
         reviews = conn.execute('''SELECT ticket_external_id,action_id,example_ticket_external_id,
             question_action_id,source_answer_action_id,rating,score,subtopic_key,keywords,comment,actor,updated_at
             FROM cortex_kb.answer_reviews WHERE candidate_id=%s ORDER BY updated_at DESC''', (candidate_id,)).fetchall()
-    if not row:
-        raise LookupError('Sugestão não encontrada.')
-    return {**dict(row), 'answer_reviews': reviews}
+        try:
+            ticket, actions = load_ticket(conn, row['ticket_external_id'])
+        except LookupError:
+            ticket, actions = {}, []
+    from movidesk_note_worker import plain, action_attachments
+    source_actions = curation_actions(actions)
+    history = []
+    ticket_images = []
+    for action in source_actions[-20:]:
+        description = sanitize(plain(action.get('description') or '')).strip()
+        if not description:
+            continue
+        author = action.get('createdBy') or {}
+        image_entries = action_attachments(action)
+        for index, attachment in enumerate(image_entries):
+            if len(ticket_images) >= 8:
+                break
+            ticket_images.append({'action_id': action.get('id'), 'index': index,
+                                  'role': 'technician' if is_agent(action) else 'customer',
+                                  'name': sanitize(attachment.get('fileName') or 'Print do ticket')[:120],
+                                  'url': f"/api/treinamento/candidatos/{candidate_id}/imagens/{action.get('id')}/{index}"})
+        history.append({'id': action.get('id'), 'role': 'technician' if is_agent(action) else 'customer',
+                        'author': sanitize(author.get('businessName') or author.get('name') or ''),
+                        'at': action.get('createdDate'), 'text': description[:1800],
+                        'attachments': [image['name'] for image in ticket_images
+                                        if image['action_id'] == action.get('id')]})
+    question_id = str(row.get('source_question_action_id') or '')
+    question_action = next((a for a in source_actions if question_id and str(a.get('id')) == question_id
+                            and not is_agent(a)), None)
+    if not question_action:
+        question_action = next((a for a in source_actions if not is_agent(a)), None)
+    question = sanitize(plain(question_action.get('description') or '')).strip() if question_action else ''
+    answer_id = str(row.get('source_answer_action_id') or '')
+    answer_action = next((a for a in source_actions if answer_id and str(a.get('id')) == answer_id
+                          and is_agent(a)), None)
+    if not answer_action:
+        answer_action = next((a for a in reversed(source_actions) if is_agent(a)), None)
+    technician_reply = sanitize(plain(answer_action.get('description') or '')).strip() if answer_action else ''
+    technician_reply = re.split(
+        r'(?i)\b(?:qualquer problema por gentileza|obrigado por entrar em contato conosco|voc[eê] j[aá]\s+assistiu)',
+        technician_reply, maxsplit=1)[0].strip()[:3000]
+    return {**dict(row), 'answer_reviews': reviews,
+            'ticket_context': {'subject': sanitize(ticket.get('subject') or ''),
+                               'status': ticket.get('status') or ticket.get('base_status') or '',
+                               'question': question[:1800], 'technician_reply': technician_reply,
+                               'history': history, 'images': ticket_images}}
+
+
+def candidate_ticket_image(candidate_id, action_id, index):
+    """Serve only images attached to this candidate's original Movidesk ticket."""
+    from movidesk_note_worker import Api, Settings, action_attachments
+    with connect() as conn:
+        row = conn.execute('SELECT ticket_external_id FROM cortex_kb.candidates WHERE id=%s',
+                           (candidate_id,)).fetchone()
+        if not row:
+            raise LookupError('Sugestão não encontrada.')
+        _, actions = load_ticket(conn, row['ticket_external_id'])
+    action = next((a for a in curation_actions(actions)
+                   if str(a.get('id')) == str(action_id)), None)
+    if not action:
+        raise LookupError('Ação não encontrada neste ticket.')
+    images = action_attachments(action)
+    if index < 0 or index >= len(images):
+        raise LookupError('Imagem não encontrada nesta ação.')
+    api = Api(Settings(interval=0))
+    try:
+        raw = api.image(images[index])
+    finally:
+        api.client.close()
+    if not raw:
+        raise LookupError('Print indisponível no armazenamento do Movidesk.')
+    mime = ('image/png' if raw.startswith(b'\x89PNG\r\n\x1a\n') else
+            'image/jpeg' if raw.startswith(b'\xff\xd8\xff') else
+            'image/webp' if len(raw) >= 12 and raw[:4] == b'RIFF' and raw[8:12] == b'WEBP' else '')
+    if not mime:
+        raise LookupError('O anexo não é uma imagem compatível.')
+    return raw, mime
 
 
 def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, limit=100):
