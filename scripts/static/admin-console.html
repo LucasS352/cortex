@@ -13,7 +13,7 @@
   <link rel="stylesheet" href="/tech-assets/admin-console.css?v=20261005-11">
   <link rel="stylesheet" href="/tech-assets/overview-dashboard.css?v=20261005-1">
   <link rel="stylesheet" href="/tech-assets/admin-theme.css?v=20261005-2">
-  <link rel="stylesheet" href="/tech-assets/cortex-polish.css?v=20261006-10">
+  <link rel="stylesheet" href="/tech-assets/cortex-polish.css?v=20261026-unified-scroll">
   <link rel="stylesheet" href="/tech-assets/agent-center.css?v=20261013-manual-pull">
   <link rel="stylesheet" href="/tech-assets/technician-workbench.css?v=5">
   <link rel="stylesheet" href="/tech-assets/client-inventory.css?v=20261014-1">
@@ -36,11 +36,10 @@
       <button class="nav-item" data-view="workbench" aria-label="Assistente do técnico"><span class="nav-icon">✦</span><span class="nav-text"><span class="nav-full">Assistente do técnico</span><span class="nav-mobile">Assistente</span></span></button>
       <button class="nav-item" data-view="clients" aria-label="Clientes"><span class="nav-icon">◎</span><span class="nav-text"><span class="nav-full">Clientes</span><span class="nav-mobile">Clientes</span></span></button>
     </nav>
-    <div class="sidebar-bottom"><div class="online-dot"></div><span>Conectado ao banco local</span><button id="refresh" title="Recarregar painel">↻</button></div>
+    <div class="sidebar-bottom"><div class="online-dot"></div><span>Conectado ao banco local</span><button id="refresh" title="Recarregar painel">↻</button><a class="sidebar-logout" href="/logout">Sair</a></div>
   </aside>
 
   <main class="main">
-    <header class="topbar"><a class="mobile-brand" href="/admin" aria-label="Cortex Business Intelligence, início"><img src="/tech-assets/cortex-wordmark.png" alt="Cortex" width="160" height="90"></a><div class="crumb">Cortex <span>/</span> <b id="crumb-title">Visão geral</b></div><div class="top-actions"><div class="theme-switch" role="group" aria-label="Tema do painel"><button type="button" data-theme-choice="light" aria-pressed="false">☀ Claro</button><button type="button" data-theme-choice="dark" aria-pressed="false">☾ Escuro</button></div><span class="snapshot"><i></i> Base local</span><a class="logout-link" href="/logout">Sair</a><div class="avatar">AD</div></div></header>
     <div class="content">
       <section class="page-head"><div><div class="eyebrow">ALTERNATIVA SISTEMAS <span id="snapshot-date">· sincronizando</span></div><h1 id="page-title">Visão geral</h1><p id="page-subtitle">Priorize o atendimento, acompanhe dependências e investigue os assuntos que concentram chamados.</p></div><div class="page-actions"><button class="button button-primary" id="sync-now" type="button">↻ Atualizar chamados</button><button class="button button-light" id="head-refresh" type="button"><span>↻</span> Recarregar painel</button></div></section>
       <section class="sync-strip panel" aria-label="Atualização de chamados"><div class="sync-strip-main"><span class="sync-dot" id="sync-dot" aria-hidden="true"></span><div><strong id="sync-run-label">Consultando atualização…</strong><small id="sync-run-detail">O painel mostra a última carga concluída.</small></div></div><details class="sync-schedule" id="sync-schedule"><summary id="sync-schedule-summary">Agendar atualização</summary><div class="sync-schedule-fields"><label class="sync-enabled"><input id="sync-enabled" type="checkbox"> Atualizar automaticamente</label><label>Horário de Brasília <input id="sync-time" type="time" value="00:00"></label><button class="button button-quiet" id="sync-schedule-save" type="button">Salvar horário</button><p>A carga completa roda uma vez ao dia enquanto o servidor Cortex estiver ligado. Entre as cargas, o webhook atualiza cada chamado alterado em tempo real. Nenhum desses fluxos aprova conteúdo para o agente.</p></div></details></section>
@@ -683,8 +682,8 @@
         </dialog>
       </section>
       
-      <section class="view" id="view-training" style="height: calc(100vh - 120px); padding: 0;">
-        <iframe id="training-frame" src="/treinamento" style="width: 100%; height: 100%; border: none; border-radius: 8px; background: transparent;" title="Ambiente de Treinamento"></iframe>
+      <section class="view" id="view-training">
+        <iframe id="training-frame" src="/treinamento" title="Ambiente de Treinamento" scrolling="no"></iframe>
       </section>
 
       <section class="view" id="view-workbench">
@@ -727,11 +726,11 @@
         <div id="performance-reviews" hidden><div class="panel filter-panel"><div class="filter-row"><label for="review-filter">Resultado</label><select id="review-filter"><option value="">Todas as gerações</option><option value="pending">Aguardando revisão</option><option value="approved">Aprovadas</option><option value="corrected">Corrigidas</option><option value="rejected">Rejeitadas</option></select><span class="muted">Abra uma resposta para conferir o texto e registrar sua avaliação.</span></div></div><div id="run-list"></div><div class="pagination"><button class="button button-quiet" id="runs-prev">← Anterior</button><span id="runs-page"></span><button class="button button-quiet" id="runs-next">Próxima →</button></div></div>
       </section>
       <section class="view" id="view-audit"><article class="panel table-panel"><div class="panel-head"><div><h2>Registro de operação</h2><p>Últimas 100 alterações de configuração e avaliações. Operador local, sem identificação individual.</p></div></div><div class="table-scroll"><table><thead><tr><th>DATA E HORA</th><th>AÇÃO</th><th>DETALHES</th></tr></thead><tbody id="audit-rows"></tbody></table></div></article></section>
-      <footer class="app-footer"><span>© Cortex · Alternativa Sistemas</span><span>Ambiente local <i></i> Acesso restrito a esta máquina</span></footer>
+      <footer class="app-footer"><span>© Cortex · Alternativa Sistemas</span><span>Ambiente local <i></i> Acesso restrito a esta máquina</span><a href="/logout">Sair</a></footer>
     </div>
   </main>
 </div>
-  <script src="/tech-assets/admin-console.js?v=20261014-training-deeplink" defer></script>
+  <script src="/tech-assets/admin-console.js?v=20261026-unified-scroll-2" defer></script>
   <script src="/tech-assets/technician-workbench.js?v=5" defer></script>
   <script src="/tech-assets/client-inventory.js?v=20261014-1" defer></script>
   <script src="/tech-assets/agent-center.js?v=20261006-enterprise" defer></script>

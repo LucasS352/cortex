@@ -2,6 +2,33 @@ const $ = (id) => document.getElementById(id);
 function setTheme(theme){document.documentElement.dataset.theme=theme;document.querySelector('meta[name="theme-color"]')?.setAttribute('content',theme==='dark'?'#0f1b2b':'#edf2f7');try{localStorage.setItem('cortex-theme',theme)}catch(_){}try{$('training-frame')?.contentDocument?.documentElement?.setAttribute('data-theme',theme);}catch(_){}document.querySelectorAll('[data-theme-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.themeChoice===theme)));}
 document.querySelectorAll('[data-theme-choice]').forEach(button=>button.addEventListener('click',()=>setTheme(button.dataset.themeChoice)));
 setTheme(document.documentElement.dataset.theme==='light'?'light':'dark');
+let trainingFrameObserver;
+function fitTrainingFrame(){
+  const frame=$('training-frame');
+  try{
+    const body=frame?.contentDocument?.body;
+    if(!body)return;
+    const top=Math.max(0,frame.getBoundingClientRect().top);
+    const available=Math.max(320,window.innerHeight-top-(window.innerWidth<=760?80:20));
+    frame.contentDocument.documentElement.style.setProperty('--admin-viewport-height',available+'px');
+    const height=Math.max(620,Math.ceil(body.getBoundingClientRect().height)+4);
+    if(Math.abs(frame.offsetHeight-height)>2)frame.style.height=height+'px';
+  }catch(_){}
+}
+function watchTrainingFrame(){
+  const frame=$('training-frame');
+  try{
+    const body=frame?.contentDocument?.body;
+    if(!body)return;
+    trainingFrameObserver?.disconnect();
+    trainingFrameObserver=new ResizeObserver(()=>requestAnimationFrame(fitTrainingFrame));
+    trainingFrameObserver.observe(body);
+    fitTrainingFrame();
+  }catch(_){}
+}
+$('training-frame')?.addEventListener('load',watchTrainingFrame);
+if($('training-frame')?.contentDocument?.readyState==='complete')watchTrainingFrame();
+window.addEventListener('resize',fitTrainingFrame);
 const state = {overview:null, ticketPage:1, knowledgePage:1, ticketTopic:'', ticketStatus:'', query:'', source:'', knowledgeModule:'', knowledgeSubtopic:'', knowledgeModules:[], settings:null};
 const sourceLabels = {
   OFFICIAL_KB:['Artigos oficiais','Conteúdo da base de conhecimento'],
@@ -70,7 +97,7 @@ async function saveTicketSyncSchedule(){
  try{await api('/api/admin/ticket-sync/schedule',{method:'PUT',body:JSON.stringify({enabled:$('sync-enabled').checked,time:$('sync-time').value})});$('sync-schedule-summary').focus();$('sync-schedule').open=false;await loadSyncStatus();}
  catch(e){showError(e.message);}finally{button.disabled=false;}
 }
-function go(name){if(!views[name])return;clearError();window.scrollTo({top:0,behavior:'instant'});document.body.classList.toggle('overview-page',name==='overview');document.body.classList.toggle('training-page',name==='training');document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(`view-${name}`).classList.add('active');document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));$('crumb-title').textContent=views[name][0];$('page-title').textContent=views[name][0];$('page-subtitle').textContent=views[name][1];if(name==='training'){try{$('training-frame')?.contentDocument?.documentElement?.setAttribute('data-theme',document.documentElement.dataset.theme||'dark');}catch(_){}}if(name==='flow')loadFlow();if(name==='tickets')loadTickets();if(name==='knowledge'){loadModules();loadKnowledge();}if(name==='agent'){loadSettings();if(typeof loadAgentCenter==='function')try{loadAgentCenter();}catch(_){}if(typeof loadWebhookReceipts==='function')try{loadWebhookReceipts();}catch(_){}}if(name==='clients'&&typeof window.loadClientInventory==='function')window.loadClientInventory();if(name==='performance')loadPerformance();if(name==='audit')loadAudit();}
+function go(name){if(!views[name])return;clearError();window.scrollTo({top:0,behavior:'instant'});document.body.classList.toggle('overview-page',name==='overview');document.body.classList.toggle('training-page',name==='training');document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(`view-${name}`).classList.add('active');document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));$('page-title').textContent=views[name][0];$('page-subtitle').textContent=views[name][1];if(name==='training'){try{$('training-frame')?.contentDocument?.documentElement?.setAttribute('data-theme',document.documentElement.dataset.theme||'dark');fitTrainingFrame();}catch(_){}}if(name==='flow')loadFlow();if(name==='tickets')loadTickets();if(name==='knowledge'){loadModules();loadKnowledge();}if(name==='agent'){loadSettings();if(typeof loadAgentCenter==='function')try{loadAgentCenter();}catch(_){}if(typeof loadWebhookReceipts==='function')try{loadWebhookReceipts();}catch(_){}}if(name==='clients'&&typeof window.loadClientInventory==='function')window.loadClientInventory();if(name==='performance')loadPerformance();if(name==='audit')loadAudit();}
 function badgeStatus(name){const hot=/novo|atendimento|triagem|dev - novo/i.test(name);return `<span class="status-chip ${hot?'open':''}">${esc(name)}</span>`;}
 function badgeUrgency(name){const high=/urgent|alta|critical|crítica|critica/i.test(name);return `<span class="urgency-chip ${high?'high':'normal'}">${esc(name)}</span>`;}
 function overviewIcon(name){const paths={support:'<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="12" width="4" height="7" rx="2"/><rect x="17" y="12" width="4" height="7" rx="2"/><path d="M20 19a5 5 0 0 1-5 3h-3"/>',handoff:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="m17 3 2 2"/>',development:'<path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16"/>',commercial:'<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12c5 3 13 3 18 0"/>',all:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',high:'<path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3h.01"/>',aged:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/>',clients:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 6a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 5"/>'};return `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.all}</svg>`;}
