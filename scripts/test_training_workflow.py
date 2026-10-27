@@ -38,6 +38,10 @@ class TrainingWorkflowTests(unittest.TestCase):
         self.assertIn('código externo',context['history'][1]['text'])
         self.assertIn('código externo',context['technician_reply'])
         self.assertEqual(len(context['images']),1)
+        self.assertEqual(len(context['history'][0]['images']),1)
+        self.assertTrue(context['history'][0]['images'][0]['inline'])
+        self.assertIn('/api/treinamento/candidatos/7/imagens/1/0',context['history'][0]['html'])
+        self.assertEqual(context['history'][1]['images'],[])
         self.assertEqual(context['images'][0]['url'],'/api/treinamento/candidatos/7/imagens/1/0')
 
     def test_candidate_image_is_bound_to_original_ticket_action(self):
@@ -232,10 +236,18 @@ class TrainingWorkflowTests(unittest.TestCase):
         page=Path(__file__).parent/'static'/'treinamento.html'
         text=page.read_text(encoding='utf-8')
         self.assertIn('candidateForm(c, content, related, imported)',text)
-        self.assertIn('state.images.filter(image => ownUploads.has(image.file))',text)
+        self.assertIn('(content.images || []).map(chosen => state.images.find(image => image.file === chosen.file))',text)
         self.assertIn('...imported.values()',text)
-        self.assertIn('Somente imagens revisadas e vinculadas abaixo serão publicadas.',text)
-        self.assertIn('Usar no procedimento',text)
+        self.assertIn('class="review-answer-editor" contenteditable="true"',text)
+        self.assertIn('function candidateAnswerHtml(c, content, context)',text)
+        self.assertIn('imagesForCandidateAction(context, source)',text)
+        self.assertNotIn('Conversa original do chamado',text)
+        self.assertIn("dlg.querySelectorAll('#f_answer img')",text)
+        self.assertIn('Os prints aparecem automaticamente na resposta',text)
+        self.assertIn('Incluído automaticamente',text)
+        self.assertIn("['blur','Borrar'],['paint','Pintar']",text)
+        self.assertIn('after_answer_paragraph',text)
+        self.assertIn('/revisar',text)
 
     def test_candidate_subcategories_use_collapsed_parent_tree(self):
         page=Path(__file__).parent/'static'/'treinamento.html'

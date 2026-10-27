@@ -87,6 +87,13 @@ class ProcedureImage(BaseModel):
     caption: str = Field(min_length=3, max_length=300)
     placement: Literal['answer', 'procedure'] = 'procedure'
     after_step: int | None = Field(default=None, ge=1, le=100)
+    after_answer_paragraph: int | None = Field(default=None, ge=1, le=100)
+
+
+class CandidateImageRedaction(BaseModel):
+    data_url: str = Field(min_length=30, max_length=7_100_000)
+    name: str = Field(default='Print tratado da resposta técnica', min_length=3, max_length=120)
+    redacted: bool = False
 
 
 class Content(BaseModel):
@@ -234,6 +241,13 @@ def candidate_image(candidate_id: int, action_id: int, index: int):
 @router.post('/candidatos/{candidate_id}/imagens/{action_id}/{index}/preparar')
 def prepare_candidate_image(candidate_id: int, action_id: int, index: int, request: Request):
     return _guard(kt.prepare_candidate_image, candidate_id, action_id, index, actor(request))
+
+
+@router.post('/candidatos/{candidate_id}/imagens/{action_id}/{index}/revisar')
+def save_candidate_image_redaction(candidate_id: int, action_id: int, index: int,
+                                   body: CandidateImageRedaction, request: Request):
+    return _guard(kt.save_candidate_redacted_image, candidate_id, action_id, index,
+                  body.data_url, body.name, body.redacted, actor(request))
 
 
 @router.post('/candidatos/{candidate_id}/aprovar')

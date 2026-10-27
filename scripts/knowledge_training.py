@@ -572,24 +572,66 @@ def get_candidate(candidate_id):
     source_actions = curation_actions(actions)
     history = []
     ticket_images = []
-    for action in source_actions[-20:]:
+    # A revisão administrativa precisa conseguir conferir o chamado inteiro.
+    # Não limitar o histórico às últimas ações: a pergunta, a resposta e as
+    # imagens podem estar em momentos diferentes do atendimento.
+    for action in source_actions:
         description = sanitize(plain(action.get('description') or '')).strip()
-        if not description:
-            continue
         author = action.get('createdBy') or {}
-        image_entries = action_attachments(action)
-        for index, attachment in enumerate(image_entries):
-            if len(ticket_images) >= 8:
-                break
-            ticket_images.append({'action_id': action.get('id'), 'index': index,
-                                  'role': 'technician' if is_agent(action) else 'customer',
-                                  'name': sanitize(attachment.get('fileName') or 'Print do ticket')[:120],
-                                  'url': f"/api/treinamento/candidatos/{candidate_id}/imagens/{action.get('id')}/{index}"})
+        rich_description = str(action.get('htmlDescription') or '')
+        inline_paths = {
+            match.group(1).upper()
+            for source in re.findall(r'<img\b[^>]*\bsrc\s*=\s*["\']([^"\']+)', rich_description, re.I)
+            if (match := re.search(r'([A-Fa-f0-9]{32})(?:\?[^\s]*)?$', source))
+        }
+        image_entries = []
+        for index, attachment in enumerate(action_attachments(action)):
+            name = str(attachment.get('fileName') or '').casefold()
+            mime = str(attachment.get('mimeType') or attachment.get('contentType') or '').casefold()
+            if (mime.startswith('image/') or attachment.get('inline') or
+                    str(attachment.get('path') or '').upper() in inline_paths or
+                    Path(name).suffix in {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}):
+                image_entries.append((index, attachment))
+        if not description and not image_entries:
+            continue
+        event_images = []
+        inline_url_by_hash = {}
+        for index, attachment in image_entries:
+            image = {'action_id': action.get('id'), 'index': index,
+                     'role': 'technician' if is_agent(action) else 'customer',
+                     'name': sanitize(attachment.get('fileName') or 'Print do ticket')[:120],
+                     'url': f"/api/treinamento/candidatos/{candidate_id}/imagens/{action.get('id')}/{index}",
+                     'inline': bool(attachment.get('inline') or
+                                    str(attachment.get('path') or '').upper() in inline_paths)}
+            event_images.append(image)
+            ticket_images.append(image)
+            storage_path = str(attachment.get('path') or '').upper()
+            if re.fullmatch(r'[A-F0-9]{32}', storage_path):
+                inline_url_by_hash[storage_path] = image['url']
+
+        message_html = _sanitize_rich_html(rich_description) if rich_description else ''
+        if message_html:
+            def candidate_image_tag(match):
+                tag = match.group(0)
+                src_match = re.search(r'\bsrc\s*=\s*(["\'])(.*?)\1', tag, re.I)
+                hash_match = re.search(r'/api/treinamento/tecnico/imagem/([A-Fa-f0-9]{32})',
+                                       src_match.group(2) if src_match else '', re.I)
+                image_url = inline_url_by_hash.get(hash_match.group(1).upper()) if hash_match else None
+                if not image_url:
+                    return ''
+                return re.sub(r'\bsrc\s*=\s*(["\']).*?\1', f'src="{image_url}"', tag,
+                              count=1, flags=re.I)
+
+            # Só renderiza prints que vieram anexados a esta ação e serão servidos
+            # pela rota restrita ao ticket; outras imagens externas são descartadas.
+            message_html = re.sub(r'<img\b[^>]*>', candidate_image_tag, message_html, flags=re.I)
+        for image in event_images:
+            image['inline'] = bool(image['inline'] and image['url'] in message_html)
         history.append({'id': action.get('id'), 'role': 'technician' if is_agent(action) else 'customer',
                         'author': sanitize(author.get('businessName') or author.get('name') or ''),
-                        'at': action.get('createdDate'), 'text': description[:1800],
-                        'attachments': [image['name'] for image in ticket_images
-                                        if image['action_id'] == action.get('id')]})
+                        'at': action.get('createdDate'), 'text': description,
+                        'html': message_html,
+                        'images': event_images})
     question_id = str(row.get('source_question_action_id') or '')
     question_action = next((a for a in source_actions if question_id and str(a.get('id')) == question_id
                             and not is_agent(a)), None)
@@ -608,7 +650,7 @@ def get_candidate(candidate_id):
     return {**dict(row), 'answer_reviews': reviews,
             'ticket_context': {'subject': sanitize(ticket.get('subject') or ''),
                                'status': ticket.get('status') or ticket.get('base_status') or '',
-                               'question': question[:1800], 'technician_reply': technician_reply,
+                               'question': question, 'technician_reply': technician_reply,
                                'history': history, 'images': ticket_images}}
 
 
@@ -665,6 +707,38 @@ def prepare_candidate_image(candidate_id, action_id, index, actor):
         audit(conn, 'candidate', candidate_id, 'image_prepared', actor,
               after={'action_id': action_id, 'index': index, 'file': file_name})
     return {'file': file_name, 'label': 'Print do ticket', 'url': '/training-media/' + file_name}
+
+
+def save_candidate_redacted_image(candidate_id, action_id, index, data_url, name, redacted, actor):
+    """Store the flattened, reviewed copy of a technician image without changing the ticket original."""
+    ensure_schema()
+    with connect() as conn:
+        row = conn.execute('SELECT ticket_external_id FROM cortex_kb.candidates WHERE id=%s',
+                           (candidate_id,)).fetchone()
+        if not row:
+            raise LookupError('Sugestão não encontrada.')
+        _, actions = load_ticket(conn, row['ticket_external_id'])
+    action = next((item for item in curation_actions(actions)
+                   if str(item.get('id')) == str(action_id)), None)
+    if not action or not is_agent(action):
+        raise LookupError('O print não pertence a uma resposta técnica deste chamado.')
+    from movidesk_note_worker import action_attachments
+    attachments = action_attachments(action)
+    if index < 0 or index >= len(attachments):
+        raise LookupError('Imagem não encontrada nesta resposta técnica.')
+    safe_name = sanitize(str(name or 'Print tratado da resposta técnica')).strip()[:120]
+    if len(safe_name) < 3:
+        safe_name = 'Print tratado da resposta técnica'
+    saved = _save_proposal_images([{
+        'data_url': data_url, 'name': safe_name, 'caption': safe_name,
+        'placement': 'answer', 'after_step': None,
+    }], '')[0]
+    with connect() as conn:
+        audit(conn, 'candidate', candidate_id, 'image_reviewed', actor,
+              after={'action_id': action_id, 'index': index, 'file': saved['file'],
+                     'name': safe_name, 'redacted': bool(redacted)})
+    return {'file': saved['file'], 'label': safe_name,
+            'url': '/training-media/' + saved['file']}
 
 
 def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, limit=100):
@@ -746,6 +820,11 @@ def _validate_content(c):
             raise ValueError('Vincule cada imagem do procedimento a um passo numerado existente (1. …).')
         image['placement'] = placement
         image['after_step'] = image.get('after_step') if placement == 'procedure' else None
+        paragraph = image.get('after_answer_paragraph')
+        if paragraph is not None and (placement != 'answer' or not isinstance(paragraph, int)
+                                      or paragraph < 1 or paragraph > 100):
+            raise ValueError('A posição da imagem na resposta é inválida.')
+        image['after_answer_paragraph'] = paragraph if placement == 'answer' else None
         image['name'] = sanitize(str(image.get('name') or image.get('caption') or 'Tela de referência')).strip()[:120]
         if len(image['name']) < 3 or norm(image['name']) in image_names:
             raise ValueError('Cada imagem precisa de um nome único com pelo menos 3 caracteres.')
@@ -1000,53 +1079,24 @@ def overview():
             (SELECT count(*) FROM cortex_kb.candidates WHERE status IN ('pending','conflict')) AS pending,
             (SELECT count(*) FROM cortex_kb.conflicts WHERE status='open') AS conflicts,
             (SELECT count(*) FROM cortex_kb.versions WHERE status='published' AND NOT embedding_ok) AS without_vector''').fetchone()
-        custom_tax = conn.execute('SELECT key, label, description, parent_key FROM cortex_kb.taxonomy ORDER BY label').fetchall()
-
-    children_by_parent = {}
-    for r in custom_tax:
-        if r.get('parent_key'):
-            children_by_parent.setdefault(r['parent_key'], []).append(dict(r))
 
     tree = []
     for mod in taxonomy_options():
         key, label, description = mod['key'], mod['label'], mod['description']
         mod_counts = {r['subtopic_key']: r['n'] for r in items if r['module_key'] == key}
-        subs_list = []
-        all_sub_entries = [(k, l) for k, l, _ in taxonomy.SUBTOPICS.get(key, [])]
-        for sr in children_by_parent.get(key, []):
-            if sr['key'] not in {k for k, _ in all_sub_entries}:
-                all_sub_entries.append((sr['key'], sr['label']))
+        known_keys = set()
 
-        for skey, slabel in all_sub_entries:
-            children = []
-            for ckey, clabel, _ in getattr(taxonomy, 'SUB_SUBTOPICS', {}).get(skey, []):
-                children.append({
-                    'key': ckey,
-                    'label': clabel,
-                    'items': mod_counts.get(ckey, 0)
-                })
-            for cr in children_by_parent.get(skey, []):
-                if cr['key'] not in {c['key'] for c in children}:
-                    children.append({
-                        'key': cr['key'],
-                        'label': cr['label'],
-                        'items': mod_counts.get(cr['key'], 0)
-                    })
-            total_sub_items = mod_counts.get(skey, 0) + sum(c['items'] for c in children)
-            subs_list.append({
-                'key': skey,
-                'label': slabel,
-                'items': total_sub_items,
-                'children': children
-            })
-        known_keys = {s['key'] for s in subs_list} | {c['key'] for s in subs_list for c in s.get('children', [])}
-        general_n = sum(n for k, n in mod_counts.items() if k not in known_keys)
-        subs_list.append({
-            'key': 'general',
-            'label': 'Geral / outros',
-            'items': general_n,
-            'children': []
-        })
+        def build_node(node):
+            children = [build_node(child) for child in node.get('children', [])]
+            known_keys.add(node['key'])
+            count = mod_counts.get(node['key'], 0) + sum(child['items'] for child in children)
+            return {'key': node['key'], 'label': node['label'], 'items': count, 'children': children}
+
+        subs_list = [build_node(node) for node in mod.get('nodes', [])]
+        general_n = mod_counts.get('general', 0) + sum(n for k, n in mod_counts.items()
+                                                        if k != 'general' and k not in known_keys)
+        subs_list.append({'key': 'general', 'label': 'Geral / outros',
+                          'items': general_n, 'children': []})
         tree.append({'key': key, 'label': label, 'description': description,
                      'items': sum(r['n'] for r in items if r['module_key'] == key),
                      'pending': next((p['n'] for p in pending if p['module_key'] == key), 0),
@@ -1134,39 +1184,88 @@ def taxonomy_options():
     with connect() as conn:
         all_tax = conn.execute('SELECT key, label, description, parent_key FROM cortex_kb.taxonomy ORDER BY label').fetchall()
 
-    roots_by_key = {r['key']: dict(r) for r in all_tax if not r.get('parent_key')}
-    children_by_parent = {}
-    for r in all_tax:
-        if r.get('parent_key'):
-            children_by_parent.setdefault(r['parent_key'], []).append(dict(r))
+    roots = []
+    nodes_by_key = {}
+
+    def register(node):
+        nodes_by_key.setdefault(node['key'], []).append(node)
+
+    for key, label, description in taxonomy.MODULES:
+        node = {'key': key, 'label': label, 'description': description,
+                'parent_key': None, 'children': []}
+        roots.append(node)
+        register(node)
+    for root_key, entries in taxonomy.SUBTOPICS.items():
+        root = next((node for node in roots if node['key'] == root_key), None)
+        if not root:
+            continue
+        for key, label, _ in entries:
+            node = {'key': key, 'label': label, 'description': '',
+                    'parent_key': root_key, 'children': []}
+            root['children'].append(node)
+            register(node)
+    for parent_key, entries in getattr(taxonomy, 'SUB_SUBTOPICS', {}).items():
+        parents = nodes_by_key.get(parent_key, [])
+        if len(parents) != 1:
+            continue
+        for key, label, _ in entries:
+            node = {'key': key, 'label': label, 'description': '',
+                    'parent_key': parent_key, 'children': []}
+            parents[0]['children'].append(node)
+            register(node)
+
+    # Existing rows rename canonical nodes; unknown rows add editable nodes.
+    unresolved = []
+    for raw in all_tax:
+        row = dict(raw)
+        key, parent_key = row['key'], row.get('parent_key')
+        matches = [node for node in nodes_by_key.get(key, []) if node['parent_key'] == parent_key]
+        if matches:
+            matches[0]['label'] = row['label'] or matches[0]['label']
+            matches[0]['description'] = row.get('description') or matches[0]['description']
+        elif key not in nodes_by_key:
+            unresolved.append(row)
+
+    # Resolve custom descendants after their parents, regardless of DB sort order.
+    for _ in range(3):
+        remaining = []
+        for row in unresolved:
+            parent_key = row.get('parent_key')
+            if parent_key:
+                parents = nodes_by_key.get(parent_key, [])
+                if len(parents) != 1:
+                    remaining.append(row)
+                    continue
+                node = {'key': row['key'], 'label': row['label'], 'description': row.get('description') or '',
+                        'parent_key': parent_key, 'children': []}
+                parents[0]['children'].append(node)
+                register(node)
+            else:
+                node = {'key': row['key'], 'label': row['label'], 'description': row.get('description') or '',
+                        'parent_key': None, 'children': []}
+                roots.append(node)
+                register(node)
+        unresolved = remaining
+
+    def serialize(node):
+        return {'key': node['key'], 'label': node['label'], 'description': node['description'],
+                'children': [serialize(child) for child in node['children']]}
 
     result = []
-    for key, label, description in taxonomy.MODULES:
-        row = roots_by_key.pop(key, {})
-        subs = []
-        for skey, slabel, _ in taxonomy.SUBTOPICS.get(key, []):
-            subs.append((skey, slabel))
-            for ckey, clabel, _ in getattr(taxonomy, 'SUB_SUBTOPICS', {}).get(skey, []):
-                subs.append((ckey, f"{slabel} > {clabel}"))
-            for cr in children_by_parent.get(skey, []):
-                subs.append((cr['key'], f"{slabel} > {cr['label']}"))
-        for sr in children_by_parent.get(key, []):
-            subs.append((sr['key'], sr['label']))
-            for cr in children_by_parent.get(sr['key'], []):
-                subs.append((cr['key'], f"{sr['label']} > {cr['label']}"))
-        subs.append(('general', 'Geral / outros'))
-        result.append({'key': key, 'label': row.get('label', label), 'description': row.get('description', description),
-                       'subtopics': subs})
+    for raw_root in roots:
+        node = serialize(raw_root)
+        flat_subtopics = []
 
-    for k, r in roots_by_key.items():
-        subs = []
-        for sr in children_by_parent.get(k, []):
-            subs.append((sr['key'], sr['label']))
-            for cr in children_by_parent.get(sr['key'], []):
-                subs.append((cr['key'], f"{sr['label']} > {cr['label']}"))
-        subs.append(('general', 'Geral / outros'))
-        result.append({'key': k, 'label': r['label'], 'description': r['description'],
-                       'subtopics': subs})
+        def flatten(children, path=()):
+            for child in children:
+                child_path = (*path, child['label'])
+                flat_subtopics.append((child['key'], ' > '.join(child_path)))
+                flatten(child['children'], child_path)
+
+        flatten(node['children'])
+        flat_subtopics.append(('general', 'Geral / outros'))
+        result.append({'key': node['key'], 'label': node['label'], 'description': node['description'],
+                       'nodes': node['children'], 'subtopics': flat_subtopics})
     return result
 
 
@@ -1178,6 +1277,27 @@ def save_module(key, label, description, actor, parent_key=None):
         raise ValueError('Nome deve ter de 2 a 80 caracteres.')
     parent = (parent_key or '').strip() or None
     ensure_schema()
+    current_nodes = {}
+
+    def collect(nodes, parent_node=None, depth=0):
+        for node in nodes:
+            current_nodes.setdefault(node['key'], []).append({'parent_key': parent_node, 'depth': depth})
+            collect(node.get('children', []), node['key'], depth + 1)
+
+    for root in taxonomy_options():
+        current_nodes.setdefault(root['key'], []).append({'parent_key': None, 'depth': 0})
+        collect(root.get('nodes', []), root['key'], 1)
+    parent_entries = current_nodes.get(parent, []) if parent else []
+    if parent and not parent_entries:
+        raise ValueError('O módulo ou categoria pai selecionada não existe.')
+    if parent and len(parent_entries) > 1:
+        raise ValueError('Esta categoria possui nomes internos repetidos; escolha outra categoria pai.')
+    if parent and parent_entries[0]['depth'] >= 2:
+        raise ValueError('A taxonomia permite até três níveis: módulo, filho e neto.')
+    existing_nodes = current_nodes.get(key, [])
+    matching_existing = [node for node in existing_nodes if node['parent_key'] == parent]
+    if existing_nodes and not matching_existing:
+        raise ValueError('Não é possível mover uma categoria para outro nível. Edite somente o nome.')
     with connect() as conn:
         before = conn.execute('SELECT * FROM cortex_kb.taxonomy WHERE key=%s', (key,)).fetchone()
         conn.execute("""INSERT INTO cortex_kb.taxonomy(key,label,description,parent_key,updated_by) VALUES (%s,%s,%s,%s,%s)

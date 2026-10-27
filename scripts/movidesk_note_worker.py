@@ -348,6 +348,7 @@ def generate_note(ticket, settings, api):
                                       resolved_support_cases, capability_evidence_cases, company_case_source,
                                       report_usage_case_source)
     from technician_workbench import cases_for_selected_evidence, report_topic
+    from technician_workbench import approved_procedure_cases
     from tech_evidence import ensure_single_tenant
     from conversation_outcome import classify_outcome, RESOLVED_REPLY, ACKNOWLEDGED_REPLY
 
@@ -429,6 +430,7 @@ def generate_note(ticket, settings, api):
         approved = knowledge_access.approved_procedures(conn, query)
         if approved:
             sources = approved
+            cases = approved_procedure_cases(conn, tenant, approved, ticket.get('id'))
             evidence_scope = 'human_approved_procedure'
         elif reviewed:
             # A reviewed exact-error recipe wins over semantic retrieval, while
@@ -439,12 +441,12 @@ def generate_note(ticket, settings, api):
         capability_leads = capability_evidence_cases(conn, tenant, query, ticket.get('id'))
         # History attached to a solution must describe a completed procedure.
         related_cases = [case for case in cases if case.get('match') == 'report_topic']
-        cases = [case for case in cases if report_usage_case_source(case, query)]
+        cases = list(cases) if approved else [case for case in cases if report_usage_case_source(case, query)]
         known = {str(case['external_id']) for case in cases}
         need_history = not any(s.get('applicable') and s.get('answer_use') != 'investigation_only'
                                for s in sources)
         for case in (resolved_support_cases(conn, tenant, query, ticket.get('id'), company_id=org_id)
-                     if (need_history or len(cases) < 3) else []):
+                     if not approved and (need_history or len(cases) < 3) else []):
             if str(case['external_id']) not in known:
                 cases.append(case)
                 known.add(str(case['external_id']))
@@ -547,6 +549,7 @@ def generate_note(ticket, settings, api):
             'similar_tickets': similar, 'evidence_scope': evidence_scope,
             'decision': decision, 'specialist': meta.get('specialist'),
             'mode': meta.get('mode'), 'attachments': attachment_notices + media_notices, 'images': images,
+            'answer_paragraph_offset': meta.get('answer_paragraph_offset', 0),
             'history_notice': ('Nenhum chamado resolvido qualificado foi encontrado para apoiar este procedimento.'
                                if reference and not any(not c.get('active') and c.get('resolution') for c in similar) else
                                'Tutorial localizado na base; vídeo sem transcrição validada para gerar passos escritos.' if tutorials and not reference else
@@ -592,6 +595,15 @@ def render_note(result, marker):
 
     images = result.get('images') or []
     answer_images = [item for item in images if item.get('placement') == 'answer']
+    answer_offset = max(0, int(result.get('answer_paragraph_offset') or 0))
+    inline_answer_images = {}
+    legacy_answer_images = []
+    for item in answer_images:
+        paragraph = item.get('after_answer_paragraph')
+        if isinstance(paragraph, int) and paragraph > 0:
+            inline_answer_images.setdefault(paragraph + answer_offset, []).append(item)
+        else:
+            legacy_answer_images.append(item)
     positioned = {}
     for item in images:
         if item.get('placement') == 'answer':
@@ -601,21 +613,29 @@ def render_note(result, marker):
             positioned.setdefault(step, []).append(item)
     lines = ['<p><strong>Cortex — resposta sugerida ao cliente (nota interna)</strong></p>']
     answer_images_emitted = False
+    answer_paragraph = 0
     for raw_line in str(result['reply']).splitlines():
         if not raw_line.strip():
             continue
         numbered = re.match(r'^(\d+)\.\s', raw_line.strip())
         if numbered and not answer_images_emitted:
-            for item in answer_images:
+            for item in legacy_answer_images:
                 lines.append(image_block(item))
             answer_images_emitted = True
         lines.append('<p>' + inline_text(raw_line.strip()) + '</p>')
+        answer_paragraph += 1
+        for item in inline_answer_images.get(answer_paragraph, []):
+            lines.append(image_block(item))
         if numbered:
             for item in positioned.get(int(numbered.group(1)), []):
                 lines.append(image_block(item))
     if not answer_images_emitted:
-        for item in answer_images:
+        for item in legacy_answer_images:
             lines.append(image_block(item))
+    for paragraph in sorted(inline_answer_images):
+        if paragraph > answer_paragraph:
+            for item in inline_answer_images[paragraph]:
+                lines.append(image_block(item))
     for source in result.get('sources', []):
         label = str(source.get('title') or 'Referência')
         if source.get('ticket'):

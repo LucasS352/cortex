@@ -11,7 +11,8 @@ function fitTrainingFrame(){
     const top=Math.max(0,frame.getBoundingClientRect().top);
     const available=Math.max(320,window.innerHeight-top-(window.innerWidth<=760?80:20));
     frame.contentDocument.documentElement.style.setProperty('--admin-viewport-height',available+'px');
-    const height=Math.max(620,Math.ceil(body.getBoundingClientRect().height)+4);
+    const dialogOpen=!!frame.contentDocument.querySelector('dialog[open]');
+    const height=dialogOpen?available:Math.max(620,Math.ceil(body.getBoundingClientRect().height)+4);
     if(Math.abs(frame.offsetHeight-height)>2)frame.style.height=height+'px';
   }catch(_){}
 }
@@ -29,6 +30,11 @@ function watchTrainingFrame(){
 $('training-frame')?.addEventListener('load',watchTrainingFrame);
 if($('training-frame')?.contentDocument?.readyState==='complete')watchTrainingFrame();
 window.addEventListener('resize',fitTrainingFrame);
+window.addEventListener('message',event=>{
+  const frame=$('training-frame');
+  if(event.origin!==window.location.origin||event.source!==frame?.contentWindow)return;
+  if(event.data?.type==='cortex-training-dialog')requestAnimationFrame(fitTrainingFrame);
+});
 const state = {overview:null, ticketPage:1, knowledgePage:1, ticketTopic:'', ticketStatus:'', query:'', source:'', knowledgeModule:'', knowledgeSubtopic:'', knowledgeModules:[], settings:null};
 const sourceLabels = {
   OFFICIAL_KB:['Artigos oficiais','Conteúdo da base de conhecimento'],

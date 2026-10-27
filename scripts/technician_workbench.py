@@ -546,15 +546,47 @@ def report_usage_case_source(case, query):
 
 def cases_for_selected_evidence(cases, primary):
     """Show only cases tied to the selected resolution or its exact error signature."""
-    source_ticket = str((primary or {}).get('source_external_id') or '')
+    source_tickets = {str((primary or {}).get('source_external_id') or '')} - {''}
+    if (primary or {}).get('evidence_status') == 'human_approved_procedure':
+        source_tickets.update(str(ref.get('external_ref')) for ref in
+                              ((primary or {}).get('metadata') or {}).get('source_references', [])
+                              if ref.get('source_type') == 'ticket' and str(ref.get('external_ref', '')).isdigit())
     title = knowledge_access.normalize((primary or {}).get('title') or '')
     rejection = re.search(r'\brejeicao\s*(\d{3,4})\b', title)
     return [case for case in cases if
-            (source_ticket and str(case.get('external_id') or '') == source_ticket) or
+            str(case.get('external_id') or '') in source_tickets or
             case.get('match') in ('error_signature', 'resolved_support', 'report_service') or
             (primary and case.get('match') == 'report_topic' and company_case_source(case)) or
             (rejection and re.search(r'\brejeicao\s*' + rejection.group(1) + r'\b',
                                      knowledge_access.normalize(case.get('subject') or '')))]
+
+
+def approved_procedure_cases(conn, tenant, sources, exclude_ticket_id=None):
+    """Read the curator's actual ticket references without scanning unrelated history."""
+    references = []
+    for source in sources:
+        if source.get('evidence_status') != 'human_approved_procedure':
+            continue
+        references.extend(str(ref.get('external_ref')) for ref in
+                          (source.get('metadata') or {}).get('source_references', [])
+                          if ref.get('source_type') == 'ticket')
+        if source.get('source_external_id'):
+            references.append(str(source['source_external_id']))
+    ids = list(dict.fromkeys(int(ref) for ref in references
+                            if ref.isdigit() and ref != str(exclude_ticket_id or '')))[:30]
+    if not ids:
+        return []
+    rows = conn.execute('''SELECT external_id,subject,status,base_status,problem_statement,
+        technical_narrative,solution_statement,quality_tier,hard_block_reason
+        FROM refined_tickets WHERE tenant_id=%s AND external_id=ANY(%s)''', (tenant, ids)).fetchall()
+    result = []
+    for row in rows:
+        resolution = extract_resolution(row)
+        active = row.get('base_status') not in ('Resolved', 'Closed')
+        result.append(dict(row, is_active=active, match='canonical_evidence',
+                           solution_statement=resolution if not active else None,
+                           resolution_verified=bool(resolution) and not active))
+    return result
 
 
 def evidence_for_company(conn, tenant, company_id: str, query: str,
@@ -564,15 +596,15 @@ def evidence_for_company(conn, tenant, company_id: str, query: str,
     # Deterministic reviewed replies can also be evaluated without a database.
     if conn is None and reviewed:
         return [reviewed], [], "reviewed_procedure"
+    approved = knowledge_access.approved_procedures(conn, query)
+    if approved:
+        return approved, approved_procedure_cases(conn, tenant, approved, exclude_ticket_id), 'human_approved_procedure'
     company_matches = company_similar_cases(conn, tenant, company_id, query, limit, exclude_ticket_id) if company_id else []
     cases = list(company_matches)
     if report_topic(query):
         related = report_related_cases(conn, tenant, query, exclude_ticket_id, limit=5)
         seen = {str(case.get('external_id')) for case in related}
         cases = related + [case for case in cases if str(case.get('external_id')) not in seen]
-    approved = knowledge_access.approved_procedures(conn, query)
-    if approved:
-        return approved, cases, 'human_approved_procedure'
     if reviewed:
         return [reviewed], cases, "reviewed_procedure"
     report_cases = report_service_cases(conn, tenant, query, exclude_ticket_id, limit=1)
@@ -1010,17 +1042,20 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
                 'Se encontrar dificuldade em alguma etapa, envie o nome do campo ou um print da tela para continuarmos a orientação.'), {
                     'used': True, 'mode': 'video_reference', 'model': None, 'specialist': spec_meta}
     if grounded and primary.get('evidence_status') == 'human_approved_procedure':
-        # Preserve human-approved step numbers so reviewed screenshots stay aligned.
-        parts = ['Olá!', primary.get('problem') or primary.get('title') or '']
+        # Use the approved words directly. Added introductions would also shift
+        # the paragraph anchors recorded for the curator's inline screenshots.
+        parts = []
         prerequisites = (primary.get('metadata') or {}).get('prerequisites')
         if prerequisites:
             parts.append('Antes de começar: ' + prerequisites)
+        answer_offset = sum(bool(line.strip()) for part in parts for line in part.splitlines())
         if primary.get('solution'):
             parts.append(primary['solution'])
         if primary.get('result'):
             parts.append('Resultado esperado: ' + primary['result'])
         return '\n\n'.join(parts), {
-            'used': True, 'mode': 'human_approved_procedure', 'model': None, 'decision': decision, 'specialist': spec_meta}
+            'used': True, 'mode': 'human_approved_procedure', 'model': None, 'decision': decision,
+            'specialist': spec_meta, 'answer_paragraph_offset': answer_offset}
     has_resolved_reference = bool(
         grounded or
         any(not c.get('is_active') and not _is_hard_blocked(c) and c.get('solution_statement') for c in cases)
@@ -1179,7 +1214,7 @@ def add_message(cid: uuid.UUID, body: NewMessage):
                                        for s in sources)
                 for extra_case in (resolved_support_cases(conn, tenant, search_query,
                                                           company_id=row["movidesk_company_id"])
-                                   if (need_history or len(cases) < 3) else []):
+                                   if _scope != 'human_approved_procedure' and (need_history or len(cases) < 3) else []):
                     if str(extra_case.get("external_id")) not in known_ids:
                         cases.append(extra_case)
                         known_ids.add(str(extra_case.get("external_id")))

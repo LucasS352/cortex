@@ -7,9 +7,12 @@
 <script>
   if (window.top === window.self) {
     const params = new URLSearchParams(window.location.search);
+    const candidate = params.get('candidate') || '';
     const ticket = params.get('ticket') || '';
     const marker = params.get('marker') || '';
-    if (/^\d+$/.test(ticket)) {
+    if (/^\d+$/.test(candidate)) {
+      document.documentElement.classList.add('standalone-candidate');
+    } else if (/^\d+$/.test(ticket)) {
       const target = new URL('/treinamento/tecnico', window.location.origin);
       target.searchParams.set('ticket', ticket);
       if (/^CORTEX-AI-NOTE:[a-f0-9]{64}$/i.test(marker)) target.searchParams.set('marker', marker);
@@ -264,10 +267,12 @@ aside#tree {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 14px 10px;
+  padding: 14px 9px;
   box-shadow: var(--shadow-sm);
   position: sticky;
   top: 0;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
 }
 
 aside h2 {
@@ -285,10 +290,10 @@ aside h2 {
   justify-content: space-between !important;
   box-sizing: border-box !important;
   width: 100% !important;
-  height: 38px !important;
-  min-height: 38px !important;
-  max-height: 38px !important;
-  padding: 0 10px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  padding: 0 8px !important;
   border-radius: 9px !important;
   cursor: pointer;
   white-space: nowrap !important;
@@ -305,13 +310,13 @@ aside h2 {
 }
 
 .sub {
-  padding-left: 20px !important;
+  padding-left: 10px !important;
   font-size: 12px;
   color: var(--muted);
 }
 
 .sub-sub {
-  padding-left: 32px !important;
+  padding-left: 19px !important;
   font-size: 11.5px;
   color: var(--muted);
 }
@@ -366,6 +371,84 @@ aside h2 {
   font-size: 11px;
   width: 12px;
   flex-shrink: 0;
+}
+
+.tree-row-main { display: inline-flex !important; align-items: center !important; gap: 7px !important; min-width: 0 !important; flex: 1 1 auto !important; overflow: hidden !important; }
+.tree-row-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-module-icon { width: 22px; height: 22px; flex: none; display: inline-grid; place-items: center; border-radius: 7px; color: var(--brand); background: var(--brand-soft); font-weight: 800; font-size: 14px; }
+.tree-row-actions { display: inline-flex !important; align-items: center !important; gap: 5px !important; flex: none !important; }
+.tree-count { min-width: 20px; height: 20px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--surface-2); color: var(--muted); font: 700 10px 'JetBrains Mono', monospace; }
+.taxonomy-inline-actions { display: inline-flex; align-items: center; flex: none; }
+.taxonomy-inline-actions button { width: 23px; height: 23px; min-width: 23px; padding: 0; display: inline-grid; place-items: center; border-radius: 7px; color: var(--brand); font-size: 16px; line-height: 1; font-weight: 800; }
+.taxonomy-inline-actions button:hover { background: var(--brand-soft); border-color: var(--line-strong); }
+.tree-all-row { margin-bottom: 7px !important; background: var(--surface-2); font-weight: 700; }
+
+dialog.taxonomy-dialog { width: min(1440px, 96vw); height: min(860px, 92vh); max-height: 92vh; overflow: hidden; }
+html.embedded-in-admin dialog.taxonomy-dialog { height: calc(var(--admin-viewport-height, 92vh) - 24px); max-height: calc(var(--admin-viewport-height, 92vh) - 24px); }
+.taxonomy-dialog[open] { display: flex; flex-direction: column; }
+.taxonomy-dialog .dlg-head { flex: none; }
+dialog.taxonomy-dialog .taxonomy-manager-body { display: grid; grid-template-columns: minmax(265px, .74fr) minmax(0, 1.55fr); gap: 0; flex: 1; min-height: 0; max-height: none !important; padding: 0; overflow: hidden; background: var(--surface); align-items: stretch; }
+.taxonomy-nav { min-width: 0; display: flex; flex-direction: column; padding: 18px 14px; border-right: 1px solid var(--line); background: var(--surface-2); overflow: hidden; }
+.taxonomy-search { position: relative; margin-bottom: 10px; flex: none; }
+.taxonomy-search input { width: 100%; padding-left: 36px; }
+.taxonomy-search span { position: absolute; left: 12px; top: 9px; color: var(--muted); }
+.taxonomy-tree { min-height: 0; flex: 1; overflow: auto; padding-right: 2px; }
+.taxonomy-nav-row { display: flex; align-items: center; gap: 4px; min-height: 37px; padding: 3px 5px; margin-bottom: 2px; border-radius: 9px; }
+.taxonomy-nav-row:hover { background: var(--surface); }
+.taxonomy-nav-row.selected { background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand); }
+.taxonomy-nav-select { border: 0; background: transparent; padding: 0 3px; display: flex; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; flex: 1; text-align: left; }
+.taxonomy-nav-select:hover { background: transparent; }
+.taxonomy-nav-select strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.taxonomy-nav-caret { width: 18px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--muted); flex: none; }
+.taxonomy-nav-caret:disabled { visibility: hidden; }
+.taxonomy-nav-count { min-width: 21px; height: 21px; padding: 0 6px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: var(--surface); color: var(--muted); font: 700 10px 'JetBrains Mono', monospace; }
+.taxonomy-nav-add { width: 24px; height: 24px; min-width: 24px; padding: 0; color: var(--brand); font-weight: 800; font-size: 17px; }
+.taxonomy-nav-depth-1 { margin-left: 23px; border-left: 1px solid var(--line); border-radius: 0 8px 8px 0; }
+.taxonomy-nav-depth-2 { margin-left: 45px; border-left: 1px solid var(--line); border-radius: 0 8px 8px 0; }
+.taxonomy-new-root { margin-top: 12px; flex: none; width: 100%; color: var(--brand); border-color: var(--brand); background: transparent; }
+.taxonomy-detail { min-width: 0; padding: 22px 26px; overflow: auto; }
+.taxonomy-detail-head { display: flex; align-items: flex-start; gap: 12px; justify-content: space-between; margin-bottom: 18px; }
+.taxonomy-detail-title { display: flex; gap: 12px; min-width: 0; }
+.taxonomy-detail-icon { width: 42px; height: 42px; display: grid; place-items: center; flex: none; border-radius: 11px; background: var(--brand-soft); color: var(--brand); font-size: 20px; font-weight: 800; }
+.taxonomy-detail h3 { margin: 0 0 5px; font-size: 19px; }
+.taxonomy-breadcrumb { color: var(--muted); font-size: 12px; }
+.taxonomy-detail-actions { display: flex; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+.taxonomy-detail-actions button { white-space: nowrap; }
+.taxonomy-desc { color: var(--muted); margin: 0 0 20px; }
+.taxonomy-category-section { border: 1px solid var(--line); border-radius: 12px; padding: 15px; background: var(--surface-2); }
+.taxonomy-category-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.taxonomy-category-heading h4 { margin: 0; font-size: 14px; }
+.taxonomy-category-list { display: grid; gap: 7px; }
+.taxonomy-category-row { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.taxonomy-category-row > button:first-child { flex: 1; display: flex; align-items: center; gap: 10px; text-align: left; border: 0; background: transparent; min-width: 0; padding: 4px; }
+.taxonomy-category-row > button:first-child:hover { background: transparent; color: var(--brand); }
+.taxonomy-category-icon { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 7px; background: var(--surface-2); color: var(--ink); font-size: 15px; }
+.taxonomy-category-copy { min-width: 0; flex: 1; }
+.taxonomy-category-chevron { color: var(--brand); font-size: 20px; padding: 0 4px; }
+.taxonomy-category-count { min-width: 24px; height: 24px; padding: 0 7px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: var(--surface-2); color: var(--muted); font: 700 11px 'JetBrains Mono', monospace; }
+.taxonomy-category-name { display: block; font-weight: 700; }
+.taxonomy-category-meta { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+.taxonomy-category-row .taxonomy-nav-add { border: 1px solid var(--line); border-radius: 7px; }
+.taxonomy-add-callout { width: 100%; min-height: 86px; margin-top: 14px; padding: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--brand); }
+.taxonomy-add-callout:hover { border-color: var(--brand); background: var(--brand-soft); }
+.taxonomy-add-callout span { color: var(--muted); font-size: 12px; font-weight: 400; }
+.taxonomy-empty { padding: 30px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface); }
+.taxonomy-edit-form { margin-top: 15px; padding: 16px; border: 1px solid var(--line-strong); border-radius: 11px; background: var(--surface); }
+.taxonomy-edit-form h4 { margin: 0 0 10px; }
+.taxonomy-edit-form[hidden] { display: none; }
+.taxonomy-edit-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+@media (max-width: 900px) {
+  dialog.taxonomy-dialog .taxonomy-manager-body { grid-template-columns: minmax(235px, .78fr) minmax(0, 1.3fr); }
+  .taxonomy-detail { padding: 18px; }
+  .taxonomy-detail-head { flex-direction: column; }
+}
+@media (max-width: 560px) {
+  dialog.taxonomy-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); max-height: none; }
+  html.embedded-in-admin dialog.taxonomy-dialog { top: 6px; height: calc(var(--admin-viewport-height, 92vh) - 12px); max-height: none; }
+  dialog.taxonomy-dialog .taxonomy-manager-body { display: grid; grid-template-columns: 1fr; grid-template-rows: minmax(190px, 35vh) minmax(0, 1fr); overflow: auto; }
+  .taxonomy-nav { min-height: 0; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); }
+  .taxonomy-detail { flex: 1; overflow: visible; }
+  .taxonomy-detail-actions { justify-content: flex-start; }
 }
 
 .mod-title {
@@ -869,7 +952,11 @@ pre {
   border: 1px solid var(--line-strong);
 }
 
-dialog.candidate-dialog { width: min(1600px, 98vw); max-height: 96vh; }
+dialog.candidate-dialog { width: min(1600px, 98vw); height: calc(100vh - 24px); max-height: 96vh; }
+html.embedded-in-admin dialog.candidate-dialog {
+  height: calc(var(--admin-viewport-height, 92vh) - 24px);
+  max-height: calc(var(--admin-viewport-height, 92vh) - 24px);
+}
 .candidate-dialog[open] { display: flex; flex-direction: column; overflow: hidden; }
 .candidate-dialog .dlg-head, .candidate-dialog .dlg-foot { flex: none; }
 .candidate-dialog .dlg-body { flex: 1; min-height: 0; max-height: none; overflow-y: auto; padding: 14px; }
@@ -880,15 +967,23 @@ dialog.candidate-dialog { width: min(1600px, 98vw); max-height: 96vh; }
 .review-card p { margin: 7px 0; }
 .review-muted { font-size: 12px; color: var(--muted); }
 .review-question { padding: 12px; background: var(--surface-2); border-radius: 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
-.review-history { display: grid; gap: 10px; }
-.review-event { border-left: 2px solid var(--line-strong); padding-left: 10px; }
-.review-event.customer { border-color: var(--brand); }
-.review-event.technician { border-color: var(--ok); }
-.review-event-head { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
-.review-event p { max-height: 105px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.review-answer-editor { min-height: 240px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface); font-size: 14px; line-height: 1.65; white-space: normal; overflow-wrap: anywhere; }
+.review-answer-editor:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+.review-answer-editor:empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; }
+.review-answer-editor p { margin: 0 0 12px; }
+.review-answer-editor img { display: block; max-width: 100%; max-height: 440px; object-fit: contain; margin: 10px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+.candidate-inline-image { margin: 12px 0 16px; padding: 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2); }
+.candidate-inline-image canvas { display: block; width: 100%; height: auto; max-height: 440px; object-fit: contain; border: 1px solid var(--line); border-radius: 6px; background: #fff; touch-action: none; }
+.candidate-inline-image[data-mode="blur"] canvas, .candidate-inline-image[data-mode="paint"] canvas { cursor: crosshair; }
+.candidate-inline-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.candidate-inline-toolbar button { padding: 5px 9px; font-size: 11px; }
+.candidate-inline-toolbar button.active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); font-weight: 800; }
+.candidate-inline-toolbar .brush-size { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--muted); font-size: 11px; }
+.candidate-inline-toolbar input[type="range"] { width: 82px; }
+.candidate-image-status { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+.candidate-print-confirm { display: flex; align-items: center; gap: 7px; margin: 10px 0; font-size: 12px; font-weight: 700; }
 .review-step-title { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 800; }
 .review-step-title b { width: 24px; height: 24px; display: inline-grid; place-items: center; border-radius: 50%; background: var(--brand-soft); color: var(--brand); }
-.review-editor #f_answer { min-height: 210px; font-size: 14px; line-height: 1.65; }
 .review-editor #f_proc { min-height: 180px; font-family: inherit; font-size: 13px; }
 .review-editor .review-card { padding: 16px; }
 .review-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -915,17 +1010,35 @@ dialog.candidate-dialog { width: min(1600px, 98vw); max-height: 96vh; }
 .subtree-option { display: block; width: 100%; text-align: left; border: 0; background: none; border-radius: 5px; padding: 7px 8px 7px 24px; font-weight: 500; }
 .subtree-option.active { color: var(--brand); font-weight: 800; }
 .subtree-parent-option { padding-left: 12px; font-size: 11px; }
-.ticket-image-select { margin-top: 7px; padding: 5px 8px; font-size: 11px; white-space: normal; }
 .candidate-dialog .dlg-foot { padding: 10px 14px; }
 @media (max-width: 1120px) { .dlg-body.candidate-body { grid-template-columns: minmax(230px, .8fr) minmax(390px, 1.4fr); } .review-side { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .review-side .review-card { margin: 0; } }
 @media (max-width: 760px) { .dlg-body.candidate-body { grid-template-columns: 1fr; } .review-side { display: block; } .review-field-pair { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
+  dialog.candidate-dialog { width: calc(100vw - 12px); height: calc(100vh - 12px); max-height: none; }
+  html.embedded-in-admin dialog.candidate-dialog { height: calc(var(--admin-viewport-height, 92vh) - 12px); max-height: none; }
+  html.embedded-in-admin dialog.candidate-dialog { top: 6px; }
   .candidate-dialog .dlg-head { display: block; padding: 12px 14px; }
   .candidate-dialog .dlg-head-title { display: block; }
   .candidate-dialog .dlg-head h2 { margin-top: 4px; font-size: 15px; }
   .candidate-dialog .dlg-head-actions { margin-top: 9px; }
   .candidate-dialog .dlg-head-actions .external-ticket-link { max-width: 100%; }
 }
+
+html.standalone-candidate, html.standalone-candidate body { width: 100%; height: 100%; min-height: 100%; overflow: hidden; background: var(--surface); }
+html.standalone-candidate .training-action-bar, html.standalone-candidate .wrap { display: none !important; }
+html.standalone-candidate dialog.candidate-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+html.standalone-candidate .candidate-dialog .dlg-body { overscroll-behavior: contain; }
 
 html[data-theme="dark"] .external-ticket-link {
   color: #8abfff;
@@ -1014,8 +1127,39 @@ const $ = (s, r = document) => r.querySelector(s);
 function showTrainingDialog(dialog) {
   if (window.parent !== window) window.parent.scrollTo({top: 0, behavior: 'instant'});
   dialog.showModal();
+  if (window.parent !== window) {
+    window.parent.postMessage({type: 'cortex-training-dialog', open: true}, window.location.origin);
+    requestAnimationFrame(() => {
+      const body = dialog.querySelector('.dlg-body');
+      if (body) body.scrollTop = 0;
+    });
+  }
 }
-$('#dlg').addEventListener('close', () => $('#dlg').classList.remove('candidate-dialog'));
+function isStandaloneCandidateReview() {
+  return document.documentElement.classList.contains('standalone-candidate');
+}
+function candidateReviewUrl(id) {
+  return `/treinamento?candidate=${encodeURIComponent(id)}`;
+}
+function openCandidateTab(id) {
+  const tab = window.open(candidateReviewUrl(id), '_blank');
+  if (!tab) {
+    toast('O navegador bloqueou a nova aba. Permita pop-ups para o Cortex e clique em Revisar novamente.');
+    return null;
+  }
+  tab.opener = null;
+  return tab;
+}
+function closeCandidateReview() {
+  if (!isStandaloneCandidateReview()) return $('#dlg').close();
+  window.close();
+  if (!window.closed) window.setTimeout(() => window.location.replace('/admin?view=training'), 100);
+}
+$('#dlg').addEventListener('close', () => {
+  $('#dlg').classList.remove('candidate-dialog');
+  $('#dlg').classList.remove('taxonomy-dialog');
+  if (window.parent !== window) window.parent.postMessage({type: 'cortex-training-dialog', open: false}, window.location.origin);
+});
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt = (d) => d ? new Date(d).toLocaleString('pt-BR') : '—';
 const REL = { duplicate: ['warn', 'Duplicado'], evolution: ['ok', 'Evolução'], different_context: ['ok', 'Outro contexto'], conflict: ['bad', 'Conflito'] };
@@ -1030,6 +1174,10 @@ async function api(path, opts = {}) {
 
 function modLabel(k) { return (state.taxonomy.find(m => m.key === k) || {}).label || k; }
 function subLabel(m, s) { return (((state.taxonomy.find(x => x.key === m) || {}).subtopics || []).find(x => x[0] === s) || [])[1] || s; }
+function moduleGlyph(key) {
+  return ({products:'▱', fiscal:'▤', integrations:'↗', sales:'▣', finance:'$', logistics:'▰',
+    purchases:'▣', registration:'♙', production:'▥', infrastructure:'▤', unclassified:'◇'})[key] || '◈';
+}
 function scoreBadge(s) {
   const c = s >= 75 ? ['#d1fadf','#05603a'] : s >= 55 ? ['#fef0c7','#93370d'] : ['#fee4e2','#912018'];
   return `<div class="score" style="background:${c[0]};color:${c[1]}">${s}</div>`;
@@ -1047,46 +1195,54 @@ async function loadOverview() {
     ['Sem vetor semântico', t.without_vector || 0]
   ].map(([l, v]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
 
-  $('#tree').innerHTML = `<h2>Módulos do Master</h2><div class="mod ${!state.module ? 'active' : ''}" data-m=""><span>Todos os módulos</span><span class="pill">${t.active || 0}</span></div>` +
+  const renderSubtopic = (node, moduleKey, depth, parentKey = '') => {
+    const hasChildren = (node.children || []).length > 0;
+    const isExpanded = !!state.expandedSubs[node.key] || (state.subtopic && state.subtopic.startsWith(node.key + ':'));
+    const isActive = state.subtopic === node.key;
+    const className = depth === 1 ? 'sub' : 'sub-sub';
+    const childrenHtml = hasChildren && isExpanded
+      ? node.children.map(child => renderSubtopic(child, moduleKey, depth + 1, node.key)).join('') : '';
+    const sharedKey = taxonomyNodes().filter(entry => entry.node.key === node.key).length > 1;
+    const actionButtons = node.key === 'general' || sharedKey || depth >= 2 ? '' : `<span class="taxonomy-inline-actions">
+        <button type="button" data-tax-action="add" data-tax-key="${esc(node.key)}" title="Criar subcategoria" aria-label="Criar filho de ${esc(node.label)}">+</button>
+      </span>`;
+    return `<div class="${className} ${isActive ? 'active' : ''}" data-m="${esc(moduleKey)}" data-s="${esc(node.key)}" data-parent-s="${esc(parentKey)}" ${hasChildren ? 'data-parent="1"' : ''}>
+        <span class="tree-row-main" style="padding-left:${Math.max(0, depth - 1) * 10}px"><span class="tree-arrow tree-arrow-sub">${hasChildren ? isExpanded ? '▾' : '▸' : ''}</span><span class="tree-row-label">${esc(node.label)}</span></span>
+        <span class="tree-row-actions"><span class="tree-count">${node.items || 0}</span>${actionButtons}</span>
+      </div>${childrenHtml}`;
+  };
+
+  $('#tree').innerHTML = `<h2>Módulos do Master</h2><div class="mod tree-all-row ${!state.module ? 'active' : ''}" data-m="">
+      <span class="tree-row-main"><span class="tree-module-icon">▱</span><span class="tree-row-label">Todos os módulos</span></span><span class="tree-row-actions"><span class="tree-count">${t.active || 0}</span><span class="tree-arrow">›</span></span>
+    </div>` +
     (o.modules || []).map(m => {
       const isModOpen = state.module === m.key;
       const modActive = isModOpen && !state.subtopic ? 'active' : '';
       const modArrow = `<span class="tree-arrow">${isModOpen ? '▾' : '▸'}</span>`;
-      const subtopicsHtml = isModOpen ? (m.subtopics || []).map(s => {
-        const hasChildren = s.children && s.children.length > 0;
-        const isSubExpanded = !!state.expandedSubs[s.key] || (state.subtopic && state.subtopic.startsWith(s.key + ':'));
-        const isSubActive = state.subtopic === s.key;
-        const subArrow = hasChildren ? `<span class="tree-arrow tree-arrow-sub">${isSubExpanded ? '▾' : '▸'}</span>` : '';
-        const childrenHtml = (hasChildren && isSubExpanded) ? (s.children || []).map(c => {
-          const isChildActive = state.subtopic === c.key;
-          return `
-            <div class="sub-sub ${isChildActive ? 'active' : ''}" data-m="${m.key}" data-s="${c.key}">
-              <span>${esc(c.label)}</span><span class="pill">${c.items}</span>
-            </div>`;
-        }).join('') : '';
-
-        return `
-          <div class="sub ${isSubActive ? 'active' : ''}" data-m="${m.key}" data-s="${s.key}" ${hasChildren ? 'data-parent="1"' : ''}>
-            <span style="display:flex;align-items:center;gap:5px">${subArrow}<span>${esc(s.label)}</span></span>
-            <span class="pill">${s.items}</span>
-          </div>
-          ${childrenHtml}`;
-      }).join('') : '';
+      const subtopicsHtml = isModOpen ? (m.subtopics || []).map(s => renderSubtopic(s, m.key, 1)).join('') : '';
+      const canEditModule = m.key !== 'unclassified';
 
       return `
         <div class="mod ${modActive}" data-m="${m.key}" title="${esc(m.description)}">
-          <span style="display:flex;align-items:center;gap:6px">${modArrow}<span>${esc(m.label)}</span></span>
-          <span>${m.pending ? `<span class="pill warn">${m.pending} fila</span> ` : ''}<span class="pill">${m.items}</span></span>
+          <span class="tree-row-main">${modArrow}<span class="tree-module-icon">${moduleGlyph(m.key)}</span><span class="tree-row-label">${esc(m.label)}</span></span>
+          <span class="tree-row-actions">${m.pending ? `<span class="pill warn">${m.pending} fila</span> ` : ''}<span class="tree-count">${m.items}</span>${canEditModule ? `<span class="taxonomy-inline-actions"><button type="button" data-tax-action="add" data-tax-key="${esc(m.key)}" title="Criar categoria" aria-label="Criar filho de ${esc(m.label)}">+</button></span>` : ''}</span>
         </div>
         ${subtopicsHtml}`;
     }).join('');
 }
 
 $('#tree').addEventListener('click', (e) => {
+  const taxonomyAction = e.target.closest('[data-tax-action]');
+  if (taxonomyAction) {
+    e.preventDefault(); e.stopPropagation();
+    openTaxonomyManager({action: taxonomyAction.dataset.taxAction, key: taxonomyAction.dataset.taxKey});
+    return;
+  }
   const el = e.target.closest('[data-m]'); if (!el) return;
   const m = el.dataset.m || null;
   const s = el.dataset.s || null;
   const isParent = el.dataset.parent === '1';
+  const parentSubtopic = el.dataset.parentS || null;
 
   if (!m) {
     state.module = null;
@@ -1122,7 +1278,7 @@ $('#tree').addEventListener('click', (e) => {
   }
 
   if (state.subtopic === s) {
-    state.subtopic = s.includes(':') ? s.split(':')[0] : null;
+    state.subtopic = parentSubtopic;
   } else {
     state.subtopic = s;
   }
@@ -1288,16 +1444,24 @@ function openRelease(r = {}) {
   showTrainingDialog(dlg);
 }
 
-async function transform(ticket, force = false, btn = null) {
+async function transform(ticket, force = false, btn = null, reviewTab = null) {
   if (btn) btn.disabled = true;
+  if (!isStandaloneCandidateReview() && !reviewTab) {
+    reviewTab = window.open('about:blank', '_blank');
+    if (reviewTab) reviewTab.opener = null;
+  }
   try {
     const c = await api('/candidatos', { method: 'POST', body: { ticket_external_id: ticket, force } });
-    toast(`Ticket #${ticket} analisado.`); await refresh(); openCandidate(c.id);
+    if (reviewTab) reviewTab.location.replace(candidateReviewUrl(c.id));
+    else if (isStandaloneCandidateReview()) await openCandidate(c.id);
+    else openCandidateTab(c.id);
+    toast(`Ticket #${ticket} analisado.`); await refresh();
   } catch (e) {
     if (e.status === 409 && e.detail?.signals) {
       const why = e.detail.signals.map(s => `${s.weight > 0 ? '+' : ''}${s.weight} ${s.label}`).join('\n');
-      if (confirm(`${e.message}\n\n${why}\n\nAnalisar mesmo assim?`)) return transform(ticket, true, btn);
-    } else toast(e.message);
+      if (confirm(`${e.message}\n\n${why}\n\nAnalisar mesmo assim?`)) return await transform(ticket, true, btn, reviewTab);
+      reviewTab?.close();
+    } else { reviewTab?.close(); toast(e.message); }
   } finally { if (btn) btn.disabled = false; }
 }
 $('#transformBtn').onclick = () => {
@@ -1354,36 +1518,148 @@ function bindCandidateForm() {
   bindCandidateSubtree();
 }
 
+function imagesForCandidateAction(context, event) {
+  if (!event) return [];
+  const byUrl = new Map((context.images || [])
+    .filter(image => String(image.action_id) === String(event.id))
+    .map(image => [image.url, image]));
+  (event.images || []).forEach(image => byUrl.set(image.url, image));
+  return [...byUrl.values()];
+}
+
+function answerSourceEvent(c, context) {
+  const history = context.history || [];
+  const sourceId = String(c.source_answer_action_id || '');
+  const selected = sourceId && history.find(event => String(event.id) === sourceId && event.role === 'technician');
+  if (selected) return selected;
+  return [...history].reverse().find(event => event.role === 'technician' && imagesForCandidateAction(context, event).length)
+      || [...history].reverse().find(event => event.role === 'technician')
+      || null;
+}
+
+async function hydrateCandidateAnswerFromTicket(c) {
+  const context = c.ticket_context || {};
+  const source = answerSourceEvent(c, context);
+  if (!source || !c.ticket_external_id) return;
+  const imageRefs = imagesForCandidateAction(context, source).sort((a, b) => Number(a.index) - Number(b.index));
+  const installSourceHtml = (html, text) => {
+    const template = document.createElement('template');
+    template.innerHTML = html || '';
+    const inlineImages = [...template.content.querySelectorAll('img')];
+    c._answerImageRefs = [];
+    inlineImages.forEach((image, index) => {
+      const reference = imageRefs[index];
+      if (!reference) return;
+      image.setAttribute('src', reference.url);
+      if (reference.name) image.setAttribute('alt', reference.name);
+      c._answerImageRefs.push({
+        ...reference,
+        after_answer_paragraph: answerParagraphForImage(image, template.content),
+      });
+    });
+    source.html = template.innerHTML;
+    if (text) source.text = text;
+  };
+  try {
+    // The older candidate endpoint returns action text and image files separately.
+    // This endpoint preserves the original inline image positions in the technician reply.
+    const ticket = await api(`/tickets/${encodeURIComponent(c.ticket_external_id)}/respostas-tecnicas`);
+    const actionId = String(source.id || c.source_answer_action_id || ticket.recommended_action_id || '');
+    const answer = (ticket.answers || []).find(item => String(item.action_id) === actionId)
+      || [...(ticket.answers || [])].reverse().find(item => item.html);
+    if (answer?.html) {
+      installSourceHtml(answer.html, answer.text || source.text);
+      return;
+    }
+  } catch (error) {
+    // Fall back to a rich action snapshot if the full ticket endpoint is unavailable.
+    console.warn('Não foi possível recuperar a ordem original dos prints do chamado.', error);
+  }
+  if (source.html) installSourceHtml(source.html, source.text);
+}
+
+function answerPlainText(root) {
+  const parts = [];
+  const walk = node => {
+    if (node.nodeType === Node.TEXT_NODE) { parts.push(node.textContent); return; }
+    if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+    if (node.matches?.('img,.candidate-inline-image,.candidate-inline-toolbar,.candidate-image-status,.answer-inline-image-tools')) return;
+    if (node.nodeName === 'BR') { parts.push('\n'); return; }
+    const block = /^(P|DIV|LI|H[1-6]|BLOCKQUOTE|PRE|TR)$/.test(node.nodeName);
+    if (block) parts.push('\n');
+    node.childNodes.forEach(walk);
+    if (block) parts.push('\n');
+  };
+  root.childNodes.forEach(walk);
+  return parts.join('').replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function answerParagraphForImage(image, root) {
+  const before = document.createRange();
+  before.setStart(root, 0);
+  before.setEndBefore(image);
+  const lines = answerPlainText(before.cloneContents()).split('\n').filter(line => line.trim());
+  return Math.max(1, lines.length);
+}
+
+function stageCandidateAnswerImages(c, imported) {
+  const refs = c._answerImageRefs || [];
+  const prepared = [];
+  for (let i = 0; i < refs.length; i++) {
+    const reference = refs[i];
+    const file = `candidate-${c.id}-${reference.action_id}-${reference.index}.png`;
+    const name = `Print técnico ${i + 1}`;
+    const preview = {file,label:name,url:reference.url,candidate_source:true};
+    if (!state.images.some(item => item.file === file)) state.images.push(preview);
+    imported.set(reference.url, file);
+    reference.file = file;
+    reference.saved_url = reference.url;
+    reference.label = name;
+    prepared.push({file,name,caption:name,placement:'answer',after_step:null,
+      after_answer_paragraph:reference.after_answer_paragraph});
+  }
+  return prepared;
+}
+
+function candidateAnswerHtml(c, content, context) {
+  if (content.customer_answer_html) return content.customer_answer_html;
+  const source = answerSourceEvent(c, context);
+  if (source?.html) return source.html;
+  const answer = content.customer_answer || context.technician_reply || source?.text || '';
+  const paragraphs = esc(answer).replace(/\r\n?/g, '\n').split('\n').map(line =>
+    line ? `<p>${line}</p>` : '<p><br></p>').join('');
+  const prints = imagesForCandidateAction(context, source)
+    .map(image => `<p><img src="${esc(image.url)}" alt="${esc(image.name || 'Print da resposta técnica')}" loading="lazy"></p>`)
+    .join('');
+  return paragraphs + prints;
+}
+
 function candidateForm(c, content, related, imported = new Map()) {
   const x = c.extraction || {}, context = c.ticket_context || {}, a = content.applicability || {};
-  const history = context.history || [];
   const ownUploads = new Set([...(content.images || []).map(image => image.file), ...imported.values()]);
-  const images = state.images.filter(image => ownUploads.has(image.file));
+  const images = (content.images || []).map(chosen => state.images.find(image => image.file === chosen.file))
+    .filter(image => image && ownUploads.has(image.file));
   const question = context.question || content.symptom || '';
+  const answerHtml = candidateAnswerHtml(c, content, context);
   const techValidated = c.extractor === 'technician_proposal' || (c.answer_reviews || []).some(r => r.rating > 0);
   return `<div class="dlg-body candidate-body">
     <section class="review-context" aria-label="Contexto do chamado">
       <div class="review-card"><h3>Ticket #${esc(c.ticket_external_id)}</h3><p class="review-muted">${esc(context.subject || 'Chamado Movidesk')} · ${esc(context.status || 'Status não disponível')}</p>
         <h3>Pergunta do cliente</h3><div class="review-question">${esc(question || 'Pergunta não disponível neste snapshot. Confira o ticket original.')}</div></div>
-      <div class="review-card"><h3>Imagens do ticket <span class="pill">${(context.images || []).length}</span></h3>
-        ${(context.images || []).length ? (context.images || []).map(image => `<div class="review-image"><a href="${esc(image.url)}" target="_blank" rel="noopener" title="Abrir print original"><img src="${esc(image.url)}" alt="${esc(image.name)}" loading="lazy"></a><div><b>${image.role === 'technician' ? 'Técnico' : 'Cliente'}</b><br><span class="review-muted">${esc(image.name)}</span><br><button type="button" class="ticket-image-select" data-action="${esc(image.action_id)}" data-index="${esc(image.index)}" data-url="${esc(image.url)}" data-role="${esc(image.role)}" ${imported.has(image.url) ? 'disabled' : ''}>${imported.has(image.url) ? 'Selecionado' : 'Usar no procedimento'}</button></div></div>`).join('') : '<p class="review-muted">Nenhum print encontrado no histórico sincronizado.</p>'}
-        <p class="review-muted">Prints originais para conferência. Somente imagens revisadas e vinculadas abaixo serão publicadas.</p></div>
-      <div class="review-card"><h3>Histórico relevante</h3><div class="review-history">
-        ${history.length ? history.map(h => `<div class="review-event ${h.role === 'technician' ? 'technician' : 'customer'}"><div class="review-event-head"><b>${h.role === 'technician' ? 'Técnico' : 'Cliente'}${h.author ? ' · ' + esc(h.author) : ''}</b><time>${fmt(h.at)}</time></div><p>${esc(h.text)}</p>${h.attachments?.length ? `<small class="review-muted">Anexos: ${esc(h.attachments.join(', '))}</small>` : ''}</div>`).join('') : '<p class="review-muted">Histórico não disponível neste snapshot. Abra o ticket para confirmar a sequência completa.</p>'}
-      </div></div>
     </section>
     <section class="review-editor" aria-label="Resposta e procedimento">
       <div class="review-card"><div class="review-step-title"><b>1</b> Resposta ao cliente <span class="pill ${techValidated ? 'ok' : 'warn'}">${techValidated ? 'Proposta do técnico' : context.technician_reply ? 'Extraída do histórico · revisar' : 'Rascunho para revisão'}</span></div>
-        <p class="review-muted">Edite o texto que a IA poderá usar após a publicação. Confira cada passo no histórico e nas evidências.</p>
-        <label for="f_answer">Resposta pronta ao cliente</label><textarea id="f_answer" placeholder="Escreva a orientação validada para o cliente">${esc(content.customer_answer || context.technician_reply || '')}</textarea>
+        <p class="review-muted">Os prints do técnico já entram na resposta, na ordem original. Use Borrar ou Pintar sobre cada imagem para ocultar dados de clientes.</p>
+        <label for="f_answer">Resposta pronta ao cliente</label><div id="f_answer" class="review-answer-editor" contenteditable="true" role="textbox" aria-multiline="true" data-placeholder="Escreva a orientação validada para o cliente">${answerHtml}</div>
         <label for="f_proc">Passo a passo reproduzível</label><textarea id="f_proc" placeholder="Onde acessar, o que preencher e como validar o resultado">${esc(content.procedure || '')}</textarea>
         <details class="review-extra"><summary>Pré-requisitos, resultado e aplicabilidade</summary>
           <div class="review-field-pair"><div><label>Pré-requisitos</label><textarea id="f_pre">${esc(content.prerequisites || '')}</textarea></div><div><label>Resultado esperado</label><textarea id="f_exp">${esc(content.expected_result || '')}</textarea></div></div>
           <div class="review-field-pair"><div><label>Versão do Master</label><input type="text" id="a_ver" value="${esc(a.master_version)}"></div><div><label>Regime tributário</label><input type="text" id="a_reg" value="${esc(a.tax_regime)}"></div><div><label>UFs (vírgula)</label><input type="text" id="a_ufs" value="${esc((a.ufs || []).join(', '))}"></div><div><label>Integrações (vírgula)</label><input type="text" id="a_int" value="${esc((a.integrations || []).join(', '))}"></div><div><label>Válido a partir de</label><input type="text" id="a_from" placeholder="AAAA-MM-DD" value="${esc(a.valid_from)}"></div><div><label>Válido até</label><input type="text" id="a_until" placeholder="AAAA-MM-DD" value="${esc(a.valid_until)}"></div></div>
         </details></div>
-      <div class="review-card"><div class="review-step-title"><b>2</b> Imagens do procedimento</div>
-        <p class="review-muted">Somente imagens vinculadas a esta proposta podem ser publicadas. Escolha o passo e confira a legenda.</p>
-        ${images.length ? images.map((image, i) => { const chosen = (content.images || []).find(x => x.file === image.file); return `<div class="review-image"><div><img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}"><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''}> Usar</label></div><div><label>Nome</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><div class="review-field-pair"><div><label>Posição</label><select id="img_place_${i}"><option value="answer" ${chosen?.placement === 'answer' ? 'selected' : ''}>Após resposta</option><option value="procedure" ${chosen?.placement !== 'answer' ? 'selected' : ''}>Após passo</option></select></div><div><label>Passo</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || 1}"></div></div><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"></div></div>`; }).join('') : '<p class="review-muted">Sem imagem revisada para publicar nesta proposta.</p>'}</div>
+      <div class="review-card"><div class="review-step-title"><b>2</b> Imagens do conhecimento</div>
+        <p class="review-muted">Os prints aparecem automaticamente na resposta. Use Borrar ou Pintar nas imagens; a cópia tratada é salva ao publicar.</p>
+        ${images.length ? '<label class="candidate-print-confirm"><input type="checkbox" id="printsReviewed"> Revisei os prints e ocultei os dados de outros clientes.</label>' : ''}
+        ${images.length ? images.map((image, i) => { const chosen = (content.images || []).find(x => x.file === image.file); return `<div class="review-image"><div><img data-preview-file="${esc(image.file)}" src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}"><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" checked disabled> Incluído automaticamente</label></div><div><label>Nome</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"><select id="img_place_${i}" hidden><option value="answer" selected>Na resposta</option></select><input type="hidden" id="img_step_${i}" value="1"><input type="hidden" id="img_paragraph_${i}" value="${chosen?.after_answer_paragraph || 1}"><span class="pill ok">Na resposta do técnico</span></div></div>`; }).join('') : '<p class="review-muted">Nenhum print técnico encontrado na resposta selecionada.</p>'}</div>
     </section>
     <section class="review-side" aria-label="Classificação e conferência">
       <div class="review-card"><div class="review-step-title"><b>3</b> Classificação do conhecimento</div>
@@ -1443,10 +1719,29 @@ function contentForm(c, onlySelected = false) {
 function bindForm() { $('#f_module').onchange = (e) => $('#f_sub').innerHTML = subOptions(e.target.value, 'general'); }
 function readForm() {
   const list = (id, sep = ',') => $(id).value.split(sep).map(s => s.trim()).filter(Boolean);
+  const answerEditor = $('#f_answer');
+  let customerAnswer = answerEditor?.isContentEditable ? null : answerEditor?.value?.trim() || null;
+  let customerAnswerHtml = null;
+  if (answerEditor.isContentEditable) {
+    const cleanEditor = answerEditor.cloneNode(true);
+    const liveImages = [...answerEditor.querySelectorAll('.candidate-inline-image')];
+    [...cleanEditor.querySelectorAll('.candidate-inline-image')].forEach((wrapper, index) => {
+      const live = liveImages[index];
+      if (!live) { wrapper.remove(); return; }
+      const image = document.createElement('img');
+      image.src = live.dataset.savedUrl || live.dataset.sourceUrl;
+      image.alt = live.dataset.alt || 'Print tratado da resposta técnica';
+      wrapper.replaceWith(image);
+    });
+    cleanEditor.querySelectorAll('.answer-inline-image-tools,.candidate-inline-toolbar,.candidate-image-status')
+      .forEach(control => control.remove());
+    customerAnswer = answerPlainText(cleanEditor) || null;
+    customerAnswerHtml = cleanEditor.innerHTML.trim() || null;
+  }
   return { title: $('#f_title').value.trim(), module_key: $('#f_module').value, subtopic_key: $('#f_sub').value,
     symptom: $('#f_symptom').value.trim(), error_messages: list('#f_errors', '\n'), root_cause: $('#f_cause').value.trim(),
-    customer_answer: $('#f_answer').value.trim() || null, procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
-    images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => { const i = Number(input.id.split('_').pop()), placement=$('#img_place_'+i).value; return input.checked ? {file:input.dataset.file,name:$('#img_name_'+i).value.trim(),placement,after_step:placement==='procedure'?Number($('#img_step_'+i).value):null,caption:$('#img_caption_'+i).value} : null; }).filter(Boolean),
+    customer_answer: customerAnswer, ...(customerAnswerHtml ? {customer_answer_html: customerAnswerHtml} : {}), procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
+    images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => { const i = Number(input.id.split('_').pop()), placement=$('#img_place_'+i).value; return input.checked ? {file:input.dataset.file,name:$('#img_name_'+i).value.trim(),placement,after_step:placement==='procedure'?Number($('#img_step_'+i).value):null,after_answer_paragraph:placement==='answer'?Number($('#img_paragraph_'+i).value)||1:null,caption:$('#img_caption_'+i).value} : null; }).filter(Boolean),
     keywords: list('#f_kw'),
     applicability: { master_version: $('#a_ver').value.trim() || null, tax_regime: $('#a_reg').value.trim() || null,
       ufs: list('#a_ufs').map(u => u.toUpperCase()), integrations: list('#a_int'),
@@ -1473,10 +1768,18 @@ function openStaging(id) {
 }
 
 async function openCandidate(id) {
+  if (!isStandaloneCandidateReview()) return openCandidateTab(id);
   const c = await api(`/candidatos/${id}`); const x = c.extraction;
-  const content = { ...x, module_key: c.suggested_module, subtopic_key: c.suggested_subtopic };
-  const related = c.similar_items || [];
+  await hydrateCandidateAnswerFromTicket(c);
   const imported = new Map();
+  let autoImages = [];
+  try { autoImages = stageCandidateAnswerImages(c, imported); }
+  catch (error) {
+    toast(`Não consegui preparar todos os prints do técnico: ${error.message}. Recarregue a curadoria para tentar novamente.`);
+    return;
+  }
+  const content = { ...x, images:[...(x.images || []), ...autoImages], module_key: c.suggested_module, subtopic_key: c.suggested_subtopic };
+  const related = c.similar_items || [];
   const dlg = $('#dlg');
   if (dlg.open) dlg.close();
   dlg.classList.add('candidate-dialog');
@@ -1490,7 +1793,7 @@ async function openCandidate(id) {
         <a class="external-ticket-link" href="${'https://helpdesk.alternativasistemas.com.br/Ticket/Edit/' + c.ticket_external_id}" target="_blank" rel="noopener">Abrir ticket #${c.ticket_external_id} no Movidesk ↗</a>
         ${c.status === 'conflict' ? '<span class="pill bad">Conflito</span>' : '<span class="pill warn">Aguardando revisão</span>'}
         <span class="pill">Confiança ${esc(x.confidence)}</span>
-        <button onclick="dlg.close()" title="Fechar janela">✕</button>
+        <button onclick="closeCandidateReview()" title="Fechar janela">✕</button>
       </div>
     </div>
     ${candidateForm(c, content, related, imported)}
@@ -1508,38 +1811,180 @@ async function openCandidate(id) {
         <button class="primary" data-act="new">Publicar como novo</button>
       </div>
     </div>`;
-  function bindTicketImageSelection() {
-    dlg.querySelectorAll('.ticket-image-select').forEach(button => button.onclick = async () => {
-      const draft = readForm();
-      if (draft.images.length >= 5) return toast('Selecione no máximo 5 prints para o procedimento.');
-      button.disabled = true;
-      try {
-        const image = await api(`/candidatos/${id}/imagens/${button.dataset.action}/${button.dataset.index}/preparar`, {method:'POST'});
-        if (!state.images.some(item => item.file === image.file)) state.images.push(image);
-        imported.set(button.dataset.url, image.file);
-        const role = button.dataset.role === 'technician' ? 'técnico' : 'cliente';
-        const name = `Print do ${role} ${button.dataset.action}-${Number(button.dataset.index) + 1}`;
-        const hasSteps = /^\s*1\.\s/m.test(draft.procedure);
-        draft.images.push({file:image.file,name,caption:name,placement:hasSteps ? 'procedure' : 'answer',after_step:hasSteps ? 1 : null});
-        const oldBody = dlg.querySelector('.candidate-body'), scroll = oldBody.scrollTop;
-        oldBody.outerHTML = candidateForm(c, draft, related, imported);
-        dlg.querySelector('.candidate-body').scrollTop = scroll;
-        bindCandidateForm(); bindTicketImageSelection();
-        toast('Print vinculado ao rascunho. Confira a legenda e o passo antes de publicar.');
-      } catch(error) { toast(error.message); button.disabled = false; }
+  function bindCandidateImageEditors() {
+    const refs = c._answerImageRefs || [];
+    const images = [...dlg.querySelectorAll('#f_answer img')];
+    images.forEach((imageElement, imageIndex) => {
+      const reference = refs[imageIndex];
+      if (!reference || imageElement.closest('.candidate-inline-image')) return;
+      const wrapper = document.createElement('figure');
+      wrapper.className = 'candidate-inline-image';
+      wrapper.contentEditable = 'false';
+      wrapper.dataset.action = reference.action_id;
+      wrapper.dataset.index = reference.index;
+      wrapper.dataset.galleryIndex = imageIndex;
+      wrapper.dataset.file = reference.file || '';
+      wrapper.dataset.sourceUrl = reference.saved_url || imageElement.getAttribute('src');
+      wrapper.dataset.savedUrl = reference.saved_url || imageElement.getAttribute('src');
+      wrapper.dataset.alt = imageElement.alt || reference.name || `Print técnico ${imageIndex + 1}`;
+      wrapper.dataset.afterAnswerParagraph = reference.after_answer_paragraph || '1';
+      wrapper.dataset.dirty = 'false';
+      wrapper.dataset.pendingUpload = 'true';
+
+      const canvas = document.createElement('canvas');
+      canvas.className = 'candidate-redaction-canvas';
+      canvas.setAttribute('aria-label', 'Imagem do técnico. Escolha Borrar ou Pintar e arraste sobre os dados a ocultar.');
+      const toolbar = document.createElement('div');
+      toolbar.className = 'candidate-inline-toolbar';
+      const status = document.createElement('span');
+      status.className = 'candidate-image-status';
+      status.textContent = 'Incluído automaticamente · revise dados de clientes; a cópia será salva ao publicar.';
+      const modeButtons = {};
+      for (const [mode, label] of [['blur','Borrar'],['paint','Pintar']]) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.textContent = label; button.dataset.mode = mode;
+        button.title = mode === 'blur' ? 'Desfocar dados sob o pincel' : 'Cobrir dados com uma faixa opaca';
+        button.onclick = () => {
+          wrapper.dataset.mode = wrapper.dataset.mode === mode ? '' : mode;
+          Object.entries(modeButtons).forEach(([key, control]) => control.classList.toggle('active', key === wrapper.dataset.mode));
+        };
+        modeButtons[mode] = button; toolbar.append(button);
+      }
+      const undo = document.createElement('button');
+      undo.type = 'button'; undo.textContent = 'Desfazer'; undo.title = 'Desfazer a última pincelada';
+      const clear = document.createElement('button');
+      clear.type = 'button'; clear.textContent = 'Limpar'; clear.title = 'Remover todas as marcações deste print';
+      const sizeLabel = document.createElement('label');
+      sizeLabel.className = 'brush-size'; sizeLabel.textContent = 'Pincel';
+      const size = document.createElement('input');
+      size.type = 'range'; size.min = '8'; size.max = '40'; size.value = '18'; sizeLabel.append(size);
+      toolbar.append(undo, clear, sizeLabel);
+      wrapper.append(canvas, toolbar, status);
+      imageElement.replaceWith(wrapper);
+
+      const ctx = canvas.getContext('2d', {willReadFrequently:true});
+      const original = new Image();
+      original.onload = () => {
+        canvas.width = original.naturalWidth; canvas.height = original.naturalHeight;
+        ctx.drawImage(original, 0, 0);
+        wrapper._original = document.createElement('canvas');
+        wrapper._original.width = canvas.width; wrapper._original.height = canvas.height;
+        wrapper._original.getContext('2d').drawImage(canvas, 0, 0);
+        wrapper._undoStack = [];
+        undo.disabled = true; clear.disabled = false;
+      };
+      original.onerror = () => { status.textContent = 'Não foi possível carregar este print. Recarregue a curadoria.'; };
+      original.src = wrapper.dataset.sourceUrl;
+
+      const snapshot = () => {
+        const copy = document.createElement('canvas'); copy.width = canvas.width; copy.height = canvas.height;
+        copy.getContext('2d').drawImage(canvas, 0, 0); return copy;
+      };
+      const markChanged = () => {
+        wrapper.dataset.dirty = 'true';
+        status.textContent = 'Tratamento pendente · será salvo ao publicar.';
+        undo.disabled = !wrapper._undoStack?.length;
+      };
+      undo.onclick = () => {
+        const previous = wrapper._undoStack?.pop(); if (!previous) return;
+        ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(previous, 0, 0);
+        markChanged(); undo.disabled = !wrapper._undoStack.length;
+      };
+      clear.onclick = () => {
+        if (!wrapper._original) return;
+        wrapper._undoStack.push(snapshot());
+        ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(wrapper._original, 0, 0);
+        markChanged();
+      };
+      let drawing = false, lastPoint = null, blurredCopy = null;
+      const pointFor = event => {
+        const rect = canvas.getBoundingClientRect(), scaleX = canvas.width / rect.width, scaleY = canvas.height / rect.height;
+        return {x:(event.clientX - rect.left) * scaleX, y:(event.clientY - rect.top) * scaleY,
+          radius:Number(size.value) * Math.min(scaleX, scaleY), scale:Math.min(scaleX, scaleY)};
+      };
+      const dot = (point, mode) => {
+        ctx.save(); ctx.beginPath(); ctx.arc(point.x, point.y, point.radius, 0, Math.PI * 2); ctx.clip();
+        if (mode === 'blur' && blurredCopy) ctx.drawImage(blurredCopy, 0, 0);
+        else { ctx.fillStyle = '#111827'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+        ctx.restore();
+      };
+      canvas.onpointerdown = event => {
+        if (!wrapper.dataset.mode || !wrapper._original || event.button !== 0) return;
+        event.preventDefault(); canvas.setPointerCapture(event.pointerId);
+        wrapper._undoStack.push(snapshot()); if (wrapper._undoStack.length > 12) wrapper._undoStack.shift();
+        drawing = true; lastPoint = pointFor(event);
+        if (wrapper.dataset.mode === 'blur') {
+          blurredCopy = document.createElement('canvas'); blurredCopy.width = canvas.width; blurredCopy.height = canvas.height;
+          const blurred = blurredCopy.getContext('2d');
+          blurred.filter = `blur(${Math.max(5, lastPoint.radius * .5)}px)`;
+          blurred.drawImage(canvas, 0, 0); blurred.filter = 'none';
+        }
+        dot(lastPoint, wrapper.dataset.mode); markChanged();
+      };
+      canvas.onpointermove = event => {
+        if (!drawing) return;
+        const next = pointFor(event), distance = Math.hypot(next.x - lastPoint.x, next.y - lastPoint.y);
+        const count = Math.max(1, Math.ceil(distance / Math.max(2, next.radius * .45)));
+        for (let step = 1; step <= count; step++) {
+          const t = step / count;
+          dot({x:lastPoint.x + (next.x-lastPoint.x)*t,y:lastPoint.y + (next.y-lastPoint.y)*t,radius:next.radius}, wrapper.dataset.mode);
+        }
+        lastPoint = next; markChanged();
+      };
+      const endStroke = () => { drawing = false; lastPoint = null; blurredCopy = null; };
+      canvas.onpointerup = endStroke; canvas.onpointercancel = endStroke;
     });
   }
-  bindCandidateForm(); bindTicketImageSelection(); showTrainingDialog(dlg);
+
+  async function persistCandidateImageEdits() {
+    const answerEditor = $('#f_answer');
+    for (const wrapper of answerEditor.querySelectorAll('.candidate-inline-image')) {
+      const paragraphInput = $(`#img_paragraph_${wrapper.dataset.galleryIndex}`);
+      if (paragraphInput) paragraphInput.value = answerParagraphForImage(wrapper, answerEditor);
+    }
+    const pending = [...dlg.querySelectorAll('.candidate-inline-image[data-pending-upload="true"]')];
+    for (const wrapper of pending) {
+      const canvas = wrapper.querySelector('canvas');
+      if (!canvas.width || !canvas.height) throw new Error('Um dos prints não carregou. Aguarde ou recarregue antes de publicar.');
+      const dataUrl = canvas.toDataURL('image/png');
+      if (dataUrl.length > 7_100_000) throw new Error('Um print tratado ficou muito grande. Reduza a área ou a resolução antes de publicar.');
+      const galleryIndex = Number(wrapper.dataset.galleryIndex);
+      const name = $(`#img_name_${galleryIndex}`).value.trim() || `Print técnico ${galleryIndex + 1}`;
+      const saved = await api(`/candidatos/${id}/imagens/${wrapper.dataset.action}/${wrapper.dataset.index}/revisar`,
+        {method:'POST',body:{data_url:dataUrl,name,redacted:wrapper.dataset.dirty === 'true'}});
+      state.images = state.images.filter(item => item.file !== wrapper.dataset.file);
+      if (!state.images.some(item => item.file === saved.file)) state.images.push(saved);
+      const oldFile = wrapper.dataset.file;
+      const item = content.images.find(image => image.file === oldFile);
+      if (item) { item.file = saved.file; item.name = name; item.caption = $(`#img_caption_${galleryIndex}`).value.trim() || name; }
+      const ref = (c._answerImageRefs || []).find(image => String(image.action_id) === wrapper.dataset.action && String(image.index) === wrapper.dataset.index);
+      if (ref) { ref.file = saved.file; ref.saved_url = saved.url; }
+      imported.set(ref?.url || wrapper.dataset.sourceUrl, saved.file);
+      wrapper.dataset.file = saved.file; wrapper.dataset.savedUrl = saved.url;
+      wrapper.dataset.dirty = 'false'; wrapper.dataset.pendingUpload = 'false';
+      const checkbox = $(`#img_use_${galleryIndex}`); if (checkbox) checkbox.dataset.file = saved.file;
+      dlg.querySelectorAll('[data-preview-file]').forEach(preview => {
+        if (preview.dataset.previewFile === oldFile) { preview.dataset.previewFile = saved.file; preview.src = saved.url; }
+      });
+      const status = wrapper.querySelector('.candidate-image-status');
+      if (status) status.textContent = 'Print tratado e salvo na cópia que será publicada.';
+    }
+  }
+
+  bindCandidateForm(); bindCandidateImageEditors(); showTrainingDialog(dlg);
   dlg.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
     const reason = $('#reason').value.trim(); const act = b.dataset.act; const target = parseInt($('#target').value, 10) || null;
     if (reason.length < 5) return toast('Informe o motivo da decisão.');
+    if (act !== 'attach' && (c._answerImageRefs || []).length && !$('#printsReviewed')?.checked)
+      return toast('Confira todos os prints e confirme a revisão de privacidade antes de publicar.');
     if ((act === 'attach' || act === 'revise') && !target) return toast('Selecione o procedimento existente.');
     b.disabled = true;
     try {
+      if (act !== 'attach') await persistCandidateImageEdits();
       if (act === 'reject') await api(`/candidatos/${id}/rejeitar`, { method: 'POST', body: { reason } });
       else if (act === 'return') await api(`/candidatos/${id}/devolver`, { method: 'POST', body: { reason } });
       else await api(`/candidatos/${id}/aprovar`, { method: 'POST', body: { decision: act, reason, target_item_id: target, content: act === 'attach' ? null : readForm() } });
-      dlg.close(); toast(act === 'reject' ? 'Sugestão rejeitada.' : act === 'return' ? 'Ajuste solicitado ao técnico.' : 'Publicado — já disponível para a IA.'); refresh();
+      closeCandidateReview(); toast(act === 'reject' ? 'Sugestão rejeitada.' : act === 'return' ? 'Ajuste solicitado ao técnico.' : 'Publicado — já disponível para a IA.'); if (!isStandaloneCandidateReview()) refresh();
     } catch (e) { toast(e.message); b.disabled = false; }
   });
 }
@@ -1714,27 +2159,310 @@ async function reviewTicket(ticket, marker = '') {
 }
 
 $('#reviewAnswerBtn').onclick = () => { const ticket = Number($('#ticketInput').value); if (Number.isInteger(ticket) && ticket > 0) reviewTicket(ticket); else toast('Informe o número do ticket.'); };
-$('#modulesBtn').onclick = () => {
-  dlg.innerHTML = `<div class="dlg-head"><div class="dlg-head-title"><span class="dlg-kicker">Taxonomia Canônica</span><h2>Gerenciar módulos</h2></div><div class="dlg-head-actions"><button id="closeModules">Fechar</button></div></div><div style="padding:20px 22px">
-    <div class="form-section">
-      <label>Módulo</label><select id="editModule"><option value="">Criar módulo</option>${moduleOptions('')}</select>
-      <label>Chave permanente (não muda ao renomear)</label><input type="text" id="moduleKey" placeholder="exemplo: atendimento">
-      <label>Nome exibido</label><input type="text" id="moduleLabel"><label>Descrição</label><input type="text" id="moduleDescription">
-      <p class="muted" style="margin-top:10px">Renomear preserva a classificação e o histórico dos procedimentos.</p>
-    </div>
-    <div style="display:flex;justify-content:flex-end"><button class="primary" id="saveModule">Salvar módulo</button></div></div>`;
-  $('#closeModules').onclick = () => dlg.close();
-  $('#editModule').onchange = e => { const m = state.taxonomy.find(m => m.key === e.target.value); $('#moduleKey').value = m?.key || ''; $('#moduleKey').disabled = !!m; $('#moduleLabel').value = m?.label || ''; $('#moduleDescription').value = m?.description || ''; };
-  $('#saveModule').onclick = async () => { try { state.taxonomy = await api('/taxonomia',{method:'POST',body:{key:$('#moduleKey').value,label:$('#moduleLabel').value,description:$('#moduleDescription').value}}); dlg.close(); await refresh(); toast('Módulo salvo.'); } catch(e) { toast(e.message); } };
+function taxonomyNodes() {
+  const entries = [];
+  const visit = (node, parentKey = null, depth = 0) => {
+    entries.push({node, parentKey, depth});
+    (node.nodes || node.children || []).forEach(child => visit(child, node.key, depth + 1));
+  };
+  state.taxonomy.forEach(root => visit(root));
+  return entries;
+}
+
+function normalizeTaxonomy(payload) {
+  return (payload || []).map(root => {
+    if (Array.isArray(root.nodes)) return root;
+    const rows = (root.subtopics || []).filter(pair => Array.isArray(pair) && pair[0] !== 'general');
+    const nodes = rows.filter(([, label]) => !String(label).includes(' > '))
+      .map(([key, label]) => ({key, label, description: '', nodes: []}));
+    for (const [key, fullLabel] of rows.filter(([, label]) => String(label).includes(' > '))) {
+      const parts = String(fullLabel).split(/\s*>\s*/);
+      const parentKey = key.includes(':') ? key.slice(0, key.lastIndexOf(':')) : '';
+      const parent = nodes.find(node => node.key === parentKey) || nodes.find(node => node.label === parts[0]);
+      if (parent && !nodes.some(node => node.key === key))
+        (parent.nodes ||= []).push({key, label: parts.at(-1), description: '', nodes: []});
+      else if (!nodes.some(node => node.key === key))
+        nodes.push({key, label: parts.at(-1), description: '', nodes: []});
+    }
+    return {...root, nodes};
+  });
+}
+
+function taxonomyKeyFor(label, parentKey = null) {
+  const slug = String(label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'categoria';
+  const parentEntry = parentKey ? taxonomyNodes().find(entry => entry.node.key === parentKey) : null;
+  const separator = parentEntry?.depth === 0 ? '_' : ':';
+  let base = parentKey ? `${parentKey}${separator}${slug}` : (/^[a-z]/.test(slug) ? slug : `mod_${slug}`);
+  base = base.slice(0, 60).replace(/[:_]+$/g, '') || 'categoria';
+  const used = new Set(taxonomyNodes().map(entry => entry.node.key));
+  let candidate = base, index = 2;
+  while (used.has(candidate)) {
+    const suffix = `_${index++}`;
+    candidate = `${base.slice(0, 60 - suffix.length).replace(/[:_]+$/g, '')}${suffix}`;
+  }
+  return candidate;
+}
+
+function openTaxonomyManager(initial = {}) {
+  dlg.classList.add('taxonomy-dialog');
+  dlg.innerHTML = `<div class="dlg-head"><div class="dlg-head-title"><span class="dlg-kicker">Taxonomia Canônica</span><h2>Gerenciar módulos e categorias</h2><span class="sub">Organize os níveis usados na classificação do conhecimento.</span></div><div class="dlg-head-actions"><button id="closeModules">Fechar</button><button id="closeModulesX" aria-label="Fechar">×</button></div></div>
+    <div class="dlg-body taxonomy-manager-body">
+      <aside class="taxonomy-nav"><div class="taxonomy-search"><span>⌕</span><input id="taxonomySearch" type="search" placeholder="Buscar módulo ou categoria…" autocomplete="off"></div>
+        <div class="taxonomy-tree" id="taxonomyTree"></div><button class="taxonomy-new-root" id="newRootModule">＋ Novo módulo</button>
+      </aside>
+      <section class="taxonomy-detail" id="taxonomyDetail"></section>
+    </div>`;
+  const treeEl = $('#taxonomyTree'), detailEl = $('#taxonomyDetail');
+  $('#closeModules').onclick = $('#closeModulesX').onclick = () => dlg.close();
+
+  let editing = null;
+  let searchText = '';
+  const expanded = new Set();
+  const managerEntries = () => {
+    const entries = [];
+    const visit = (node, parentKey, depth, moduleKey, path) => {
+      entries.push({node, parentKey, depth, moduleKey, path});
+      (node.nodes || node.children || []).forEach(child => visit(child, node.key, depth + 1, moduleKey, [...path, child.label]));
+    };
+    state.taxonomy.forEach(root => visit(root, null, 0, root.key, [root.label]));
+    return entries;
+  };
+  const refId = (moduleKey, key) => `${moduleKey}::${key}`;
+  const findEntry = (key, parentKey, moduleKey) => managerEntries().find(entry => entry.node.key === key &&
+    (parentKey === undefined || entry.parentKey === (parentKey || null)) &&
+    (!moduleKey || entry.moduleKey === moduleKey)) || null;
+  const childrenOf = node => node.nodes || node.children || [];
+  const countFor = (moduleKey, key) => {
+    const mod = (state.overview?.modules || []).find(item => item.key === moduleKey);
+    if (!mod) return 0;
+    if (key === moduleKey) return mod.items || 0;
+    const visit = nodes => {
+      for (const node of nodes || []) {
+        if (node.key === key) return node.items || 0;
+        const found = visit(node.children || []); if (found) return found;
+      }
+      return 0;
+    };
+    return visit(mod.subtopics || []);
+  };
+  const sharedKey = key => managerEntries().filter(entry => entry.node.key === key).length > 1;
+  const selectedEntry = () => selectedRef ? findEntry(selectedRef.key, selectedRef.parentKey, selectedRef.moduleKey) : null;
+  const addExpandedPath = entry => {
+    if (!entry) return;
+    let cursor = entry;
+    while (cursor) {
+      if (childrenOf(cursor.node).length) expanded.add(refId(cursor.moduleKey, cursor.node.key));
+      cursor = cursor.parentKey ? findEntry(cursor.parentKey, undefined, cursor.moduleKey) : null;
+    }
+  };
+
+  const allEntries = managerEntries();
+  let selectedEntryInitial = initial.key
+    ? allEntries.find(entry => entry.node.key === initial.key)
+    : null;
+  if (!selectedEntryInitial && state.subtopic)
+    selectedEntryInitial = allEntries.find(entry => entry.node.key === state.subtopic && entry.moduleKey === state.module);
+  if (!selectedEntryInitial && state.module)
+    selectedEntryInitial = allEntries.find(entry => entry.node.key === state.module && entry.depth === 0);
+  if (!selectedEntryInitial)
+    selectedEntryInitial = allEntries.find(entry => entry.depth === 0 && entry.node.key !== 'unclassified') || allEntries[0];
+  let selectedRef = selectedEntryInitial ? {key:selectedEntryInitial.node.key, parentKey:selectedEntryInitial.parentKey,
+    moduleKey:selectedEntryInitial.moduleKey} : null;
+  addExpandedPath(selectedEntryInitial);
+
+  const nodeMatches = node => {
+    if (!searchText) return true;
+    if (String(node.label || '').toLocaleLowerCase('pt-BR').includes(searchText)) return true;
+    return childrenOf(node).some(nodeMatches);
+  };
+  const renderNavNode = (node, parentKey, depth, moduleKey) => {
+    if (!nodeMatches(node)) return '';
+    const children = childrenOf(node);
+    const id = refId(moduleKey, node.key);
+    const isExpanded = expanded.has(id) || (!!searchText && children.some(nodeMatches));
+    const isSelected = selectedRef?.key === node.key && selectedRef?.parentKey === (parentKey || null) && selectedRef?.moduleKey === moduleKey;
+    const canAdd = depth < 2 && node.key !== 'unclassified' && !sharedKey(node.key);
+    const count = countFor(moduleKey, node.key);
+    const childrenHtml = isExpanded ? children.map(child => renderNavNode(child, node.key, depth + 1, moduleKey)).join('') : '';
+    const glyph = depth === 0 ? moduleGlyph(node.key) : (depth === 1 ? '▤' : '·');
+    return `<div class="taxonomy-nav-row taxonomy-nav-depth-${depth} ${isSelected ? 'selected' : ''}">
+      <button class="taxonomy-nav-caret" type="button" data-tax-toggle="${esc(node.key)}" data-tax-module="${esc(moduleKey)}" ${children.length ? '' : 'disabled'} aria-label="${isExpanded ? 'Recolher' : 'Expandir'}">${children.length ? (isExpanded ? '⌄' : '›') : ''}</button>
+      <button class="taxonomy-nav-select" type="button" data-tax-select="${esc(node.key)}" data-tax-parent="${esc(parentKey || '')}" data-tax-module="${esc(moduleKey)}">
+        <span class="tree-module-icon">${glyph}</span><strong>${esc(node.label)}</strong><span class="taxonomy-nav-count">${count}</span>
+      </button>
+      ${canAdd ? `<button class="taxonomy-nav-add" type="button" data-tax-action="add" data-tax-key="${esc(node.key)}" data-tax-parent="${esc(parentKey || '')}" data-tax-module="${esc(moduleKey)}" title="Criar filho" aria-label="Criar filho de ${esc(node.label)}">＋</button>` : ''}
+    </div>${childrenHtml}`;
+  };
+  const renderTree = () => {
+    const roots = state.taxonomy.filter(nodeMatches).map(root => renderNavNode(root, null, 0, root.key)).join('');
+    treeEl.innerHTML = `<button class="taxonomy-nav-row taxonomy-nav-select tree-all-row ${selectedRef ? '' : 'selected'}" type="button" data-tax-all="1"><span class="tree-module-icon">▱</span><strong>Todos os módulos</strong><span class="taxonomy-nav-count">${state.overview?.totals?.active || 0}</span></button>${roots || '<div class="taxonomy-empty">Nenhum módulo ou categoria encontrada.</div>'}`;
+  };
+  const editorMarkup = entry => {
+    if (!editing) return '';
+    const parent = editing.parentKey ? findEntry(editing.parentKey, undefined, editing.moduleKey)?.node : null;
+    const isRoot = !editing.parentKey;
+    return `<div class="taxonomy-edit-form"><h4>${editing.mode === 'edit' ? 'Renomear item' : (parent ? `Nova categoria em ${esc(parent.label)}` : 'Novo módulo')}</h4>
+      <label for="taxonomyName">Nome</label><input id="taxonomyName" maxlength="80" autocomplete="off" value="${editing.mode === 'edit' ? esc(editing.node.label) : ''}" placeholder="Digite o nome">
+      ${isRoot ? `<label for="taxonomyDescription">Descrição (opcional)</label><input id="taxonomyDescription" maxlength="500" value="${esc(editing.mode === 'edit' ? editing.node.description || '' : '')}" placeholder="Resumo do módulo">` : ''}
+      <p class="taxonomy-category-meta">${editing.mode === 'edit' ? `A chave interna “${esc(editing.key)}” será mantida.` : (parent ? `Este item será criado abaixo de “${esc(parent.label)}”.` : 'Este módulo ficará na raiz da taxonomia.')}</p>
+      <div class="taxonomy-edit-actions"><button type="button" data-tax-cancel="1">Cancelar</button><button class="primary" type="button" data-tax-save="1">Salvar</button></div></div>`;
+  };
+  const renderDetail = () => {
+    const entry = selectedEntry();
+    if (!entry) {
+      const modules = state.taxonomy.filter(nodeMatches);
+      const moduleRows = modules.map(node => {
+        const count = countFor(node.key, node.key);
+        const summary = node.description || `${childrenOf(node).length} categorias · ${count} procedimentos`;
+        return `<div class="taxonomy-category-row">
+          <button type="button" data-tax-select="${esc(node.key)}" data-tax-module="${esc(node.key)}">
+            <span class="taxonomy-category-icon">${moduleGlyph(node.key)}</span><span class="taxonomy-category-copy"><span class="taxonomy-category-name">${esc(node.label)}</span><span class="taxonomy-category-meta">${esc(summary)}</span></span><span class="taxonomy-category-count">${count}</span><span class="taxonomy-category-chevron">›</span>
+          </button>
+        </div>`;
+      }).join('') || '<div class="taxonomy-empty">Nenhum módulo encontrado.</div>';
+      detailEl.innerHTML = `<div class="taxonomy-detail-head"><div class="taxonomy-detail-title"><div class="taxonomy-detail-icon">▱</div><div><h3>Todos os módulos</h3><div class="taxonomy-breadcrumb">Taxonomia canônica</div></div><span class="taxonomy-nav-count">${modules.length} módulos</span></div>
+          <div class="taxonomy-detail-actions"><button class="primary" type="button" data-tax-root="1" data-tax-action="add">＋ Novo módulo</button></div>
+        </div><p class="taxonomy-desc">Selecione um módulo para organizar suas categorias e subcategorias.</p>
+        <section class="taxonomy-category-section"><div class="taxonomy-category-heading"><h4>Módulos</h4><span class="taxonomy-nav-count">${modules.length}</span></div><div class="taxonomy-category-list">${moduleRows}</div></section>
+        ${editorMarkup(null)}`;
+      return;
+    }
+    const children = childrenOf(entry.node);
+    const canAdd = entry.depth < 2 && entry.node.key !== 'unclassified' && !sharedKey(entry.node.key);
+    const canEdit = entry.node.key !== 'unclassified' && !sharedKey(entry.node.key);
+    const descendantCount = node => childrenOf(node).reduce((sum, child) => sum + 1 + descendantCount(child), 0);
+    const description = entry.node.description || (entry.depth === 0 ? 'Categorias e subcategorias usadas para classificar o conhecimento do ERP Master.' : 'Categoria da taxonomia canônica.');
+    const childRows = children.length ? children.map(child => {
+      const childDepth = entry.depth + 1;
+      const childShared = sharedKey(child.key);
+      const childCanAdd = childDepth < 2 && child.key !== 'unclassified' && !childShared;
+      const childParentKey = entry.node.key;
+      const itemCount = countFor(entry.moduleKey, child.key);
+      const childSummary = child.description || (descendantCount(child)
+        ? `${descendantCount(child)} subcategorias · ${itemCount} procedimentos`
+        : `${itemCount} procedimentos nesta categoria`);
+      return `<div class="taxonomy-category-row">
+        <button type="button" data-tax-select="${esc(child.key)}" data-tax-parent="${esc(childParentKey)}" data-tax-module="${esc(entry.moduleKey)}">
+          <span class="taxonomy-category-icon">▤</span><span class="taxonomy-category-copy"><span class="taxonomy-category-name">${esc(child.label)}</span><span class="taxonomy-category-meta">${esc(childSummary)}</span></span><span class="taxonomy-category-count">${itemCount}</span><span class="taxonomy-category-chevron">›</span>
+        </button>
+        ${childCanAdd ? `<button class="taxonomy-nav-add" type="button" data-tax-action="add" data-tax-key="${esc(child.key)}" data-tax-parent="${esc(childParentKey)}" data-tax-module="${esc(entry.moduleKey)}" title="Criar neto" aria-label="Criar filho de ${esc(child.label)}">＋</button>` : ''}
+        ${child.key !== 'unclassified' && !childShared ? `<button type="button" data-tax-action="edit" data-tax-key="${esc(child.key)}" data-tax-parent="${esc(childParentKey)}" data-tax-module="${esc(entry.moduleKey)}" title="Renomear" aria-label="Renomear ${esc(child.label)}">✎</button>` : ''}
+      </div>`;
+    }).join('') : '<div class="taxonomy-empty">Nenhuma categoria neste nível. Use “Nova categoria” para adicionar.</div>';
+    detailEl.innerHTML = `<div class="taxonomy-detail-head"><div class="taxonomy-detail-title"><div class="taxonomy-detail-icon">${moduleGlyph(entry.moduleKey)}</div><div><h3>${esc(entry.node.label)}</h3><div class="taxonomy-breadcrumb">${entry.path.map(esc).join('　›　')}</div></div><span class="taxonomy-nav-count">${descendantCount(entry.node)} categorias</span></div>
+        <div class="taxonomy-detail-actions">${canEdit ? `<button type="button" data-tax-action="edit" data-tax-key="${esc(entry.node.key)}" data-tax-parent="${esc(entry.parentKey || '')}" data-tax-module="${esc(entry.moduleKey)}">✎ Editar</button>` : ''}${canAdd ? `<button class="primary" type="button" data-tax-action="add" data-tax-key="${esc(entry.node.key)}" data-tax-parent="${esc(entry.parentKey || '')}" data-tax-module="${esc(entry.moduleKey)}">＋ Nova categoria</button>` : ''}</div>
+      </div><p class="taxonomy-desc">${esc(description)}</p>
+      <section class="taxonomy-category-section"><div class="taxonomy-category-heading"><h4>${entry.depth === 0 ? 'Categorias do módulo' : 'Subcategorias'}</h4><span class="taxonomy-nav-count">${children.length}</span></div><div class="taxonomy-category-list">${childRows}</div></section>
+      ${canAdd ? `<button class="taxonomy-add-callout" type="button" data-tax-action="add" data-tax-key="${esc(entry.node.key)}" data-tax-parent="${esc(entry.parentKey || '')}" data-tax-module="${esc(entry.moduleKey)}"><strong>＋　Adicionar nova categoria</strong><span>Clique para adicionar ou use + ao lado de um item.</span></button>` : ''}
+      ${sharedKey(entry.node.key) ? '<p class="taxonomy-category-meta">Esta categoria possui uma chave legada compartilhada e não pode ser renomeada sem afetar outro módulo.</p>' : ''}
+      ${editorMarkup(entry)}`;
+  };
+  const selectEntry = entry => {
+    if (!entry) return;
+    selectedRef = {key:entry.node.key, parentKey:entry.parentKey, moduleKey:entry.moduleKey};
+    addExpandedPath(entry); editing = null; renderTree(); renderDetail();
+  };
+  const beginCreate = (parentEntry = null) => {
+    if (parentEntry && (parentEntry.depth >= 2 || sharedKey(parentEntry.node.key)))
+      return toast('Este nível não permite criar outra categoria.');
+    if (parentEntry) selectedRef = {key:parentEntry.node.key, parentKey:parentEntry.parentKey, moduleKey:parentEntry.moduleKey};
+    else selectedRef = null;
+    editing = {mode:'create', parentKey:parentEntry?.node.key || null, moduleKey:parentEntry?.moduleKey || null, depth:parentEntry?.depth ?? -1};
+    if (parentEntry) addExpandedPath(parentEntry);
+    renderTree(); renderDetail();
+    requestAnimationFrame(() => $('#taxonomyName')?.focus());
+  };
+  const beginEdit = entry => {
+    if (!entry || entry.node.key === 'unclassified' || sharedKey(entry.node.key)) return;
+    selectedRef = {key:entry.node.key, parentKey:entry.parentKey, moduleKey:entry.moduleKey};
+    editing = {mode:'edit', key:entry.node.key, parentKey:entry.parentKey, moduleKey:entry.moduleKey,
+      depth:entry.depth, node:entry.node};
+    addExpandedPath(entry); renderTree(); renderDetail();
+    requestAnimationFrame(() => { $('#taxonomyName')?.focus(); $('#taxonomyName')?.select(); });
+  };
+
+  treeEl.onclick = e => {
+    const action = e.target.closest('[data-tax-action]');
+    if (action) {
+      e.preventDefault(); e.stopPropagation();
+      const entry = findEntry(action.dataset.taxKey, action.dataset.taxParent || null, action.dataset.taxModule);
+      if (entry) beginCreate(entry);
+      return;
+    }
+    const toggle = e.target.closest('[data-tax-toggle]');
+    if (toggle) {
+      e.preventDefault();
+      const id = refId(toggle.dataset.taxModule, toggle.dataset.taxToggle);
+      expanded.has(id) ? expanded.delete(id) : expanded.add(id);
+      renderTree(); return;
+    }
+    if (e.target.closest('[data-tax-all]')) { selectedRef = null; editing = null; renderTree(); renderDetail(); return; }
+    const select = e.target.closest('[data-tax-select]'); if (!select) return;
+    selectEntry(findEntry(select.dataset.taxSelect, select.dataset.taxParent || null, select.dataset.taxModule));
+  };
+  detailEl.onclick = async e => {
+    const action = e.target.closest('[data-tax-action]');
+    if (action) {
+      if (action.dataset.taxRoot === '1') { beginCreate(null); return; }
+      const entry = findEntry(action.dataset.taxKey, action.dataset.taxParent || null, action.dataset.taxModule);
+      if (!entry) return;
+      if (action.dataset.taxAction === 'add') beginCreate(entry); else beginEdit(entry);
+      return;
+    }
+    const select = e.target.closest('[data-tax-select]');
+    if (select) {
+      selectEntry(findEntry(select.dataset.taxSelect, select.dataset.taxParent || null, select.dataset.taxModule));
+      return;
+    }
+    if (e.target.closest('[data-tax-cancel]')) { editing = null; renderDetail(); return; }
+    if (!e.target.closest('[data-tax-save]')) return;
+    const label = $('#taxonomyName', detailEl)?.value.trim() || '';
+    if (label.length < 2) return toast('Informe um nome com pelo menos 2 caracteres.');
+    const saveButton = e.target.closest('[data-tax-save]'); saveButton.disabled = true;
+    try {
+      const draft = editing;
+      const parentKey = draft.parentKey;
+      const key = draft.mode === 'edit' ? draft.key : taxonomyKeyFor(label, parentKey);
+      const description = draft.depth === 0 || draft.depth === -1
+        ? ($('#taxonomyDescription', detailEl)?.value.trim() || '')
+        : (draft.mode === 'edit' ? (draft.node.description || '') : '');
+      state.taxonomy = normalizeTaxonomy(await api('/taxonomia', {method:'POST', body:{key, label, description, parent_key:parentKey}}));
+      await refresh();
+      selectedRef = {key, parentKey:parentKey || null, moduleKey:draft.mode === 'create' && draft.depth === -1 ? key : draft.moduleKey};
+      editing = null;
+      const savedEntry = findEntry(key, parentKey || null, selectedRef.moduleKey);
+      if (savedEntry) addExpandedPath(savedEntry);
+      renderTree(); renderDetail();
+      toast(draft.mode === 'edit' ? 'Nome atualizado.' : 'Categoria criada.');
+    } catch (err) { toast(err.message); }
+    finally { saveButton.disabled = false; }
+  };
+  $('#newRootModule').onclick = () => beginCreate(null);
+  $('#taxonomySearch').oninput = e => { searchText = e.target.value.trim().toLocaleLowerCase('pt-BR'); renderTree(); };
+
+  renderTree(); renderDetail();
+  if (initial.action === 'add') {
+    const entry = findEntry(initial.key);
+    if (entry) beginCreate(entry);
+    else beginCreate(null);
+  } else if (initial.action === 'edit') beginEdit(findEntry(initial.key));
   showTrainingDialog(dlg);
-};
+}
+
+$('#modulesBtn').onclick = () => openTaxonomyManager();
 
 (async () => {
   try {
-    state.taxonomy = await api('/taxonomia');
+    state.taxonomy = normalizeTaxonomy(await api('/taxonomia'));
     state.images = await api('/imagens');
-    await refresh();
     const p = new URLSearchParams(location.search);
+    const candidate = Number(p.get('candidate'));
+    if (Number.isInteger(candidate) && candidate > 0 && isStandaloneCandidateReview()) {
+      await openCandidate(candidate);
+      return;
+    }
+    await refresh();
     const ticket = Number(p.get('ticket'));
     if (Number.isInteger(ticket) && ticket > 0) {
       $('#ticketInput').value = ticket;

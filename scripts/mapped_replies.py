@@ -6,6 +6,7 @@ Media stays behind the existing Cortex login; never expose the manual library.
 from pathlib import Path
 from urllib.parse import urlsplit
 import base64
+import io
 import os
 import re
 import unicodedata
@@ -44,6 +45,27 @@ def safe_image_data(value):
     except ValueError:
         return ''
     return value if len(raw) <= 350_000 and raw.startswith(b'\x89PNG\r\n\x1a\n') else ''
+
+
+def reviewed_image_data(path):
+    """Prepare a bounded delivery copy; keep the curator's flattened original unchanged."""
+    raw = path.read_bytes()
+    if len(raw) <= 350_000:
+        return safe_image_data('data:image/png;base64,' + base64.b64encode(raw).decode())
+    from PIL import Image, UnidentifiedImageError
+    try:
+        with Image.open(io.BytesIO(raw)) as original:
+            image = original.convert('RGBA')
+            image.thumbnail((2400, 2400), Image.Resampling.LANCZOS)
+            for colors in (256, 128, 64):
+                out = io.BytesIO()
+                image.quantize(colors=colors, method=Image.Quantize.FASTOCTREE).save(out, 'PNG', optimize=True)
+                candidate = 'data:image/png;base64,' + base64.b64encode(out.getvalue()).decode()
+                if safe_image_data(candidate):
+                    return candidate
+    except (OSError, ValueError, UnidentifiedImageError):
+        pass
+    return ''
 
 
 PAYMENT_REPLY = '''A mensagem indica que a forma de pagamento recebida do integrador ainda não está relacionada no Master. Faça o de/para assim:
@@ -478,9 +500,14 @@ def note_images(source):
             notices.append('Imagem mapeada indisponível: ' + name)
             continue
         route = '/procedure-images/' if path == reviewed else '/training-media/'
+        data_url = reviewed_image_data(path)
+        if not data_url and not origin:
+            notices.append('Print revisado não pôde ser incluído no limite de envio: ' + name)
+            continue
         images.append({'url': origin + route + name if origin else '',
-                       'data_url': 'data:image/png;base64,' + base64.b64encode(path.read_bytes()).decode(),
+                       'data_url': data_url,
                        'name': item.get('name') or item.get('caption') or 'Imagem de apoio',
                        'caption': item['caption'], 'placement': item.get('placement') or 'procedure',
-                       'after_step': item.get('after_step')})
+                       'after_step': item.get('after_step'),
+                       'after_answer_paragraph': item.get('after_answer_paragraph')})
     return images, notices

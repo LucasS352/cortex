@@ -245,6 +245,35 @@ def integrator_names(text):
     return {('uappi/well' if n in ('uappi','well') else 'mercado livre' if n=='mercadolivre' else n) for n in names}
 
 
+_RELATION_ENTITIES = {
+    'produto': r'\b(?:produtos?|sku|item|itens)\b',
+    'pagamento': r'\b(?:formas? de pagamento|pagamentos?)\b',
+    'transportadora': r'\b(?:transportadoras?|carrier|frete)\b',
+}
+_RELATION_FAILURE = re.compile(
+    r'\bnao (?:esta |estao |foi |foram |existe |ha |possui )?(?:\w+\s+){0,3}'
+    r'(?:relacionad[ao]s?|vinculad[ao]s?|associad[ao]s?|integrad[ao]s?|integra|integram|relacionamento|vinculo)\b|'
+    r'\bsem (?:o |um |uma )?(?:relacao|relacionamento|vinculo|de[ /-]?para|'
+    r'codigo (?:externo|de fora)|tipo\s*[\'"]?s\b)|'
+    r'\b(?:relacao|relacionamento|vinculo|codigo (?:externo|de fora))\b.{0,20}'
+    r'\b(?:ausente|inexistente|nao encontrad[ao])\b')
+
+
+def mapping_failure_entities(query):
+    """Identify the entity reported as failing, excluding nearby successful relations."""
+    targets = set()
+    clauses = re.split(r'[,;\n.!?]|\b(?:mas|porem|entretanto|porque|devido a)\b', normalize(query))
+    for clause in clauses:
+        mentions = sorted((match.start(), match.end(), entity)
+                          for entity, pattern in _RELATION_ENTITIES.items()
+                          for match in re.finditer(pattern, clause))
+        for index, (_start, end, entity) in enumerate(mentions):
+            stop = mentions[index + 1][0] if index + 1 < len(mentions) else len(clause)
+            if _RELATION_FAILURE.search(clause[end:stop][:100]):
+                targets.add(entity)
+    return targets
+
+
 def applicability(row, query, context=None):
     """Shared evidence gate. Retrieval rank is never diagnostic confidence."""
     plan=query_plan(query)
@@ -285,6 +314,11 @@ def applicability(row, query, context=None):
     # A shared noun is insufficient when the customer's stated failure differs.
     # E.g. "IE inválida" must not inherit a procedure for "contribuinte isento".
     symptom=normalize(' '.join(str(row.get(k) or '') for k in ('title','problem','diagnosis')))
+    failed_entities = mapping_failure_entities(query)
+    source_entities = {entity for entity, pattern in _RELATION_ENTITIES.items()
+                       if re.search(pattern, symptom)}
+    if failed_entities - source_entities:
+        reasons.append('mapping_entity_not_matched')
     qualifier_groups=(('invalida','invalido','invalid'), ('isento','isenta'),
                       ('nao informada','nao informado'), ('maior','superior'), ('menor','inferior'))
     for variants in qualifier_groups:

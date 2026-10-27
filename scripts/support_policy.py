@@ -5,7 +5,7 @@ probability of being right. Similarity alone cannot authorize a procedure.
 """
 import re
 
-from knowledge_access import normalize, query_plan
+from knowledge_access import normalize, query_plan, mapping_failure_entities
 
 
 def evidence(text):
@@ -17,7 +17,7 @@ def evidence(text):
         'produto': r'\bproduto\b|\bsku\b',
         'nota_fiscal': r'\bnf[ -]?e\b|\bnfc[ -]?e\b|\bnota fiscal\b',
     }.items() if re.search(pattern, value)]
-    mapping_failure = bool(re.search(
+    mapping_failure = bool(mapping_failure_entities(value) or re.search(
         r'\bnao (?:esta |foi |existe |ha |possui )?(?:\w+\s+){0,3}'
         r'(?:relacionad[ao]|vinculad[ao]|associad[ao]|integrad[ao]|configurad[ao]|relacionamento|vinculo)\b|'
         r'\bnao (?:esta |foi )?integr\w+\b.{0,80}\b(?:relacionamento|relacao|vinculo|transportadora|carrier)\b|'
