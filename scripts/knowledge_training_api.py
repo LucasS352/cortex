@@ -126,11 +126,11 @@ class Decision(BaseModel):
 
 
 class Reason(BaseModel):
-    reason: str = Field(min_length=5, max_length=1000)
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 class Revision(BaseModel):
-    reason: str = Field(min_length=5, max_length=1000)
+    reason: str | None = Field(default=None, max_length=1000)
     content: Content
 
 

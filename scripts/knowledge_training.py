@@ -496,7 +496,7 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
                 if proposal.get('validated_html') is not None:
                     extraction['validated_html'] = proposal['validated_html']
                 target_mod = module_key or existing['suggested_module']
-                valid_subs = dict(taxonomy.subtopic_options(target_mod))
+                valid_subs = dict(subtopic_options_for_module(target_mod))
                 target_sub = (proposal.get('subtopic_key')
                               if proposal.get('subtopic_key') in valid_subs
                               else existing.get('suggested_subtopic') or 'general')
@@ -558,7 +558,7 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
         # Chamada ao modelo fora da transação: não segura conexão nem locks.
         extraction, text, extractor = extract(ticket, actions)
     module = module_key or extraction['module_hint']
-    valid_subs = dict(taxonomy.subtopic_options(module))
+    valid_subs = dict(subtopic_options_for_module(module))
     proposed_sub = (proposal.get('subtopic_key') or '').strip() if proposal else ''
     sub = (proposed_sub
            if proposed_sub and (proposed_sub in valid_subs or proposed_sub in ('general', 'geral'))
@@ -858,10 +858,31 @@ def _validate_content(c):
         c['customer_answer'] = sanitize(c['customer_answer']).strip()
     if c['module_key'] == 'unclassified':
         raise ValueError('Selecione o módulo antes de publicar.')
-    if c['module_key'] not in taxonomy.MODULE_NAMES and c['module_key'] not in {m['key'] for m in taxonomy_options()}:
-        raise ValueError('Módulo inválido.')
-    if c['subtopic_key'] not in dict(taxonomy.subtopic_options(c['module_key'])):
-        raise ValueError('Subtópico inválido para o módulo.')
+    is_canonical_mod = c['module_key'] in taxonomy.MODULE_NAMES
+    if not is_canonical_mod:
+        try:
+            valid_mod_keys = {m['key'] for m in taxonomy_options()}
+        except Exception:
+            valid_mod_keys = set()
+        if c['module_key'] not in valid_mod_keys:
+            raise ValueError('Módulo inválido.')
+    c['subtopic_key'] = (c.get('subtopic_key') or '').strip() or 'general'
+    if c['subtopic_key'] == 'geral':
+        c['subtopic_key'] = 'general'
+    if is_canonical_mod and c['subtopic_key'] in dict(taxonomy.subtopic_options(c['module_key'])):
+        pass
+    else:
+        valid_subs = dict(subtopic_options_for_module(c['module_key']))
+        if c['subtopic_key'] not in valid_subs:
+            normalized_key = None
+            for k, lbl in valid_subs.items():
+                if c['subtopic_key'].casefold() in (k.casefold(), lbl.casefold(), lbl.split('>')[-1].strip().casefold()):
+                    normalized_key = k
+                    break
+            if normalized_key:
+                c['subtopic_key'] = normalized_key
+            else:
+                raise ValueError('Subtópico inválido para o módulo.')
     for key in ('title', 'symptom', 'root_cause', 'procedure', 'prerequisites', 'expected_result'):
         if c.get(key):
             c[key] = sanitize(c[key]).strip()
@@ -1156,10 +1177,11 @@ def observe(candidate_id, actor, reason):
     return {'ok': True, 'status': 'observed'}
 
 
-def deprecate(item_id, actor, reason):
+def deprecate(item_id, actor, reason=None):
     """Retira do RAG imediatamente; histórico e versões permanecem para auditoria."""
-    if len((reason or '').strip()) < 5:
-        raise ValueError('Informe o motivo da inativação.')
+    reason = (reason or '').strip() or 'Procedimento inativado via curadoria administrativa'
+    if len(reason) < 5:
+        reason = 'Procedimento inativado via curadoria administrativa'
     ensure_schema()
     with connect() as conn:
         item = conn.execute("SELECT * FROM cortex_kb.items WHERE id=%s FOR UPDATE", (item_id,)).fetchone()
@@ -1171,10 +1193,11 @@ def deprecate(item_id, actor, reason):
         audit(conn, 'item', item_id, 'deprecated', actor, reason, before=dict(item))
 
 
-def revise_item(item_id, content, actor, reason):
+def revise_item(item_id, content, actor, reason=None):
     """Edição direta pelo curador (sem ticket de origem) — também gera nova versão."""
-    if len((reason or '').strip()) < 5:
-        raise ValueError('Informe o motivo da revisão.')
+    reason = (reason or '').strip() or 'Revisão administrativa do procedimento canônico'
+    if len(reason) < 5:
+        reason = 'Revisão administrativa do procedimento canônico'
     content = _validate_content(dict(content))
     embedding = _embed(document_text(content, {**content, 'error_messages': content.get('error_messages') or [],
                                                'applicability': content.get('applicability') or {}}))
@@ -1421,6 +1444,18 @@ def taxonomy_options():
         result.append({'key': node['key'], 'label': node['label'], 'description': node['description'],
                        'nodes': node['children'], 'subtopics': flat_subtopics})
     return result
+
+
+def subtopic_options_for_module(module_key):
+    """Retorna lista de (key, label) válidos para um módulo, combinando taxonomia canônica e customizada."""
+    canonical = taxonomy.subtopic_options(module_key) if module_key in taxonomy.MODULE_NAMES else []
+    try:
+        for mod in taxonomy_options():
+            if mod['key'] == module_key:
+                return mod.get('subtopics') or canonical or [('general', 'Geral / outros')]
+    except Exception:
+        pass
+    return canonical or [('general', 'Geral / outros')]
 
 
 def save_module(key, label, description, actor, parent_key=None):

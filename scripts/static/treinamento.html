@@ -1514,7 +1514,7 @@ $('#transformBtn').onclick = () => {
 function moduleOptions(sel) { return state.taxonomy.map(m => `<option value="${m.key}" ${m.key === sel ? 'selected' : ''}>${esc(m.label)}</option>`).join(''); }
 function subOptions(mod, sel) {
   const m = state.taxonomy.find(x => x.key === mod);
-  if (!m || !m.subtopics) return '';
+  if (!m || !m.subtopics || !m.subtopics.length) return '<option value="general">Geral / outros</option>';
   return m.subtopics.map(([k, l]) => {
     const isChild = k.includes(':');
     const displayLabel = isChild ? `  ↳ ${l.replace(/^.*? > /, '')}` : l;
@@ -1749,6 +1749,15 @@ function contentForm(c, onlySelected = false) {
   const a = c.applicability || {};
   const ownUploads = new Set((c.images || []).map(x => x.file));
   const availableImages = state.images.filter(image => onlySelected ? ownUploads.has(image.file) : !/^[0-9a-f]{32}\.png$/.test(image.file) || ownUploads.has(image.file));
+  (c.images || []).forEach(img => {
+    if (img && img.file && !availableImages.some(x => x.file === img.file)) {
+      availableImages.push({
+        file: img.file,
+        label: img.name || img.caption || 'Print do procedimento',
+        url: /^[0-9a-f]{32}\.png$/.test(img.file) ? `/training-media/${img.file}` : `/procedure-images/${img.file}`
+      });
+    }
+  });
   return `
     <div class="form-section">
       <div class="form-section-head"><h3>1. Identificação e Classificação</h3><span>Taxonomia canônica</span></div>
@@ -1804,7 +1813,7 @@ function readForm() {
     customerAnswer = answerPlainText(cleanEditor) || null;
     customerAnswerHtml = cleanEditor.innerHTML.trim() || null;
   }
-  return { title: $('#f_title').value.trim(), module_key: $('#f_module').value, subtopic_key: $('#f_sub').value,
+  return { title: ($('#f_title')?.value || '').trim(), module_key: ($('#f_module')?.value || '').trim() || 'unclassified', subtopic_key: ($('#f_sub')?.value || '').trim() || 'general',
     symptom: $('#f_symptom').value.trim(), error_messages: list('#f_errors', '\n'), root_cause: $('#f_cause').value.trim(),
     customer_answer: customerAnswer, ...(customerAnswerHtml ? {customer_answer_html: customerAnswerHtml} : {}), procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
     images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => {
@@ -2165,7 +2174,9 @@ async function openItem(id) {
         <button onclick="dlg.close()" title="Fechar janela">✕</button>
       </div>
     </div>
-    <div class="dlg-body"><div>${contentForm({ ...v, title: it.title, module_key: it.module_key, subtopic_key: it.subtopic_key },true)}</div>
+    <div class="dlg-body">
+      <div id="itemDialogError" class="review-error-banner" style="display:none;margin-bottom:14px"></div>
+      <div>${contentForm({ ...v, title: it.title, module_key: it.module_key, subtopic_key: it.subtopic_key },true)}</div>
       <div>
         ${it.conflicts.filter(c => c.status === 'open').map(c => `<div class="panel" style="border-color:var(--bad-border)"><h3>Conflito aberto</h3>${esc(c.reason)}
           <div style="margin-top:8px;display:flex;gap:8px"><button onclick="conflict(${c.id},false,${id})">Resolvido</button><button onclick="conflict(${c.id},true,${id})">Descartar</button></div></div>`).join('')}
@@ -2178,7 +2189,7 @@ async function openItem(id) {
         <div class="panel"><h3>Avaliação de uso</h3><div style="display:flex;gap:8px"><button onclick="rate(${id},1)">👍 Ajudou</button> <button onclick="rate(${id},-1)">👎 Não ajudou</button></div></div>
       </div></div>
     ${it.status === 'active' ? `<div class="dlg-foot">
-      <div class="dlg-foot-inputs"><input type="text" id="reason" placeholder="Motivo da alteração (obrigatório)" style="flex:1"></div>
+      <div class="dlg-foot-inputs"><input type="text" id="reason" placeholder="Motivo da alteração (opcional para auditoria)" style="flex:1"></div>
       <div class="dlg-foot-actions">
         <button class="danger" id="depBtn">Inativar (sai da IA na hora)</button>
         <button class="primary" id="revBtn">Salvar nova versão</button>
@@ -2198,12 +2209,57 @@ async function openItem(id) {
     } catch (e) { $('#retrievalResult').textContent = e.message; }
     finally { $('#retrievalBtn').disabled = false; }
   };
-  const go = async (path, body, msg) => {
-    const reason = $('#reason').value.trim(); if (reason.length < 5) return toast('Informe o motivo.');
-    try { await api(path, { method: 'POST', body: { ...body, reason } }); dlg.close(); toast(msg); refresh(); } catch (e) { toast(e.message); }
+  const showError = (msg) => {
+    const banner = $('#itemDialogError');
+    if (banner) {
+      banner.textContent = msg;
+      banner.style.display = 'block';
+      banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    toast(msg);
   };
-  if ($('#revBtn')) { $('#revBtn').onclick = () => go(`/itens/${id}/revisar`, { content: readForm() }, 'Nova versão publicada.');
-                      $('#depBtn').onclick = () => confirm('Retirar este procedimento das respostas da IA?') && go(`/itens/${id}/inativar`, {}, 'Procedimento inativado.'); }
+  const clearError = () => {
+    const banner = $('#itemDialogError');
+    if (banner) {
+      banner.textContent = '';
+      banner.style.display = 'none';
+    }
+  };
+  const go = async (path, body, msg, activeBtn, workingText) => {
+    clearError();
+    const reason = $('#reason')?.value?.trim() || (path.includes('inativar') ? 'Procedimento inativado via curadoria administrativa' : 'Revisão administrativa do procedimento canônico');
+    const allBtns = [$('#revBtn'), $('#depBtn')].filter(Boolean);
+    allBtns.forEach(b => b.disabled = true);
+    const origText = activeBtn ? activeBtn.textContent : '';
+    if (activeBtn && workingText) activeBtn.textContent = workingText;
+    try {
+      await api(path, { method: 'POST', body: { ...body, reason } });
+      dlg.close();
+      toast(msg);
+      refresh();
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      allBtns.forEach(b => b.disabled = false);
+      if (activeBtn && origText) activeBtn.textContent = origText;
+    }
+  };
+  if ($('#revBtn')) {
+    $('#revBtn').onclick = () => {
+      let content;
+      try {
+        content = readForm();
+      } catch (err) {
+        return showError('Erro ao ler o formulário: ' + err.message);
+      }
+      return go(`/itens/${id}/revisar`, { content }, 'Nova versão publicada.', $('#revBtn'), 'Salvando...');
+    };
+    $('#depBtn').onclick = () => {
+      if (confirm('Retirar este procedimento das respostas da IA?')) {
+        go(`/itens/${id}/inativar`, {}, 'Procedimento inativado.', $('#depBtn'), 'Inativando...');
+      }
+    };
+  }
 }
 async function rate(id, r) { try { await api(`/itens/${id}/feedback`, { method: 'POST', body: { rating: r } }); toast('Avaliação registrada.'); } catch (e) { toast(e.message); } }
 async function conflict(cid, dismiss, item) {

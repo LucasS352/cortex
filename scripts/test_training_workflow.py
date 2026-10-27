@@ -703,4 +703,53 @@ class TrainingWorkflowTests(unittest.TestCase):
         self.assertIn('candidateReviewError', html)
         self.assertIn('candidate-error-banner', html)
 
+
+    def test_custom_subtopic_validation_and_normalization(self):
+        fake_tax = [
+            {'key': 'relatorios', 'label': 'Relatórios', 'description': '', 'nodes': [
+                {'key': 'relatorios_venda_por_produto', 'label': 'Venda Por Produto', 'description': '', 'children': []}
+            ], 'subtopics': [('relatorios_venda_por_produto', 'Venda Por Produto'), ('general', 'Geral / outros')]}
+        ]
+        with patch.object(kt, 'taxonomy_options', return_value=fake_tax):
+            # 1. Custom subtopic key accepted
+            content = {
+                'title': 'Relatório Venda por Produto',
+                'module_key': 'relatorios',
+                'subtopic_key': 'relatorios_venda_por_produto',
+                'symptom': 'Localizar relatório de vendas por produto no Master.',
+                'root_cause': 'Dúvida operacional de emissão de relatórios.',
+                'procedure': '1. Acesse o menu Relatórios.\n2. Escolha Venda por Produto.',
+                'images': [],
+            }
+            validated = kt._validate_content(dict(content))
+            self.assertEqual(validated['subtopic_key'], 'relatorios_venda_por_produto')
+
+            # 2. Custom subtopic label normalized to key
+            content_label = dict(content, subtopic_key='Venda Por Produto')
+            validated_label = kt._validate_content(content_label)
+            self.assertEqual(validated_label['subtopic_key'], 'relatorios_venda_por_produto')
+
+            # 3. Invalid subtopic raises ValueError
+            with self.assertRaises(ValueError) as ctx:
+                kt._validate_content(dict(content, subtopic_key='totalmente_inexistente'))
+            self.assertIn('Subtópico inválido', str(ctx.exception))
+
+    def test_deprecate_and_revise_allow_omitted_reason(self):
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = {'id': 10, 'status': 'active', 'title': 'Teste'}
+        with patch.object(kt, 'ensure_schema'), \
+             patch.object(kt, 'connect') as conn_mock, \
+             patch.object(kt, 'audit') as audit_mock:
+            conn_mock.return_value.__enter__.return_value = db
+            kt.deprecate(10, 'Lucas', reason=None)
+            audit_call = [call for call in audit_mock.call_args_list if call.args[3] == 'deprecated']
+            self.assertTrue(len(audit_call) > 0)
+            self.assertIn('inativado', audit_call[0].args[5])
+
+    def test_open_item_html_has_error_banner_and_optional_reason(self):
+        html = (Path(__file__).parent / 'static' / 'treinamento.html').read_text(encoding='utf-8')
+        self.assertIn('itemDialogError', html)
+        self.assertIn('review-error-banner', html)
+        self.assertIn('placeholder="Motivo da alteração (opcional para auditoria)"', html)
+
 if __name__ == '__main__': unittest.main()
