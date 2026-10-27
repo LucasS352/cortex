@@ -611,4 +611,96 @@ class TrainingWorkflowTests(unittest.TestCase):
             self.assertEqual(review_fn.call_args.kwargs['keywords'], ['fornecedor', 'historico'])
             self.assertEqual(review_fn.call_args.kwargs['score'], 7)
 
+    def test_approve_candidate_materializes_unprepared_ticket_images_and_accepts_default_reason(self):
+        candidate = {
+            'id': 5,
+            'ticket_external_id': 132273,
+            'status': 'pending',
+            'suggested_module': 'sales',
+            'suggested_subtopic': 'general',
+            'extraction': {
+                'title': 'Localização de Relatório de Vendas',
+                'symptom': 'Usuário quer localizar relatório de vendas por produto.',
+                'root_cause': 'Dúvida operacional de navegação no menu de relatórios.',
+                'procedure': '1. Acesse o menu Vendas.\n2. Selecione Relatório por Produto.',
+                'customer_answer': 'Acesse o menu Vendas > Relatório.',
+                'applicability': {},
+                'error_messages': [],
+            }
+        }
+        raw_png = io.BytesIO()
+        Image.new('RGB', (10, 10), 'blue').save(raw_png, 'PNG')
+        prepared_meta = {'file': 'd41d8cd98f00b204e9800998ecf8427e.png', 'url': '/training-media/d41d8cd98f00b204e9800998ecf8427e.png'}
+
+        db = MagicMock()
+        db.execute.return_value.fetchone.side_effect = [
+            candidate, # SELECT FOR UPDATE candidates
+            {'id': 101}, # INSERT items RETURNING id
+            {'n': 0}, # SELECT max(version_no) AS n
+            {'id': 201, 'version_no': 1}, # INSERT versions RETURNING *
+            {'v': None}, # _cached_vector
+        ]
+        db.execute.return_value.fetchall.return_value = []
+
+        content = {
+            'title': 'Localização de Relatório de Vendas',
+            'module_key': 'sales',
+            'subtopic_key': 'general',
+            'symptom': 'Usuário quer localizar relatório de vendas por produto.',
+            'root_cause': 'Dúvida operacional de navegação no menu de relatórios.',
+            'procedure': '1. Acesse o menu Vendas.\n2. Selecione Relatório por Produto.',
+            'customer_answer': 'Acesse o menu Vendas > Relatório.',
+            'customer_answer_html': '<p>Acesse o menu</p><img src="/api/treinamento/candidatos/5/imagens/7/0">',
+            'images': [{
+                'file': 'candidate-5-7-0.png',
+                'name': 'Tela de Vendas',
+                'caption': 'Menu de vendas',
+                'placement': 'answer',
+                'after_answer_paragraph': 1,
+            }],
+            'applicability': {},
+            'error_messages': [],
+        }
+
+        with patch.object(kt, 'ensure_schema'),              patch.object(kt, 'connect') as conn_mock,              patch.object(kt, 'prepare_candidate_image', return_value=prepared_meta) as prep_mock,              patch.object(kt, 'procedure_images', return_value=[{'file': 'd41d8cd98f00b204e9800998ecf8427e.png'}]),              patch.object(kt, '_embed', return_value=None),              patch.object(kt, '_publish'),              patch.object(kt, 'audit') as audit_mock,              patch.object(kt, 'item_detail', return_value={'id': 101}):
+            conn_mock.return_value.__enter__.return_value = db
+            result = kt.approve(5, 'new', content, 'Lucas', reason='')
+            self.assertEqual(result, {'id': 101})
+            prep_mock.assert_called_once_with(5, 7, 0, 'Lucas')
+            # Check audit action and reason
+            audit_call = [call for call in audit_mock.call_args_list if call.args[2] == 5 and call.args[3] == 'approved:new']
+            self.assertTrue(len(audit_call) > 0)
+            self.assertIn('132273', audit_call[0].args[5])
+
+    def test_approve_api_route_allows_omitted_reason_and_returns_clean_422_detail(self):
+        app = FastAPI()
+        app.include_router(router)
+        with TestClient(app) as client:
+            # 1. Missing required field in content gives 422 with structured detail
+            bad_res = client.post('/api/treinamento/candidatos/5/aprovar', json={
+                'decision': 'new',
+                'content': {
+                    'title': 'abc', # too short (min_length=5)
+                    'module_key': 'sales',
+                    'subtopic_key': 'general',
+                    'symptom': 'Curto', # min_length=5
+                    'root_cause': 'Causa', # min_length=5
+                    'procedure': '1. Passo curto',
+                }
+            })
+            self.assertEqual(bad_res.status_code, 422)
+            self.assertIsInstance(bad_res.json()['detail'], list)
+            locs = [d['loc'][-1] for d in bad_res.json()['detail']]
+            self.assertIn('title', locs)
+
+    def test_treinamento_html_removed_reason_and_target_from_candidate_footer(self):
+        html = (Path(__file__).parent / 'static' / 'treinamento.html').read_text(encoding='utf-8')
+        # Check that candidateForm footer does not contain #reason or #target inputs
+        candidate_form_idx = html.find('candidateForm(')
+        self.assertNotEqual(candidate_form_idx, -1)
+        self.assertNotIn('placeholder="Motivo da decisão (obrigatório, fica na auditoria)"', html)
+        self.assertNotIn('— vincular a procedimento existente —', html)
+        self.assertIn('candidateReviewError', html)
+        self.assertIn('candidate-error-banner', html)
+
 if __name__ == '__main__': unittest.main()

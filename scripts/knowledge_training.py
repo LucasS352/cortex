@@ -876,10 +876,12 @@ def _validate_content(c):
     image_names = set()
     for image in c.get('images') or []:
         placement = image.get('placement') or 'procedure'
-        if image.get('file') not in allowed or placement not in ('answer', 'procedure'):
-            raise ValueError('A imagem revisada ou seu local de exibição é inválido.')
+        if placement not in ('answer', 'procedure'):
+            raise ValueError('O local de exibição da imagem é inválido.')
+        if image.get('file') not in allowed:
+            raise ValueError(f"A imagem '{image.get('name') or image.get('file')}' não foi encontrada na biblioteca de mídia.")
         if placement == 'procedure' and image.get('after_step') not in steps:
-            raise ValueError('Vincule cada imagem do procedimento a um passo numerado existente (1. …).')
+            raise ValueError(f"A imagem '{image.get('name')}' está vinculada a um passo ({image.get('after_step')}) que não existe no procedimento numerado.")
         image['placement'] = placement
         image['after_step'] = image.get('after_step') if placement == 'procedure' else None
         paragraph = image.get('after_answer_paragraph')
@@ -888,10 +890,12 @@ def _validate_content(c):
             raise ValueError('A posição da imagem na resposta é inválida.')
         image['after_answer_paragraph'] = paragraph if placement == 'answer' else None
         image['name'] = sanitize(str(image.get('name') or image.get('caption') or 'Tela de referência')).strip()[:120]
-        if len(image['name']) < 3 or norm(image['name']) in image_names:
-            raise ValueError('Cada imagem precisa de um nome único com pelo menos 3 caracteres.')
+        if len(image['name']) < 3:
+            raise ValueError(f"O nome da imagem '{image['name']}' deve ter pelo menos 3 caracteres.")
+        if norm(image['name']) in image_names:
+            raise ValueError(f"Existe mais de uma imagem com o nome '{image['name']}'. Cada imagem precisa de um nome único.")
         image_names.add(norm(image['name']))
-        image['caption'] = sanitize(str(image.get('caption') or 'Tela de referência'))[:300]
+        image['caption'] = sanitize(str(image.get('caption') or image['name'] or 'Tela de referência'))[:300]
     return c
 
 
@@ -1007,22 +1011,54 @@ def _new_version(conn, item_id, content, actor, reason):
     return version
 
 
-def approve(candidate_id, decision, content, actor, reason, target_item_id=None):
+def _materialize_candidate_images(content, candidate_id, actor):
+    images = content.get('images') or []
+    if not images:
+        return
+    for image in images:
+        file = image.get('file') or ''
+        match = re.fullmatch(r'candidate-(\d+)-(\d+)-(\d+)\.png', file)
+        if match:
+            cand_id, action_id, index = (int(g) for g in match.groups())
+            try:
+                prepared = prepare_candidate_image(cand_id, action_id, index, actor)
+                image['file'] = prepared['file']
+                old_ref = f'/api/treinamento/candidatos/{cand_id}/imagens/{action_id}/{index}'
+                new_ref = prepared['url']
+                for html_key in ('customer_answer_html', 'customer_answer', 'procedure'):
+                    if content.get(html_key):
+                        content[html_key] = content[html_key].replace(old_ref, new_ref)
+            except Exception:
+                pass
+
+
+def approve(candidate_id, decision, content, actor, reason=None, target_item_id=None):
     """decision: 'new' (novo procedimento) | 'revise' (nova versão de item existente) | 'attach' (só evidência)."""
     if decision not in ('new', 'revise', 'attach'):
         raise ValueError('Decisão inválida.')
+    if not (reason or '').strip():
+        if decision == 'new':
+            reason = f'Publicado como novo procedimento canônico a partir da sugestão #{candidate_id}'
+        elif decision == 'revise':
+            reason = f'Nova versão publicada a partir da sugestão #{candidate_id}'
+        elif decision == 'attach':
+            reason = f'Ticket anexado como evidência a partir da sugestão #{candidate_id}'
     if len((reason or '').strip()) < 5:
         raise ValueError('Informe o motivo da decisão (fica na auditoria).')
     if decision != 'new' and not target_item_id:
         raise ValueError('Selecione o procedimento existente.')
     if decision != 'attach':
-        content = _validate_content(dict(content))
+        content = dict(content)
+        _materialize_candidate_images(content, candidate_id, actor)
+        content = _validate_content(content)
         embedding = _embed(document_text({'title': content['title'], 'module_key': content['module_key']},
                                          {**content, 'error_messages': content.get('error_messages') or [],
                                           'applicability': content.get('applicability') or {}}))
     ensure_schema()
     with connect() as conn:
         cand = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s FOR UPDATE', (candidate_id,)).fetchone()
+        if cand and reason.endswith(f'da sugestão #{candidate_id}'):
+            reason = reason.replace(f'da sugestão #{candidate_id}', f'do chamado #{cand["ticket_external_id"]}')
         if not cand or cand['status'] not in ('pending', 'conflict'):
             raise RuntimeError('Esta sugestão já foi decidida. Recarregue a fila.')
         if decision == 'new':

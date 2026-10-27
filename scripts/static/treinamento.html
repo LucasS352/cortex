@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel='icon' href='data:,'>
 <title>CORTEX — Treinamento da IA</title>
 <script>
   if (window.top === window.self) {
@@ -1010,7 +1011,19 @@ html.embedded-in-admin dialog.candidate-dialog {
 .subtree-option { display: block; width: 100%; text-align: left; border: 0; background: none; border-radius: 5px; padding: 7px 8px 7px 24px; font-weight: 500; }
 .subtree-option.active { color: var(--brand); font-weight: 800; }
 .subtree-parent-option { padding-left: 12px; font-size: 11px; }
-.candidate-dialog .dlg-foot { padding: 10px 14px; }
+.candidate-dialog .dlg-foot { padding: 10px 14px; display: flex; justify-content: flex-end; gap: 8px; }
+.candidate-error-banner {
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+  color: #b42318;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 10px 14px 0;
+  font-weight: 500;
+  font-size: 13px;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
 @media (max-width: 1120px) { .dlg-body.candidate-body { grid-template-columns: minmax(230px, .8fr) minmax(390px, 1.4fr); } .review-side { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .review-side .review-card { margin: 0; } }
 @media (max-width: 760px) { .dlg-body.candidate-body { grid-template-columns: 1fr; } .review-side { display: block; } .review-field-pair { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
@@ -1177,7 +1190,25 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.displa
 async function api(path, opts = {}) {
   const r = await fetch(API + path, { headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) { const err = new Error(data.detail?.message || data.detail || 'Erro na operação'); err.status = r.status; err.detail = data.detail; throw err; }
+  if (!r.ok) {
+    let msg = 'Erro na operação';
+    if (typeof data.detail === 'string') {
+      msg = data.detail;
+    } else if (Array.isArray(data.detail)) {
+      msg = data.detail.map(d => {
+        const field = (d.loc || []).filter(p => p !== 'body').join('.');
+        return field ? `${field}: ${d.msg}` : d.msg;
+      }).join(';\n') || 'Erro de validação';
+    } else if (data.detail?.message) {
+      msg = data.detail.message;
+    } else if (data.message) {
+      msg = data.message;
+    }
+    const err = new Error(msg);
+    err.status = r.status;
+    err.detail = data.detail;
+    throw err;
+  }
   return data;
 }
 
@@ -1776,7 +1807,19 @@ function readForm() {
   return { title: $('#f_title').value.trim(), module_key: $('#f_module').value, subtopic_key: $('#f_sub').value,
     symptom: $('#f_symptom').value.trim(), error_messages: list('#f_errors', '\n'), root_cause: $('#f_cause').value.trim(),
     customer_answer: customerAnswer, ...(customerAnswerHtml ? {customer_answer_html: customerAnswerHtml} : {}), procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
-    images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => { const i = Number(input.id.split('_').pop()), placement=$('#img_place_'+i).value; return input.checked ? {file:input.dataset.file,name:$('#img_name_'+i).value.trim(),placement,after_step:placement==='procedure'?Number($('#img_step_'+i).value):null,after_answer_paragraph:placement==='answer'?Number($('#img_paragraph_'+i).value)||1:null,caption:$('#img_caption_'+i).value} : null; }).filter(Boolean),
+    images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => {
+      const i = Number(input.id.split('_').pop()), placement = $('#img_place_' + i)?.value || 'answer';
+      const name = ($('#img_name_' + i)?.value || '').trim() || `Print técnico ${i + 1}`;
+      const caption = ($('#img_caption_' + i)?.value || '').trim() || name;
+      return input.checked ? {
+        file: input.dataset.file,
+        name,
+        placement,
+        after_step: placement === 'procedure' ? Number($('#img_step_' + i)?.value) || 1 : null,
+        after_answer_paragraph: placement === 'answer' ? Number($('#img_paragraph_' + i)?.value) || 1 : null,
+        caption
+      } : null;
+    }).filter(Boolean),
     keywords: list('#f_kw'),
     applicability: { master_version: $('#a_ver').value.trim() || null, tax_regime: $('#a_reg').value.trim() || null,
       ufs: list('#a_ufs').map(u => u.toUpperCase()), integrations: list('#a_int'),
@@ -1832,12 +1875,8 @@ async function openCandidate(id) {
       </div>
     </div>
     ${candidateForm(c, content, related, imported)}
+    <div id="candidateReviewError" class="candidate-error-banner" style="display:none"></div>
     <div class="dlg-foot">
-      <div class="dlg-foot-inputs">
-        <input type="text" id="reason" placeholder="Motivo da decisão (obrigatório, fica na auditoria)" style="flex:1;min-width:240px">
-        <select id="target" style="width:auto;max-width:300px"><option value="">— vincular a procedimento existente —</option>
-          ${related.map(r => `<option value="${r.item_id}">${esc(r.title)} (${REL[r.relation][1]})</option>`).join('')}</select>
-      </div>
       <div class="dlg-foot-actions">
         <button data-act="observe" title="Guarda a observação e a decisão na auditoria, sem ensinar esta informação à IA">Apenas observação</button>
         <button class="danger" data-act="reject" title="Descarta a sugestão; ela não entra na base da IA">Rejeitar</button>
@@ -2020,13 +2059,73 @@ async function openCandidate(id) {
   }
 
   bindCandidateForm(); bindCandidateImageEditors(); showTrainingDialog(dlg);
+  const showError = (msg) => {
+    const banner = $('#candidateReviewError');
+    if (banner) {
+      banner.textContent = msg;
+      banner.style.display = 'block';
+      banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    toast(msg);
+  };
+  const clearError = () => {
+    const banner = $('#candidateReviewError');
+    if (banner) {
+      banner.textContent = '';
+      banner.style.display = 'none';
+    }
+  };
+
   dlg.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
-    const reason = $('#reason').value.trim(); const act = b.dataset.act; const target = parseInt($('#target').value, 10) || null;
-    if (reason.length < 5) return toast('Informe o motivo da decisão.');
-    if ((act === 'new' || act === 'revise') && (c._answerImageRefs || []).length && !$('#printsReviewed')?.checked)
-      return toast('Confira todos os prints e confirme a revisão de privacidade antes de publicar.');
-    if ((act === 'attach' || act === 'revise') && !target) return toast('Selecione o procedimento existente.');
-    b.disabled = true;
+    clearError();
+    const act = b.dataset.act;
+    let reason = '';
+    let target = null;
+
+    if (act === 'observe') {
+      const input = prompt('Observação para a auditoria (mínimo 5 caracteres):');
+      if (input === null) return;
+      reason = input.trim();
+      if (reason.length < 5) return showError('Informe uma observação com pelo menos 5 caracteres.');
+    } else if (act === 'reject') {
+      const input = prompt('Motivo do descarte da sugestão (mínimo 5 caracteres):');
+      if (input === null) return;
+      reason = input.trim();
+      if (reason.length < 5) return showError('Informe o motivo da rejeição com pelo menos 5 caracteres.');
+    } else if (act === 'return') {
+      const input = prompt('Qual ajuste o técnico deve fazer no chamado? (mínimo 5 caracteres):');
+      if (input === null) return;
+      reason = input.trim();
+      if (reason.length < 5) return showError('Informe o ajuste necessário para devolver ao técnico.');
+    } else if (act === 'attach' || act === 'revise') {
+      const actionLabel = act === 'attach' ? 'anexar como evidência' : 'publicar nova versão';
+      const promptLines = [`Informe o ID do procedimento existente para ${actionLabel}:`];
+      if (related.length) {
+        promptLines.push('Procedimentos relacionados sugeridos:');
+        related.forEach(r => promptLines.push(`• ID ${r.item_id}: ${r.title} (${REL[r.relation]?.[1] || r.relation})`));
+      }
+      const defaultVal = related[0] ? String(related[0].item_id) : '';
+      const input = prompt(promptLines.join('\n'), defaultVal);
+      if (input === null) return;
+      target = parseInt(String(input).replace(/\D/g, ''), 10) || null;
+      if (!target) return showError('Selecione ou digite um ID de procedimento válido.');
+      reason = act === 'attach'
+        ? `Ticket anexado como evidência a partir do chamado #${c.ticket_external_id}`
+        : `Nova versão publicada a partir do chamado #${c.ticket_external_id}`;
+    } else if (act === 'new') {
+      reason = `Publicado como novo procedimento canônico a partir do chamado #${c.ticket_external_id}`;
+    }
+
+    if ((act === 'new' || act === 'revise') && (c._answerImageRefs || []).length && !$('#printsReviewed')?.checked) {
+      $('#printsReviewed')?.focus();
+      return showError('Confira todos os prints e marque a confirmação "Revisei os prints e ocultei os dados de outros clientes" antes de publicar.');
+    }
+
+    const allBtns = dlg.querySelectorAll('[data-act]');
+    allBtns.forEach(btn => btn.disabled = true);
+    const origText = b.textContent;
+    b.textContent = act === 'new' ? 'Publicando...' : 'Processando...';
+
     try {
       if (act === 'new' || act === 'revise') await persistCandidateImageEdits();
       if (act === 'observe') await api(`/candidatos/${id}/observar`, { method: 'POST', body: { reason } });
@@ -2041,7 +2140,12 @@ async function openCandidate(id) {
         : act === 'revise' ? 'Nova versão publicada e classificada também em Versão.'
         : 'Publicado como novo — já disponível para a IA.');
       if (!isStandaloneCandidateReview()) refresh();
-    } catch (e) { toast(e.message); b.disabled = false; }
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      allBtns.forEach(btn => btn.disabled = false);
+      b.textContent = origText;
+    }
   });
 }
 

@@ -84,7 +84,7 @@ class Applicability(BaseModel):
 class ProcedureImage(BaseModel):
     file: str = Field(min_length=1, max_length=100)
     name: str | None = Field(default=None, max_length=120)
-    caption: str = Field(min_length=3, max_length=300)
+    caption: str = Field(default='', max_length=300)
     placement: Literal['answer', 'procedure'] = 'procedure'
     after_step: int | None = Field(default=None, ge=1, le=100)
     after_answer_paragraph: int | None = Field(default=None, ge=1, le=100)
@@ -105,6 +105,7 @@ class Content(BaseModel):
     error_messages: list[str] = Field(default_factory=list, max_length=15)
     root_cause: str = Field(min_length=5, max_length=6000)
     customer_answer: str | None = Field(default=None, max_length=10000)
+    customer_answer_html: str | None = Field(default=None, max_length=50000)
     procedure: str = Field(min_length=5, max_length=10000)
     prerequisites: str | None = Field(default=None, max_length=4000)
     expected_result: str | None = Field(default=None, max_length=4000)
@@ -119,7 +120,7 @@ class NewCandidate(BaseModel):
 
 class Decision(BaseModel):
     decision: Literal['new', 'revise', 'attach']
-    reason: str = Field(min_length=5, max_length=1000)
+    reason: str | None = Field(default=None, max_length=1000)
     target_item_id: int | None = None
     content: Content | None = None
 

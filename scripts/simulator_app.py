@@ -116,6 +116,11 @@ app = FastAPI(title="DeskCortex — Simulador de Atendimento", lifespan=lifespan
               docs_url=None, redoc_url=None, openapi_url=None)
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error_without_payload(_request: Request, exc: RequestValidationError):
     # Pydantic includes the original request in its default 422 response. Master
