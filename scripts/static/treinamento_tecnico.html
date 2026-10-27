@@ -2421,23 +2421,30 @@ async function loadContext() {
 
     // Respostas sugeridas pela IA
     const answers = data.context.answers || [];
-    if (!answers.length) {
-      showBanner('Nenhuma resposta automática do CORTEX foi encontrada no histórico sincronizado deste chamado.', 'warn');
-      renderSelectedQuestion();
-      return;
-    }
-    const selected = answers.find(a => state.marker && a.text.includes(state.marker)) || answers[answers.length - 1];
     const aSelect = $('#answerSelect');
-    aSelect.innerHTML = answers.map(a =>
-      `<option value="${esc(a.action_id)}" ${a.action_id === selected.action_id ? 'selected' : ''}>Ação #${esc(a.action_id)} · ${esc(formatDateBr(a.created_at))}</option>`
-    ).join('');
-    aSelect.style.display = answers.length > 1 ? 'inline-block' : 'none';
+    const manualActionId = `manual:${ticket}`;
+    if (answers.length) {
+      const selected = answers.find(a => state.marker && a.text.includes(state.marker)) || answers[answers.length - 1];
+      aSelect.innerHTML = answers.map(a =>
+        `<option value="${esc(a.action_id)}" ${a.action_id === selected.action_id ? 'selected' : ''}>Ação #${esc(a.action_id)} · ${esc(formatDateBr(a.created_at))}</option>`
+      ).join('');
+      aSelect.style.display = answers.length > 1 ? 'inline-block' : 'none';
+    } else {
+      aSelect.innerHTML = `<option value="${esc(manualActionId)}">Preparação manual do chamado #${esc(ticket)}</option>`;
+      aSelect.style.display = 'none';
+      $('#answerPreview').innerHTML = '<p style="color:var(--muted)">Este chamado não possui resposta anterior do Cortex. Prepare abaixo a solução validada pelo técnico.</p>';
+      $('#aiTelemetryContainer').innerHTML = '<span class="telemetry-pill">Modo <strong>preparação manual</strong></span>';
+      renderSelectedQuestion();
+    }
+    $$('#scoreButtons .score-btn').forEach(button => { button.disabled = !answers.length; });
 
     // Verifica pedidos de revisão administrativa
     const revisions = data.context.revision_requests || [];
     if (revisions.length) {
       const latestRev = revisions[0];
       showBanner(`Revisão solicitada por ${latestRev.decided_by || 'Administrador'}: "${latestRev.decision_reason || 'Complemente o passo a passo'}"`, 'warn');
+    } else if (!answers.length) {
+      showBanner('Sem resposta anterior do CORTEX: o chamado foi aberto em modo de preparação manual.', 'info');
     } else {
       showBanner('');
     }
@@ -2446,7 +2453,14 @@ async function loadContext() {
       populateTechNoteSelector(state.technicianAnswers, state.recommendedTechActionId);
     }
 
-    renderSelectedAiAnswer();
+    if (answers.length) renderSelectedAiAnswer();
+    else restoreSavedReviewForAction(manualActionId);
+    const recommendedNote = state.technicianAnswers.find(note =>
+      String(note.action_id) === String(state.recommendedTechActionId)
+    ) || state.technicianAnswers[state.technicianAnswers.length - 1];
+    if (recommendedNote && !getEditorPlainText()) {
+      applyTechnicianNoteToEditor(recommendedNote, false);
+    }
     toast(`Chamado #${ticket} carregado para ${data.technician}.`);
   } catch (e) {
     toast(e.message);

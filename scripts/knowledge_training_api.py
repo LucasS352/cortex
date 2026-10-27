@@ -250,6 +250,13 @@ def save_candidate_image_redaction(candidate_id: int, action_id: int, index: int
                   body.data_url, body.name, body.redacted, actor(request))
 
 
+@router.post('/candidatos/{candidate_id}/imagens-salvas/{file_name}/revisar')
+def save_candidate_prepared_image_redaction(candidate_id: int, file_name: str,
+                                            body: CandidateImageRedaction, request: Request):
+    return _guard(kt.save_candidate_prepared_image_redaction, candidate_id, file_name,
+                  body.data_url, body.name, body.redacted, actor(request))
+
+
 @router.post('/candidatos/{candidate_id}/aprovar')
 def approve(candidate_id: int, body: Decision, request: Request):
     if body.decision != 'attach' and body.content is None:
@@ -259,13 +266,17 @@ def approve(candidate_id: int, body: Decision, request: Request):
 
 @router.post('/candidatos/{candidate_id}/rejeitar')
 def reject(candidate_id: int, body: Reason, request: Request):
-    _guard(kt.reject, candidate_id, actor(request), body.reason)
+    return _guard(kt.reject, candidate_id, actor(request), body.reason)
+
+
+@router.post('/candidatos/{candidate_id}/observar')
+def observe(candidate_id: int, body: Reason, request: Request):
+    return _guard(kt.observe, candidate_id, actor(request), body.reason)
 
 
 @router.post('/candidatos/{candidate_id}/devolver')
 def return_for_revision(candidate_id: int, body: Reason, request: Request):
     return _guard(kt.request_revision, candidate_id, actor(request), body.reason)
-    return {'ok': True}
 
 
 @router.get('/itens')

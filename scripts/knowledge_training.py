@@ -93,6 +93,9 @@ _TECHNICAL_SUCCESS = re.compile(r'integrad[oa] com sucesso|inclu[ií]d[oa] com s
 _STEPS = re.compile(r'(^|\n)\s*(\d+[.)-]|passo|- )|acess(e|ar) o menu|configura(c|r)|cadastr|marque|desmarque|altere|parametr|>')
 _ERROR = re.compile(r'rejei(c|ç)|erro\s*\d+|codigo\s*\d+|exception|falha (na|ao)|\b[a-z]*error\b')
 _AGENT_PROFILES = {1, 3}
+_SUPPORT_SIGNATURE_START = re.compile(
+    r'(?i)\bobrigado por entrar em contato conosco por este canal de atendimento\b'
+)
 
 
 def is_agent(action):
@@ -108,6 +111,32 @@ def curation_actions(actions):
                    and 'CORTEX-AI-NOTE:' not in str(action.get('description') or '')
                    and not automatic_receipt_action(action)),
                   key=lambda action: (str(action.get('createdDate') or ''), int(action.get('id') or 0)))
+
+
+def _clean_technician_message(action):
+    """Remove the standard support footer and reject footer-only actions."""
+    from movidesk_note_worker import plain
+    raw_html = str(action.get('htmlDescription') or action.get('description') or '')
+    text = sanitize(plain(action.get('description') or '')).strip()
+    text = _SUPPORT_SIGNATURE_START.split(text, maxsplit=1)[0].strip()
+    marker = _SUPPORT_SIGNATURE_START.search(raw_html)
+    clean_html = raw_html[:marker.start()].strip() if marker else raw_html.strip()
+    return text, clean_html
+
+
+def _recommended_curation_pair(actions):
+    """Select the latest real technician answer and its preceding customer question."""
+    latest_question = None
+    selected = (None, None)
+    for action in curation_actions(actions):
+        if not is_agent(action):
+            if str(action.get('type') or '2') == '2':
+                latest_question = str(action.get('id'))
+            continue
+        text, _ = _clean_technician_message(action)
+        if len(text) >= 20:
+            selected = (latest_question, str(action.get('id')))
+    return selected
 
 
 def usefulness(ticket, actions=()):
@@ -414,6 +443,7 @@ def _refresh_open_candidate(candidate_id, external_id, actor, force):
     if not eligible and not force:
         raise PermissionError(json.dumps({'score': score, 'signals': signals}, ensure_ascii=False))
     extraction, text, extractor = extract(ticket, actions)
+    source_question_id, source_answer_id = _recommended_curation_pair(actions)
     module = extraction['module_hint']
     sub = taxonomy.subtopic(module, extraction['title'], [extraction['symptom'] or ''])
     checks = quality_checks(extraction, text)
@@ -425,9 +455,9 @@ def _refresh_open_candidate(candidate_id, external_id, actor, force):
             WHERE candidate_id=%s AND status='open' ''', (actor, candidate_id))
         conn.execute('''UPDATE cortex_kb.candidates SET status=%s,usefulness_score=%s,usefulness_signals=%s,
             extraction=%s,quality_checks=%s,suggested_module=%s,suggested_subtopic=%s,similar_items=%s,
-            extractor=%s WHERE id=%s''',
+            extractor=%s,source_question_action_id=%s,source_answer_action_id=%s WHERE id=%s''',
             (status, score, Jsonb(signals), Jsonb(extraction), Jsonb(checks), module, sub,
-             Jsonb(related), extractor, candidate_id))
+             Jsonb(related), extractor, source_question_id, source_answer_id, candidate_id))
         for item in related:
             if item['relation'] == 'conflict':
                 conn.execute('INSERT INTO cortex_kb.conflicts(item_id,candidate_id,reason) VALUES (%s,%s,%s)',
@@ -496,6 +526,7 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
             position = next(i for i, a in enumerate(actions) if str(a.get('id')) == str(action_id))
             actions = [a for a in actions[:position + 1] if 'CORTEX-AI-NOTE:' not in str(a.get('description') or '')]
             actions.append({**selected, 'description': ticket['solution_statement']})
+        source_question_id, source_answer_id = _recommended_curation_pair(actions)
         score, signals, eligible = usefulness(ticket, actions)
         if not eligible and not force:
             raise PermissionError(json.dumps({'score': score, 'signals': signals}, ensure_ascii=False))
@@ -544,8 +575,8 @@ def create_candidate(external_id, actor, force=False, action_id=None, module_key
             ON CONFLICT (ticket_external_id) WHERE status IN ('pending','conflict') DO NOTHING RETURNING id''',
             (external_id, status, score, Jsonb(signals), Jsonb(extraction), Jsonb(checks), module, sub,
              Jsonb(related), extractor, actor, str(action_id) if action_id else None,
-             proposal.get('question_action_id') if proposal else None,
-             proposal.get('answer_action_id') if proposal else None)).fetchone()
+             proposal.get('question_action_id') if proposal else source_question_id,
+             proposal.get('answer_action_id') if proposal else source_answer_id)).fetchone()
         if not row:
             raise RuntimeError('Outra revisão foi aberta para este ticket. Recarregue a fila.')
         for r in related:
@@ -741,6 +772,37 @@ def save_candidate_redacted_image(candidate_id, action_id, index, data_url, name
             'url': '/training-media/' + saved['file']}
 
 
+def save_candidate_prepared_image_redaction(candidate_id, file_name, data_url, name, redacted, actor):
+    """Replace a proposal image that was already copied into the candidate media library."""
+    ensure_schema()
+    safe_file = Path(str(file_name or '')).name
+    if safe_file != str(file_name or '') or not re.fullmatch(r'[0-9a-f]{32}\.png', safe_file, re.I):
+        raise ValueError('Imagem preparada inválida.')
+    with connect() as conn:
+        row = conn.execute('SELECT extraction FROM cortex_kb.candidates WHERE id=%s', (candidate_id,)).fetchone()
+        if not row:
+            raise LookupError('Sugestão não encontrada.')
+        allowed = {str(image.get('file') or '') for image in (row.get('extraction') or {}).get('images', [])}
+    if safe_file not in allowed:
+        raise LookupError('A imagem não pertence a esta sugestão.')
+    safe_name = sanitize(str(name or 'Print tratado da resposta técnica')).strip()[:120]
+    if len(safe_name) < 3:
+        safe_name = 'Print tratado da resposta técnica'
+    saved = _save_proposal_images([{
+        'data_url': data_url,
+        'name': safe_name,
+        'caption': safe_name,
+        'placement': 'answer',
+        'after_step': None,
+    }], '')[0]
+    with connect() as conn:
+        audit(conn, 'candidate', candidate_id, 'prepared_image_reviewed', actor,
+              after={'source_file': safe_file, 'file': saved['file'], 'name': safe_name,
+                     'redacted': bool(redacted)})
+    return {'file': saved['file'], 'label': safe_name,
+            'url': '/training-media/' + saved['file']}
+
+
 def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, limit=100):
     ensure_schema()
     with connect() as conn:
@@ -869,6 +931,20 @@ def document_text(item, version):
         f"Palavras-chave: {', '.join(version['keywords'])}" if version.get('keywords') else '') if p)
 
 
+def _version_category_key(conn):
+    """Localiza a categoria transversal Versão criada na taxonomia administrativa."""
+    rows = conn.execute("SELECT key,label FROM cortex_kb.taxonomy WHERE parent_key IS NULL").fetchall()
+    return next((row['key'] for row in rows
+                 if row['key'] in ('versao', 'version') or norm(row['label']) == 'versao'), None)
+
+
+def _secondary_modules(conn, item_id):
+    return conn.execute('''SELECT c.module_key, coalesce(t.label,c.module_key) AS label
+        FROM cortex_kb.item_categories c
+        LEFT JOIN cortex_kb.taxonomy t ON t.key=c.module_key AND t.parent_key IS NULL
+        WHERE c.item_id=%s ORDER BY label''', (item_id,)).fetchall()
+
+
 def _publish(conn, item_id, embedding_cache=None):
     """Espelha a versão vigente em ticket_knowledge_nodes — efeito imediato no RAG, sem deploy."""
     item = conn.execute('SELECT * FROM cortex_kb.items WHERE id=%s', (item_id,)).fetchone()
@@ -876,6 +952,10 @@ def _publish(conn, item_id, embedding_cache=None):
     refs = [r['external_ref'] for r in conn.execute(
         "SELECT external_ref FROM cortex_kb.sources WHERE item_id=%s AND source_type='ticket' ORDER BY id", (item_id,))]
     source_refs = conn.execute('SELECT source_type,external_ref,version_id FROM cortex_kb.sources WHERE item_id=%s ORDER BY id', (item_id,)).fetchall()
+    secondary_modules = _secondary_modules(conn, item_id)
+    module_labels = [taxonomy.MODULE_NAMES.get(item['module_key'], item['module_key']),
+                     *(row['label'] for row in secondary_modules)]
+    module_labels = list(dict.fromkeys(module_labels))
     text = document_text(item, version)
     vector = embedding_cache
     app = version['applicability'] or {}
@@ -884,13 +964,14 @@ def _publish(conn, item_id, embedding_cache=None):
         title=item['title'], content_for_embedding=text, problem=version['symptom'], diagnosis=version['root_cause'],
         solution=('\n\n'.join(p for p in (version.get('customer_answer'), version['procedure']) if p)),
         result=version['expected_result'],
-        modules=[taxonomy.MODULE_NAMES.get(item['module_key'], item['module_key'])], detected_error_codes=version['error_messages'],
+        modules=module_labels, detected_error_codes=version['error_messages'],
         version_reference=(app.get('master_version') or None), tier='KB', confidence='HIGH',
         validation_score=100, final_score=100, source_authority=100,
         validation_evidence=[f"{r['source_type']}:{r['external_ref']}" for r in source_refs][:50],
         metadata=Jsonb({'canonical_item_id': item_id, 'version_no': version['version_no'],
                         'applicability': app, 'approved_by': version['approved_by'],
                         'approved_at': str(version['approved_at']), 'subtopic': item['subtopic_key'],
+                        'secondary_modules': [row['module_key'] for row in secondary_modules],
                         'source_references': source_refs,
                         'images': version.get('images') or [], 'prerequisites': version.get('prerequisites')}),
         embedding=('[' + ','.join(map(str, vector)) + ']') if vector else None,
@@ -953,6 +1034,12 @@ def approve(candidate_id, decision, content, actor, reason, target_item_id=None)
                 raise LookupError('Procedimento não encontrado.')
             item_id = item['id']
         version = _new_version(conn, item_id, content, actor, reason) if decision != 'attach' else None
+        version_category = _version_category_key(conn) if decision == 'revise' else None
+        if version_category and version_category != content['module_key']:
+            conn.execute('''INSERT INTO cortex_kb.item_categories(item_id,module_key,reason,created_by)
+                VALUES (%s,%s,%s,%s) ON CONFLICT (item_id,module_key) DO UPDATE
+                SET reason=excluded.reason, created_by=excluded.created_by''',
+                (item_id, version_category, reason, actor))
         conn.execute('''INSERT INTO cortex_kb.sources(item_id,version_id,source_type,external_ref,note)
             VALUES (%s,%s,'ticket',%s,%s) ON CONFLICT (item_id,source_type,external_ref) DO NOTHING''',
             (item_id, version['id'] if version else None, str(cand['ticket_external_id']), reason))
@@ -963,7 +1050,8 @@ def approve(candidate_id, decision, content, actor, reason, target_item_id=None)
         conn.execute('''UPDATE cortex_kb.conflicts SET status='resolved', resolved_by=%s, resolved_at=now(), resolution_note=%s
             WHERE candidate_id=%s AND status='open' ''', (actor, f'{decision}: {reason}', candidate_id))
         audit(conn, 'candidate', candidate_id, f'approved:{decision}', actor, reason, before=dict(cand),
-              after={'item_id': item_id, 'version_no': version['version_no'] if version else None})
+              after={'item_id': item_id, 'version_no': version['version_no'] if version else None,
+                     'secondary_module': version_category})
     return item_detail(item_id)
 
 
@@ -1011,6 +1099,25 @@ def reject(candidate_id, actor, reason):
         conn.execute("UPDATE cortex_kb.conflicts SET status='dismissed',resolved_by=%s,resolved_at=now(),resolution_note=%s "
                      "WHERE candidate_id=%s AND status='open'", (actor, reason, candidate_id))
         audit(conn, 'candidate', candidate_id, 'rejected', actor, reason)
+
+
+def observe(candidate_id, actor, reason):
+    """Arquiva uma informação útil para auditoria sem transformá-la em conhecimento da IA."""
+    if len((reason or '').strip()) < 5:
+        raise ValueError('Descreva a observação com pelo menos 5 caracteres.')
+    ensure_schema()
+    with connect() as conn:
+        cand = conn.execute('SELECT * FROM cortex_kb.candidates WHERE id=%s FOR UPDATE', (candidate_id,)).fetchone()
+        if not cand or cand['status'] not in ('pending', 'conflict'):
+            raise RuntimeError('Esta sugestão já foi decidida.')
+        note = sanitize(reason).strip()
+        conn.execute("UPDATE cortex_kb.candidates SET status='observed',decided_by=%s,decided_at=now(),decision_note=%s WHERE id=%s",
+                     (actor, note, candidate_id))
+        conn.execute("UPDATE cortex_kb.conflicts SET status='dismissed',resolved_by=%s,resolved_at=now(),resolution_note=%s "
+                     "WHERE candidate_id=%s AND status='open'", (actor, note, candidate_id))
+        audit(conn, 'candidate', candidate_id, 'observation_only', actor, note, before=dict(cand),
+              after={'published_to_ai': False})
+    return {'ok': True, 'status': 'observed'}
 
 
 def deprecate(item_id, actor, reason):
@@ -1069,8 +1176,13 @@ def feedback(item_id, rating, actor, comment=None, ticket_external_id=None):
 def overview():
     ensure_schema()
     with connect() as conn:
-        items = conn.execute('''SELECT module_key, subtopic_key, count(*) AS n FROM cortex_kb.items
-            WHERE status='active' GROUP BY 1,2''').fetchall()
+        items = conn.execute('''SELECT module_key, subtopic_key, count(*) AS n FROM (
+                SELECT i.id, i.module_key, i.subtopic_key FROM cortex_kb.items i WHERE i.status='active'
+                UNION ALL
+                SELECT i.id, c.module_key, 'general' AS subtopic_key
+                FROM cortex_kb.items i JOIN cortex_kb.item_categories c ON c.item_id=i.id
+                WHERE i.status='active' AND c.module_key<>i.module_key
+            ) classified GROUP BY 1,2''').fetchall()
         pending = conn.execute('''SELECT suggested_module AS module_key, count(*) AS n FROM cortex_kb.candidates
             WHERE status IN ('pending','conflict') GROUP BY 1''').fetchall()
         totals = conn.execute('''SELECT
@@ -1111,10 +1223,15 @@ def list_items(module=None, subtopic=None, status='active', q=None, limit=200):
             SELECT i.id, i.title, i.module_key, i.subtopic_key, i.status, i.updated_at, v.version_no, v.embedding_ok,
                    v.applicability, (SELECT count(*) FROM cortex_kb.sources s WHERE s.item_id=i.id) AS sources,
                    (SELECT count(*) FROM cortex_kb.conflicts c WHERE c.item_id=i.id AND c.status='open') AS open_conflicts,
-                   (SELECT coalesce(sum(rating),0) FROM cortex_kb.feedback f WHERE f.version_id=v.id) AS feedback
+                   (SELECT coalesce(sum(rating),0) FROM cortex_kb.feedback f WHERE f.version_id=v.id) AS feedback,
+                   ARRAY(SELECT c.module_key FROM cortex_kb.item_categories c WHERE c.item_id=i.id ORDER BY c.module_key) AS secondary_modules
             FROM cortex_kb.items i LEFT JOIN cortex_kb.versions v ON v.id=i.current_version_id
-            WHERE i.status=%(st)s AND (%(m)s::text IS NULL OR i.module_key=%(m)s)
-              AND (%(s)s::text IS NULL OR i.subtopic_key=%(s)s OR i.subtopic_key LIKE (%(s)s || ':%%'))
+            WHERE i.status=%(st)s AND (%(m)s::text IS NULL OR i.module_key=%(m)s OR EXISTS (
+                    SELECT 1 FROM cortex_kb.item_categories c WHERE c.item_id=i.id AND c.module_key=%(m)s))
+              AND (%(s)s::text IS NULL
+                   OR (i.module_key=%(m)s AND (i.subtopic_key=%(s)s OR i.subtopic_key LIKE (%(s)s || ':%%')))
+                   OR (%(s)s='general' AND EXISTS (SELECT 1 FROM cortex_kb.item_categories c
+                       WHERE c.item_id=i.id AND c.module_key=%(m)s)))
               AND (%(q)s::text IS NULL OR i.title ILIKE '%%'||%(q)s||'%%' OR v.procedure ILIKE '%%'||%(q)s||'%%'
                    OR array_to_string(v.error_messages,' ') ILIKE '%%'||%(q)s||'%%')
             ORDER BY open_conflicts DESC, i.updated_at DESC LIMIT %(l)s''',
@@ -1129,6 +1246,7 @@ def item_detail(item_id):
             raise LookupError('Procedimento não encontrado.')
         return {**item,
                 'versions': conn.execute('SELECT * FROM cortex_kb.versions WHERE item_id=%s ORDER BY version_no DESC', (item_id,)).fetchall(),
+                'secondary_modules': [row['module_key'] for row in _secondary_modules(conn, item_id)],
                 'sources': conn.execute('SELECT * FROM cortex_kb.sources WHERE item_id=%s ORDER BY id', (item_id,)).fetchall(),
                 'conflicts': conn.execute('SELECT * FROM cortex_kb.conflicts WHERE item_id=%s ORDER BY status, created_at DESC', (item_id,)).fetchall(),
                 'audit': conn.execute("SELECT * FROM cortex_kb.audit WHERE entity='item' AND entity_id=%s ORDER BY at DESC LIMIT 50", (item_id,)).fetchall()}
@@ -1747,10 +1865,6 @@ def ticket_technician_answers(ticket_id, allow_internal=True, refresh_live=True)
         r'encerrad[oa]\s+automaticamente\s+por\s+inatividade|evento\s+autom[aá]tico\s+do\s+sistema)',
         re.I
     )
-    sig_re = re.compile(
-        r'(?:<(?:div|p)[^>]*>\s*)*(?:<strong>)?\s*Obrigado por entrar em contato conosco por este canal de atendimento[\s\S]*$',
-        re.I
-    )
     for action in ordered:
         description = str(action.get('description') or '')
         raw_html = str(action.get('htmlDescription') or description or '')
@@ -1771,8 +1885,9 @@ def ticket_technician_answers(ticket_id, allow_internal=True, refresh_live=True)
             if not is_public and not allow_internal:
                 continue
             # Remove assinatura institucional repetitiva deixando a resolução e os passos
-            cleaned_html = sig_re.sub('', raw_html).strip() or raw_html
-            cleaned_text = sig_re.sub('', text).strip() or text
+            cleaned_text, cleaned_html = _clean_technician_message(action)
+            if len(cleaned_text) < 20:
+                continue
             answers.append({
                 'action_id': str(action['id']),
                 'text': cleaned_text[:10000],
@@ -1872,7 +1987,9 @@ def save_review_draft(ticket_id, action_id, actor, score=None, module_key=None, 
     ensure_schema()
     with connect() as conn:
         _, actions = load_ticket(conn, ticket_id)
-        selected = select_answer(actions, action_id)
+        manual_proposal = str(action_id).startswith('manual:')
+        selected = ({'description': proposed_answer or proposed_procedure or 'Preparação manual de conhecimento'}
+                    if manual_proposal else select_answer(actions, action_id))
         existing = conn.execute(
             'SELECT * FROM cortex_kb.answer_reviews WHERE ticket_external_id=%s AND action_id=%s AND actor=%s',
             (ticket_id, str(action_id), actor)
@@ -2105,7 +2222,9 @@ def review_answer(ticket_id, action_id, rating, module_key, comment, actor, exam
             proposal['score'] = score
     with connect() as conn:
         _, actions = load_ticket(conn, ticket_id)
-        selected = select_answer(actions, action_id)
+        manual_proposal = rating == -1 and str(action_id).startswith('manual:')
+        selected = ({'description': proposed_answer or 'Preparação manual de conhecimento'}
+                    if manual_proposal else select_answer(actions, action_id))
     # A proposta do técnico sempre fica isolada na fila. Somente a decisão
     # administrativa posterior pode publicá-la no índice usado pelo CORTEX.
     candidate = create_candidate(example_ticket_id, actor, True, None, module_key, proposal) if rating == -1 else None

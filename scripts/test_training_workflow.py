@@ -75,6 +75,36 @@ class TrainingWorkflowTests(unittest.TestCase):
             self.assertEqual(audit.call_args.args[3], 'image_prepared')
             self.assertEqual(audit.call_args.args[4], 'Lucas')
 
+    def test_prepared_candidate_image_can_be_redacted_without_original_action(self):
+        raw = io.BytesIO(); Image.new('RGB', (20, 10), 'white').save(raw, 'PNG')
+        data_url = 'data:image/png;base64,' + base64.b64encode(raw.getvalue()).decode()
+        source_file = 'a' * 32 + '.png'
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = {
+            'extraction': {'images': [{'file': source_file}]}
+        }
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(kt, 'TRAINING_MEDIA', Path(folder)), \
+             patch.object(kt, 'ensure_schema'), \
+             patch.object(kt, 'connect') as connect, \
+             patch.object(kt, 'audit') as audit:
+            connect.return_value.__enter__.return_value = db
+            result = kt.save_candidate_prepared_image_redaction(
+                7, source_file, data_url, 'Print tratado', True, 'Lucas'
+            )
+        self.assertTrue(result['file'].endswith('.png'))
+        self.assertNotEqual(result['file'], source_file)
+        self.assertEqual(audit.call_args.args[3], 'prepared_image_reviewed')
+
+    def test_candidate_answer_prefers_validated_html_and_restores_missing_gallery_images(self):
+        text = (Path(__file__).parent / 'static' / 'treinamento.html').read_text(encoding='utf-8')
+        validated = text.index('if (content.validated_html)')
+        source = text.index('if (source?.html)', validated)
+        self.assertLess(validated, source)
+        self.assertIn('function ensureCandidateImagesInAnswer(html, content)', text)
+        self.assertIn('image.dataset.candidateFile = chosen.file', text)
+        self.assertIn('/imagens-salvas/${encodeURIComponent(wrapper.dataset.file)}/revisar', text)
+
     def test_existing_training_rules(self):
         for name in dir(legacy):
             if name.startswith('test_'):
@@ -231,6 +261,40 @@ class TrainingWorkflowTests(unittest.TestCase):
             result=client.post('/api/treinamento/candidatos',json={'ticket_external_id':132176,'force':True})
         self.assertEqual(result.status_code,200)
         create.assert_called_once_with(132176,'tecnico_local',True,refresh_live=True)
+
+    def test_admin_ticket_entry_opens_exact_ticket_in_technician_curation(self):
+        text = (Path(__file__).parent / 'static' / 'treinamento.html').read_text(encoding='utf-8')
+        self.assertIn('function openTechnicalCuration(ticket)', text)
+        self.assertIn("target.searchParams.set('ticket', String(ticket))", text)
+        self.assertIn('openTechnicalCuration(n);', text)
+        self.assertIn('>Preparar para curadoria</button>', text)
+        self.assertNotIn('id="reviewAnswerBtn"', text)
+        self.assertNotIn('data-tab="reviews"', text)
+
+        technician = (Path(__file__).parent / 'static' / 'treinamento_tecnico.html').read_text(encoding='utf-8')
+        self.assertIn('const manualActionId = `manual:${ticket}`', technician)
+        self.assertIn('Modo <strong>preparação manual</strong>', technician)
+        self.assertIn('applyTechnicianNoteToEditor(recommendedNote, false)', technician)
+
+    def test_manual_technician_proposal_does_not_require_prior_cortex_answer(self):
+        db = MagicMock()
+        db.execute.return_value.fetchone.return_value = {'id': 44}
+        with patch.object(kt, 'taxonomy_options', return_value=[{'key': 'relatorios'}]), \
+             patch.object(kt, 'connect') as connect, \
+             patch.object(kt, 'load_ticket', return_value=({'subject': 'Relatório'}, [
+                 {'id': 1, 'type': 2, 'description': 'Onde encontro o relatório por produto?'}
+             ])), \
+             patch.object(kt, 'create_candidate', return_value={'id': 81}) as create:
+            connect.return_value.__enter__.return_value = db
+            result = kt.review_answer(
+                132384, 'manual:132384', -1, 'relatorios', 'Solução revisada', 'Lucas', 132384,
+                'Relatório de vendas por produto',
+                'O relatório está disponível no menu de vendas do Master.',
+                '1. Acesse o menu Relatórios.\n2. Abra Vendas por produto.',
+                [], None, None,
+            )
+        self.assertEqual(result['candidate_id'], 81)
+        create.assert_called_once()
 
     def test_candidate_screen_does_not_mix_global_image_library(self):
         page=Path(__file__).parent/'static'/'treinamento.html'
@@ -482,6 +546,28 @@ class TrainingWorkflowTests(unittest.TestCase):
         self.assertEqual(res['answers'][0]['visibility'], 'public')
         self.assertEqual(res['answers'][1]['visibility'], 'internal')
         self.assertEqual([a['action_id'] for a in res_public_only['answers']], ['4'])
+
+    def test_signature_only_action_is_not_a_technician_answer_or_image_source(self):
+        ticket = {'subject': 'Relatório de vendas', 'status': 'Cancelado', 'baseStatus': 'Closed'}
+        actions = [
+            {'id': 1, 'type': 2, 'createdDate': '2026-10-23T03:50:00',
+             'createdBy': {'profileType': 2, 'businessName': 'Cliente'},
+             'description': 'No Master existe relatório de vendas por produto?'},
+            {'id': 4, 'type': 2, 'createdDate': '2026-10-23T03:54:00',
+             'createdBy': {'profileType': 1, 'businessName': 'Lucas'},
+             'description': '<p>Acesse Relatórios &gt; Vendas e abra Vendas por produto.</p>',
+             'htmlDescription': '<p>Acesse Relatórios &gt; Vendas e abra Vendas por produto.</p>'},
+            {'id': 8, 'type': 2, 'createdDate': '2026-10-26T14:49:00',
+             'createdBy': {'profileType': 1, 'businessName': 'Lucas'},
+             'description': 'Obrigado por entrar em contato conosco por este canal de atendimento. '
+                            'Você já assistiu nossos vídeos sobre a Base de Conhecimento?'},
+        ]
+        with patch.object(kt, 'ensure_schema'), patch.object(kt, 'connect'), \
+             patch.object(kt, 'load_ticket', return_value=(ticket, actions)):
+            result = kt.ticket_technician_answers(132273, refresh_live=False)
+        self.assertEqual([answer['action_id'] for answer in result['answers']], ['4'])
+        self.assertEqual(result['recommended_action_id'], '4')
+        self.assertEqual(kt._recommended_curation_pair(actions), ('1', '4'))
 
     def test_save_review_draft_and_submit_proposal_with_classification_and_score(self):
         import os

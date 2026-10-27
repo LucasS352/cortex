@@ -1093,8 +1093,7 @@ html[data-theme="dark"] a { color: #7ab3ff; }
       <span>CHAMADO #</span>
       <input id="ticketInput" type="number" min="1" placeholder="Ex.: 132084">
     </div>
-    <button id="reviewAnswerBtn" title="Preparar conhecimento a partir de resposta da IA no chamado">Avaliar resposta da IA</button>
-    <button class="primary" id="transformBtn">Transformar em conhecimento</button>
+    <button class="primary" id="transformBtn" title="Abre o chamado na curadoria técnica para preparar a solução antes da revisão administrativa">Preparar para curadoria</button>
     <button id="modulesBtn">Módulos</button>
   </div>
 </header>
@@ -1104,7 +1103,6 @@ html[data-theme="dark"] a { color: #7ab3ff; }
     <div class="stats" id="stats"></div>
     <div class="tabs">
       <button data-tab="queue" class="tab active">Fila de curadoria</button>
-      <button data-tab="reviews" class="tab">Avaliações dos técnicos</button>
       <button data-tab="suggestions" class="tab">Tickets sugeridos</button>
       <button data-tab="items" class="tab">Base canônica</button>
       <button data-tab="staging" class="tab">Importação em prévia</button>
@@ -1145,6 +1143,17 @@ function openCandidateTab(id) {
   const tab = window.open(candidateReviewUrl(id), '_blank');
   if (!tab) {
     toast('O navegador bloqueou a nova aba. Permita pop-ups para o Cortex e clique em Revisar novamente.');
+    return null;
+  }
+  tab.opener = null;
+  return tab;
+}
+function openTechnicalCuration(ticket) {
+  const target = new URL('/treinamento/tecnico', window.location.origin);
+  target.searchParams.set('ticket', String(ticket));
+  const tab = window.open(target.href, '_blank');
+  if (!tab) {
+    toast('O navegador bloqueou a nova aba. Permita pop-ups para o Cortex e tente novamente.');
     return null;
   }
   tab.opener = null;
@@ -1350,7 +1359,7 @@ async function renderList() {
           </div>
           <button class="primary" onclick="openCandidate(${r.id})">Revisar</button>
         </div>`;
-      }).join('') : '<div class="empty">Nenhuma sugestão aguardando revisão. Use "Transformar em conhecimento" ou a aba Tickets sugeridos.</div>';
+      }).join('') : '<div class="empty">Nenhuma sugestão aguardando revisão. Informe um chamado e use “Preparar para curadoria”, ou escolha um ticket sugerido.</div>';
     } else if (state.tab === 'reviews') {
       const reviews = await api('/avaliacoes');
       const rows = reviews.filter(r => !state.module || r.module_key === state.module);
@@ -1365,7 +1374,7 @@ async function renderList() {
           <div class="grow"><div class="title">#${r.ticket_external_id} · ${esc(r.subject)}</div>
           <div class="meta"><span class="pill">${esc(modLabel(r.module_key))}</span>
             ${r.signals.map(s => `<span class="pill ${s.weight > 0 ? 'ok' : 'bad'}">${s.weight > 0 ? '+' : ''}${s.weight} ${esc(s.label)}</span>`).join('')}</div></div>
-          <button class="primary" onclick="transform(${r.ticket_external_id}, false, this)">Analisar</button></div>`).join('')
+          <button class="primary" onclick="openTechnicalCuration(${r.ticket_external_id})">Preparar para curadoria</button></div>`).join('')
         : '<div class="empty">Nenhum ticket resolvido elegível no momento.</div>';
     } else if (state.tab === 'releases') {
       const rows = await api('/versoes-master');
@@ -1387,6 +1396,7 @@ async function renderList() {
       list.innerHTML = rows.length ? rows.map(r => `<div class="row">
           <div class="grow"><div class="title">${esc(r.title)}</div>
           <div class="meta"><span class="pill">${esc(modLabel(r.module_key))} › ${esc(subLabel(r.module_key, r.subtopic_key))}</span>
+            ${(r.secondary_modules || []).filter(m => m !== r.module_key).map(m => `<span class="pill info">Também em ${esc(modLabel(m))}</span>`).join('')}
             <span>v${r.version_no}</span><span>${r.sources} ticket(s) de evidência</span>
             ${r.open_conflicts ? `<span class="pill bad">${r.open_conflicts} conflito(s)</span>` : ''}
             <span>👍 ${r.feedback > 0 ? '+'+r.feedback : r.feedback}</span></div></div>
@@ -1455,7 +1465,7 @@ async function transform(ticket, force = false, btn = null, reviewTab = null) {
     if (reviewTab) reviewTab.location.replace(candidateReviewUrl(c.id));
     else if (isStandaloneCandidateReview()) await openCandidate(c.id);
     else openCandidateTab(c.id);
-    toast(`Ticket #${ticket} analisado.`); await refresh();
+    toast(`Ticket #${ticket} enviado para a curadoria.`); await refresh();
   } catch (e) {
     if (e.status === 409 && e.detail?.signals) {
       const why = e.detail.signals.map(s => `${s.weight > 0 ? '+' : ''}${s.weight} ${s.label}`).join('\n');
@@ -1467,7 +1477,7 @@ async function transform(ticket, force = false, btn = null, reviewTab = null) {
 $('#transformBtn').onclick = () => {
   const n = parseInt($('#ticketInput').value, 10);
   if (!n) return toast('Informe o número do ticket.');
-  transform(n, false, $('#transformBtn'));
+  openTechnicalCuration(n);
 };
 
 function moduleOptions(sel) { return state.taxonomy.map(m => `<option value="${m.key}" ${m.key === sel ? 'selected' : ''}>${esc(m.label)}</option>`).join(''); }
@@ -1621,17 +1631,42 @@ function stageCandidateAnswerImages(c, imported) {
   return prepared;
 }
 
+function ensureCandidateImagesInAnswer(html, content) {
+  const template = document.createElement('template');
+  template.innerHTML = html || '';
+  const selected = (content.images || []).map(chosen => ({
+    chosen,
+    source: state.images.find(image => image.file === chosen.file),
+  })).filter(item => item.source);
+  const existingCount = template.content.querySelectorAll('img').length;
+  for (const {chosen, source} of selected.slice(existingCount)) {
+    const paragraph = document.createElement('p');
+    const image = document.createElement('img');
+    image.src = source.url;
+    image.alt = chosen.caption || chosen.name || source.label || 'Print da resposta técnica';
+    image.loading = 'lazy';
+    image.dataset.candidateFile = chosen.file;
+    paragraph.append(image);
+    const position = Math.max(1, Number(chosen.after_answer_paragraph) || 999);
+    const blocks = [...template.content.querySelectorAll('p,li')].filter(block => !block.querySelector('img'));
+    const anchor = blocks[Math.min(position - 1, blocks.length - 1)];
+    if (anchor) anchor.after(paragraph); else template.content.append(paragraph);
+  }
+  return template.innerHTML;
+}
+
 function candidateAnswerHtml(c, content, context) {
-  if (content.customer_answer_html) return content.customer_answer_html;
   const source = answerSourceEvent(c, context);
-  if (source?.html) return source.html;
+  if (content.customer_answer_html) return ensureCandidateImagesInAnswer(content.customer_answer_html, content);
+  if (content.validated_html) return ensureCandidateImagesInAnswer(content.validated_html, content);
+  if (source?.html) return ensureCandidateImagesInAnswer(source.html, content);
   const answer = content.customer_answer || context.technician_reply || source?.text || '';
   const paragraphs = esc(answer).replace(/\r\n?/g, '\n').split('\n').map(line =>
     line ? `<p>${line}</p>` : '<p><br></p>').join('');
   const prints = imagesForCandidateAction(context, source)
     .map(image => `<p><img src="${esc(image.url)}" alt="${esc(image.name || 'Print da resposta técnica')}" loading="lazy"></p>`)
     .join('');
-  return paragraphs + prints;
+  return ensureCandidateImagesInAnswer(paragraphs + prints, content);
 }
 
 function candidateForm(c, content, related, imported = new Map()) {
@@ -1804,18 +1839,28 @@ async function openCandidate(id) {
           ${related.map(r => `<option value="${r.item_id}">${esc(r.title)} (${REL[r.relation][1]})</option>`).join('')}</select>
       </div>
       <div class="dlg-foot-actions">
-        <button class="danger" data-act="reject">Rejeitar</button>
-        <button data-act="return">Devolver para ajuste</button>
-        <button data-act="attach" title="O ticket vira mais uma evidência, sem mudar o procedimento">Anexar como evidência</button>
-        <button data-act="revise" title="Gera nova versão; a anterior fica no histórico">Nova versão</button>
-        <button class="primary" data-act="new">Publicar como novo</button>
+        <button data-act="observe" title="Guarda a observação e a decisão na auditoria, sem ensinar esta informação à IA">Apenas observação</button>
+        <button class="danger" data-act="reject" title="Descarta a sugestão; ela não entra na base da IA">Rejeitar</button>
+        <button data-act="return" title="Mantém a sugestão pendente e registra o ajuste que ainda precisa ser feito">Devolver para ajuste</button>
+        <button data-act="attach" title="Vincula este ticket como evidência de um procedimento existente, sem alterar o texto publicado">Anexar como evidência</button>
+        <button data-act="revise" title="Substitui a versão publicada de um procedimento existente, preserva a anterior no histórico e também o classifica em Versão">Nova versão</button>
+        <button class="primary" data-act="new" title="Cria um procedimento canônico novo e o disponibiliza imediatamente para a IA">Publicar como novo</button>
       </div>
     </div>`;
   function bindCandidateImageEditors() {
     const refs = c._answerImageRefs || [];
     const images = [...dlg.querySelectorAll('#f_answer img')];
     images.forEach((imageElement, imageIndex) => {
-      const reference = refs[imageIndex];
+      const chosen = content.images?.[imageIndex];
+      const prepared = chosen && state.images.find(image => image.file === chosen.file);
+      const reference = refs[imageIndex] || (prepared ? {
+        file: chosen.file,
+        name: chosen.name || chosen.caption || prepared.label,
+        saved_url: prepared.url,
+        url: prepared.url,
+        after_answer_paragraph: chosen.after_answer_paragraph || 1,
+        saved_only: true,
+      } : null);
       if (!reference || imageElement.closest('.candidate-inline-image')) return;
       const wrapper = document.createElement('figure');
       wrapper.className = 'candidate-inline-image';
@@ -1824,6 +1869,7 @@ async function openCandidate(id) {
       wrapper.dataset.index = reference.index;
       wrapper.dataset.galleryIndex = imageIndex;
       wrapper.dataset.file = reference.file || '';
+      wrapper.dataset.savedOnly = reference.saved_only ? 'true' : 'false';
       wrapper.dataset.sourceUrl = reference.saved_url || imageElement.getAttribute('src');
       wrapper.dataset.savedUrl = reference.saved_url || imageElement.getAttribute('src');
       wrapper.dataset.alt = imageElement.alt || reference.name || `Print técnico ${imageIndex + 1}`;
@@ -1950,8 +1996,10 @@ async function openCandidate(id) {
       if (dataUrl.length > 7_100_000) throw new Error('Um print tratado ficou muito grande. Reduza a área ou a resolução antes de publicar.');
       const galleryIndex = Number(wrapper.dataset.galleryIndex);
       const name = $(`#img_name_${galleryIndex}`).value.trim() || `Print técnico ${galleryIndex + 1}`;
-      const saved = await api(`/candidatos/${id}/imagens/${wrapper.dataset.action}/${wrapper.dataset.index}/revisar`,
-        {method:'POST',body:{data_url:dataUrl,name,redacted:wrapper.dataset.dirty === 'true'}});
+      const endpoint = wrapper.dataset.savedOnly === 'true'
+        ? `/candidatos/${id}/imagens-salvas/${encodeURIComponent(wrapper.dataset.file)}/revisar`
+        : `/candidatos/${id}/imagens/${wrapper.dataset.action}/${wrapper.dataset.index}/revisar`;
+      const saved = await api(endpoint, {method:'POST',body:{data_url:dataUrl,name,redacted:wrapper.dataset.dirty === 'true'}});
       state.images = state.images.filter(item => item.file !== wrapper.dataset.file);
       if (!state.images.some(item => item.file === saved.file)) state.images.push(saved);
       const oldFile = wrapper.dataset.file;
@@ -1975,16 +2023,24 @@ async function openCandidate(id) {
   dlg.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
     const reason = $('#reason').value.trim(); const act = b.dataset.act; const target = parseInt($('#target').value, 10) || null;
     if (reason.length < 5) return toast('Informe o motivo da decisão.');
-    if (act !== 'attach' && (c._answerImageRefs || []).length && !$('#printsReviewed')?.checked)
+    if ((act === 'new' || act === 'revise') && (c._answerImageRefs || []).length && !$('#printsReviewed')?.checked)
       return toast('Confira todos os prints e confirme a revisão de privacidade antes de publicar.');
     if ((act === 'attach' || act === 'revise') && !target) return toast('Selecione o procedimento existente.');
     b.disabled = true;
     try {
-      if (act !== 'attach') await persistCandidateImageEdits();
-      if (act === 'reject') await api(`/candidatos/${id}/rejeitar`, { method: 'POST', body: { reason } });
+      if (act === 'new' || act === 'revise') await persistCandidateImageEdits();
+      if (act === 'observe') await api(`/candidatos/${id}/observar`, { method: 'POST', body: { reason } });
+      else if (act === 'reject') await api(`/candidatos/${id}/rejeitar`, { method: 'POST', body: { reason } });
       else if (act === 'return') await api(`/candidatos/${id}/devolver`, { method: 'POST', body: { reason } });
       else await api(`/candidatos/${id}/aprovar`, { method: 'POST', body: { decision: act, reason, target_item_id: target, content: act === 'attach' ? null : readForm() } });
-      closeCandidateReview(); toast(act === 'reject' ? 'Sugestão rejeitada.' : act === 'return' ? 'Ajuste solicitado ao técnico.' : 'Publicado — já disponível para a IA.'); if (!isStandaloneCandidateReview()) refresh();
+      closeCandidateReview();
+      toast(act === 'observe' ? 'Observação registrada somente na auditoria.'
+        : act === 'reject' ? 'Sugestão rejeitada.'
+        : act === 'return' ? 'Ajuste solicitado ao técnico.'
+        : act === 'attach' ? 'Ticket anexado como evidência.'
+        : act === 'revise' ? 'Nova versão publicada e classificada também em Versão.'
+        : 'Publicado como novo — já disponível para a IA.');
+      if (!isStandaloneCandidateReview()) refresh();
     } catch (e) { toast(e.message); b.disabled = false; }
   });
 }
@@ -2000,6 +2056,7 @@ async function openItem(id) {
       </div>
       <div class="dlg-head-actions">
         <span class="pill ${it.status === 'active' ? 'ok' : 'bad'}">${it.status === 'active' ? 'Ativo' : 'Inativo'}</span>
+        ${(it.secondary_modules || []).filter(m => m !== it.module_key).map(m => `<span class="pill info">Também em ${esc(modLabel(m))}</span>`).join('')}
         <span class="pill">v${v.version_no || '-'}</span>
         <button onclick="dlg.close()" title="Fechar janela">✕</button>
       </div>
@@ -2158,7 +2215,6 @@ async function reviewTicket(ticket, marker = '') {
   } catch(e) { toast(e.message); }
 }
 
-$('#reviewAnswerBtn').onclick = () => { const ticket = Number($('#ticketInput').value); if (Number.isInteger(ticket) && ticket > 0) reviewTicket(ticket); else toast('Informe o número do ticket.'); };
 function taxonomyNodes() {
   const entries = [];
   const visit = (node, parentKey = null, depth = 0) => {
@@ -2466,7 +2522,7 @@ $('#modulesBtn').onclick = () => openTaxonomyManager();
     const ticket = Number(p.get('ticket'));
     if (Number.isInteger(ticket) && ticket > 0) {
       $('#ticketInput').value = ticket;
-      await reviewTicket(ticket, p.get('marker') || '');
+      openTechnicalCuration(ticket);
     }
   } catch(err) {
     toast('Erro ao inicializar curadoria: ' + err.message);

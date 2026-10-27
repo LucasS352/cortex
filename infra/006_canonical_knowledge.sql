@@ -25,6 +25,19 @@ CREATE TABLE IF NOT EXISTS cortex_kb.items (
 );
 CREATE INDEX IF NOT EXISTS idx_kb_items_module ON cortex_kb.items (module_key, subtopic_key, status);
 
+-- Um procedimento conserva um módulo principal, mas pode aparecer também em
+-- classificações transversais (por exemplo, "Versão") sem duplicar conteúdo.
+CREATE TABLE IF NOT EXISTS cortex_kb.item_categories (
+    item_id         bigint NOT NULL REFERENCES cortex_kb.items(id) ON DELETE CASCADE,
+    module_key      text NOT NULL,
+    reason          text NOT NULL DEFAULT '',
+    created_by      text NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (item_id, module_key)
+);
+CREATE INDEX IF NOT EXISTS idx_kb_item_categories_module
+    ON cortex_kb.item_categories (module_key, item_id);
+
 -- Conteúdo e condições de aplicação. Uma revisão nunca sobrescreve a anterior.
 CREATE TABLE IF NOT EXISTS cortex_kb.versions (
     id              bigserial PRIMARY KEY,
@@ -88,6 +101,11 @@ CREATE TABLE IF NOT EXISTS cortex_kb.candidates (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_kb_candidates_open_ticket
     ON cortex_kb.candidates (ticket_external_id) WHERE status IN ('pending', 'conflict');
 CREATE INDEX IF NOT EXISTS idx_kb_candidates_queue ON cortex_kb.candidates (status, suggested_module, usefulness_score DESC);
+
+-- "Apenas observação" encerra a sugestão com rastreabilidade, sem publicá-la no RAG.
+ALTER TABLE cortex_kb.candidates DROP CONSTRAINT IF EXISTS candidates_status_check;
+ALTER TABLE cortex_kb.candidates ADD CONSTRAINT candidates_status_check
+    CHECK (status IN ('pending', 'conflict', 'approved', 'merged', 'rejected', 'observed'));
 
 -- Divergências entre um ticket novo e um procedimento publicado.
 CREATE TABLE IF NOT EXISTS cortex_kb.conflicts (
