@@ -633,6 +633,7 @@ def render_note(result, marker):
     lines = ['<p><strong>Cortex — resposta sugerida ao cliente (nota interna)</strong></p>']
     answer_images_emitted = False
     answer_paragraph = 0
+    emitted_image_files = set()
     for raw_line in str(result['reply']).splitlines():
         if not raw_line.strip():
             continue
@@ -645,16 +646,25 @@ def render_note(result, marker):
         answer_paragraph += 1
         for item in inline_answer_images.get(answer_paragraph, []):
             lines.append(image_block(item))
+            emitted_image_files.add(item.get('file'))
         if numbered:
             for item in positioned.get(int(numbered.group(1)), []):
                 lines.append(image_block(item))
+                emitted_image_files.add(item.get('file'))
     if not answer_images_emitted:
         for item in legacy_answer_images:
             lines.append(image_block(item))
+            emitted_image_files.add(item.get('file'))
     for paragraph in sorted(inline_answer_images):
         if paragraph > answer_paragraph:
             for item in inline_answer_images[paragraph]:
                 lines.append(image_block(item))
+                emitted_image_files.add(item.get('file'))
+    # Safety net: ensure any image not yet placed is emitted so none is lost
+    for item in images:
+        if item.get('file') and item.get('file') not in emitted_image_files:
+            lines.append(image_block(item))
+            emitted_image_files.add(item.get('file'))
     for source in result.get('sources', []):
         label = str(source.get('title') or 'Referência')
         if source.get('ticket'):

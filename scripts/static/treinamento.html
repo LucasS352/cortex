@@ -1785,11 +1785,14 @@ function contentForm(c, onlySelected = false) {
       <label>Causa raiz</label><textarea id="f_cause">${esc(c.root_cause)}</textarea>
     </div>
     <div class="form-section">
-      <div class="form-section-head"><h3>3. Solução Oficial e Passo a Passo</h3><span>Conteúdo utilizado pela IA</span></div>
-      <label>Resposta pronta ao cliente</label><textarea id="f_answer" class="tall" placeholder="Texto que poderá ser enviado ao cliente após a aprovação">${esc(c.customer_answer)}</textarea>
-      <label>Procedimento (passo a passo)</label><textarea id="f_proc" class="tall">${esc(c.procedure)}</textarea>
-      <div class="grid2"><div><label>Pré-requisitos</label><textarea id="f_pre">${esc(c.prerequisites)}</textarea></div>
-        <div><label>Resultado esperado</label><textarea id="f_exp">${esc(c.expected_result)}</textarea></div></div>
+      <div class="form-section-head"><h3>3. Solução Oficial e Procedimento Completo</h3><span>Texto integral enviado pela IA ao cliente</span></div>
+      <label><b>Texto da Solução (resposta pronta e passo a passo unificados)</b></label>
+      <textarea id="f_proc" class="tall" style="min-height:160px;font-family:inherit" placeholder="Escreva a resposta e o passo a passo completo da solução...">${esc([c.customer_answer, c.procedure].filter(Boolean).join('\n\n') || c.procedure || '')}</textarea>
+      <input type="hidden" id="f_answer" value="">
+      <details class="review-extra" style="margin-top:8px"><summary>Pré-requisitos e resultado esperado (opcional)</summary>
+        <div class="grid2" style="margin-top:6px"><div><label>Pré-requisitos</label><textarea id="f_pre">${esc(c.prerequisites || '')}</textarea></div>
+          <div><label>Resultado esperado</label><textarea id="f_exp">${esc(c.expected_result || '')}</textarea></div></div>
+      </details>
     </div>
     <div class="form-section">
       <div class="form-section-head"><h3>4. Quando este procedimento se aplica</h3><span>Restrições de versão, UF e integração</span></div>
@@ -1801,9 +1804,136 @@ function contentForm(c, onlySelected = false) {
         <div><label>Válido até</label><input type="text" id="a_until" placeholder="AAAA-MM-DD" value="${esc(a.valid_until)}"></div></div>
     </div>
     <div class="panel"><h3>Imagens vinculadas</h3><p>Somente imagens enviadas com esta proposta aparecem aqui. A biblioteca global não é misturada ao chamado.</p>
-    ${availableImages.length ? availableImages.map((image,i) => { const chosen = (c.images || []).find(x => x.file === image.file) || image; return `<div class="review-image-item" data-img-index="${i}" style="margin-bottom:12px;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg)"><div class="grid2"><div><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''}> <b>Print ${i + 1}:</b> ${esc(chosen?.name || chosen?.caption || image.label)}</label><img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}" style="max-width:220px;max-height:100px;border-radius:8px;border:1px solid var(--line);margin-top:6px;display:block"></div><div><label>Nome da imagem</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><label>Onde posicionar na resposta da IA</label><select id="img_place_${i}"><option value="answer" ${chosen?.placement === 'answer' ? 'selected' : ''}>Na resposta pronta (antes dos passos)</option><option value="procedure" ${chosen?.placement !== 'answer' ? 'selected' : ''}>No procedimento (junto aos passos)</option></select><div class="grid2" style="margin-top:6px"><div><label>Parágrafo da resposta</label><input type="number" min="1" max="100" id="img_paragraph_${i}" value="${chosen?.after_answer_paragraph || (i + 1)}"></div><div><label>Passo do procedimento</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || (i + 1)}"></div></div><label style="margin-top:6px">Legenda (opcional — vazio oculta no chamado)</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption && !chosen.caption.startsWith('Captura de tela importada') && !chosen.caption.startsWith('Print ') ? chosen.caption : '')}" placeholder="Opcional"></div></div></div>`; }).join('') : '<p class="muted">Nenhuma imagem foi vinculada a esta proposta.</p>'}</div>`;
+    ${availableImages.length ? availableImages.map((image,i) => {
+      const chosen = (c.images || []).find(x => x.file === image.file) || image;
+      const isAnswer = chosen?.placement === 'answer';
+      const targetPos = isAnswer ? (chosen?.after_answer_paragraph || (i + 1)) : (chosen?.after_step || (i + 1));
+      return `<div class="review-image-item" data-img-index="${i}" style="margin-bottom:12px;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg)">
+        <div class="grid2">
+          <div>
+            <label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''} onchange="updateNoteLivePreview()"> <b>Print ${i + 1}:</b> ${esc(chosen?.name || chosen?.caption || image.label)}</label>
+            <img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}" style="max-width:220px;max-height:100px;border-radius:8px;border:1px solid var(--line);margin-top:6px;display:block">
+          </div>
+          <div>
+            <label>Nome do print</label>
+            <input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}" oninput="updateNoteLivePreview()">
+            <label>Onde posicionar este print na resposta</label>
+            <div class="grid2">
+              <div>
+                <select id="img_place_${i}" onchange="syncTargetPos(${i});updateNoteLivePreview()">
+                  <option value="procedure" ${!isAnswer ? 'selected' : ''}>Após um passo numerado</option>
+                  <option value="answer" ${isAnswer ? 'selected' : ''}>Após um parágrafo do texto</option>
+                </select>
+              </div>
+              <div>
+                <input type="number" min="1" max="100" id="img_target_pos_${i}" value="${targetPos}" oninput="syncTargetPos(${i});updateNoteLivePreview()" placeholder="Número do passo/parágrafo">
+                <input type="hidden" id="img_step_${i}" value="${chosen?.after_step || (i + 1)}">
+                <input type="hidden" id="img_paragraph_${i}" value="${chosen?.after_answer_paragraph || (i + 1)}">
+              </div>
+            </div>
+            <label style="margin-top:6px">Legenda (opcional — vazio oculta no chamado)</label>
+            <input type="text" id="img_caption_${i}" value="${esc(chosen?.caption && !chosen.caption.startsWith('Captura de tela importada') && !chosen.caption.startsWith('Print ') ? chosen.caption : '')}" placeholder="Opcional" oninput="updateNoteLivePreview()">
+          </div>
+        </div>
+      </div>`;
+    }).join('') : '<p class="muted">Nenhuma imagem foi vinculada a esta proposta.</p>'}
+    
+    <div style="margin-top:16px;border:1px solid #0052cc;border-radius:10px;padding:16px;background:var(--surface)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <h4 style="margin:0;color:#0052cc;font-size:14px">👁️ Prévia da Resposta no Chamado</h4>
+        <span class="pill ok" style="font-size:11px">Atualizado em tempo real</span>
+      </div>
+      <p class="muted" style="margin:0 0 10px 0;font-size:12px">Veja exatamente como o texto, os passos e os prints aparecerão na nota interna do Movidesk:</p>
+      <div id="noteLivePreview" style="padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:13px;line-height:1.6"></div>
+    </div>
+    </div>`;
 }
-function bindForm() { $('#f_module').onchange = (e) => $('#f_sub').innerHTML = subOptions(e.target.value, 'general'); }
+function syncTargetPos(i) {
+  const val = Number($('#img_target_pos_' + i)?.value) || 1;
+  const place = $('#img_place_' + i)?.value || 'procedure';
+  if (place === 'procedure') {
+    if ($('#img_step_' + i)) $('#img_step_' + i).value = val;
+    if ($('#img_paragraph_' + i)) $('#img_paragraph_' + i).value = val;
+  } else {
+    if ($('#img_paragraph_' + i)) $('#img_paragraph_' + i).value = val;
+    if ($('#img_step_' + i)) $('#img_step_' + i).value = val;
+  }
+}
+
+function updateNoteLivePreview() {
+  const box = $('#noteLivePreview');
+  if (!box) return;
+  const rawText = $('#f_proc')?.value || '';
+  const lines = rawText.split('\n').filter(l => l.trim().length > 0);
+  
+  const imageInputs = [...document.querySelectorAll('[id^="img_use_"]')];
+  const activeImages = [];
+  imageInputs.forEach(input => {
+    if (!input.checked) return;
+    const i = Number(input.id.split('_').pop());
+    const place = $('#img_place_' + i)?.value || 'procedure';
+    const target = Number($('#img_target_pos_' + i)?.value) || (i + 1);
+    const itemContainer = input.closest('.review-image-item');
+    const imgEl = itemContainer ? itemContainer.querySelector('img') : null;
+    const src = imgEl ? imgEl.src : '';
+    const name = ($('#img_name_' + i)?.value || '').trim() || `Print ${i + 1}`;
+    const caption = ($('#img_caption_' + i)?.value || '').trim();
+    activeImages.push({ index: i, place, target, src, name, caption, file: input.dataset.file });
+  });
+
+  const stepImages = {};
+  const paraImages = {};
+  activeImages.forEach(img => {
+    if (img.place === 'procedure') {
+      stepImages[img.target] = stepImages[img.target] || [];
+      stepImages[img.target].push(img);
+    } else {
+      paraImages[img.target] = paraImages[img.target] || [];
+      paraImages[img.target].push(img);
+    }
+  });
+
+  let html = '<p><strong>Cortex — resposta sugerida ao cliente (nota interna)</strong></p>';
+  let paraCount = 0;
+  const renderedFiles = new Set();
+
+  function renderImg(img) {
+    renderedFiles.add(img.file);
+    const showHeader = img.name && !img.name.toLowerCase().startsWith('print ');
+    const headerHtml = showHeader ? `<p><strong>${esc(img.name)}</strong></p>` : '';
+    const capHtml = img.caption ? `<p><small>${esc(img.caption)}</small></p>` : '';
+    return `${headerHtml}<p style="margin:8px 0"><img src="${esc(img.src)}" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid var(--line);box-shadow:0 2px 8px rgba(0,0,0,0.06);display:block"></p>${capHtml}`;
+  }
+
+  lines.forEach(line => {
+    html += `<p style="margin:4px 0">${esc(line)}</p>`;
+    paraCount++;
+    (paraImages[paraCount] || []).forEach(img => html += renderImg(img));
+    const stepMatch = line.trim().match(/^(\d+)\.\s/);
+    if (stepMatch) {
+      const stepNum = parseInt(stepMatch[1], 10);
+      (stepImages[stepNum] || []).forEach(img => html += renderImg(img));
+    }
+  });
+
+  activeImages.forEach(img => {
+    if (!renderedFiles.has(img.file)) {
+      html += renderImg(img);
+    }
+  });
+
+  const title = ($('#f_title')?.value || 'Procedimento oficial').trim();
+  html += `<p style="margin-top:14px;padding-top:8px;border-top:1px dashed var(--line);color:var(--muted);font-size:12px"><strong>Procedimento oficial:</strong> ${esc(title)} (v1 · aprovado por alternativa)</p>`;
+  html += `<p style="color:var(--brand);font-size:12px"><u>Sugerir ajuste ou melhoria neste procedimento</u> (uso interno)</p>`;
+
+  box.innerHTML = html;
+}
+
+function bindForm() {
+  if ($('#f_module')) $('#f_module').onchange = (e) => $('#f_sub').innerHTML = subOptions(e.target.value, 'general');
+  if ($('#f_proc')) $('#f_proc').oninput = updateNoteLivePreview;
+  if ($('#f_title')) $('#f_title').oninput = updateNoteLivePreview;
+}
 function readForm() {
   const list = (id, sep = ',') => $(id).value.split(sep).map(s => s.trim()).filter(Boolean);
   const answerEditor = $('#f_answer');
@@ -2206,7 +2336,7 @@ async function openItem(id) {
         <button class="danger" id="depBtn">Inativar (sai da IA na hora)</button>
         <button class="primary" id="revBtn">Salvar nova versão</button>
       </div></div>` : ''}`;
-  bindForm(); showTrainingDialog(dlg);
+  bindForm(); showTrainingDialog(dlg); updateNoteLivePreview();
   $('#retrievalBtn').onclick = async () => {
     const query = $('#retrievalQuery').value.trim();
     if (query.length < 5) return toast('Escreva uma pergunta de teste.');
