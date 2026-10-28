@@ -582,16 +582,35 @@ def render_note(result, marker):
         if not image_src:
             return ''
         raw_name = (item.get('name') or '').strip()
-        raw_caption = (item.get('caption') or 'Tela de referência do procedimento').strip()
+        raw_caption = (item.get('caption') or '').strip()
         caption = html.escape(raw_caption)
         safe_src = html.escape(image_src, quote=True)
-        image = '<img src="' + safe_src + '" alt="' + caption + \
+        show_header = (
+            raw_name
+            and not raw_name.lower().startswith('print da resolução')
+            and not raw_name.lower().startswith('print do ticket')
+            and not raw_name.lower().startswith('print técnico')
+            and not raw_name.lower().startswith('print ')
+            and raw_name != raw_caption
+        )
+        header = ('<p><strong>' + html.escape(raw_name) + '</strong></p>' if show_header else '')
+        show_caption = (
+            raw_caption
+            and raw_caption != 'Tela de referência do procedimento'
+            and not raw_caption.lower().startswith('captura de tela importada')
+            and not raw_caption.lower().startswith('print da resolução')
+            and not raw_caption.lower().startswith('print do ticket')
+            and not raw_caption.lower().startswith('print técnico')
+            and not raw_caption.lower().startswith('print ')
+            and raw_caption != raw_name
+        )
+        caption_html = ('<p><small>' + caption + '</small></p>' if show_caption else '')
+        clean_alt = raw_caption if show_caption else (raw_name if show_header else 'Print do procedimento')
+        image = '<img src="' + safe_src + '" alt="' + html.escape(clean_alt) + \
                 '" width="900" style="max-width:100%;height:auto">'
         if url:
             image = '<a href="' + html.escape(url, quote=True) + '">' + image + '</a>'
-        header = ('<p><strong>' + html.escape(raw_name) + '</strong></p>'
-                  if raw_name and raw_name != raw_caption else '')
-        return header + '<p>' + image + '</p><p><small>' + caption + '</small></p>'
+        return header + '<p>' + image + '</p>' + caption_html
 
     images = result.get('images') or []
     answer_images = [item for item in images if item.get('placement') == 'answer']
@@ -682,8 +701,19 @@ def render_note(result, marker):
         if decision.get('can_draft_from_evidence'):
             lines.append('<p><strong>Revisão necessária:</strong> confira a fonte e a aplicabilidade no ambiente do cliente antes de enviar. Registre na curadoria o resultado confirmado.</p>')
         if decision.get('procedure'):
-            lines.append('<p><strong>Procedimento e versão:</strong> ' +
-                         html.escape(json.dumps(decision['procedure'], ensure_ascii=False, default=str)) + '</p>')
+            proc = decision['procedure']
+            if isinstance(proc, dict):
+                proc_title = proc.get('title') or 'Procedimento oficial'
+                proc_id = str(proc.get('id') or '').replace('canon:', '')
+                id_prefix = f"#{proc_id} — " if proc_id else ""
+                version = proc.get('version')
+                ver_str = f"v{version}" if version else ""
+                actor = proc.get('approved_by')
+                meta_parts = [p for p in (ver_str, f"aprovado por {actor}" if actor else None) if p]
+                meta_text = f" ({' · '.join(meta_parts)})" if meta_parts else ""
+                lines.append(f'<p><strong>Procedimento oficial:</strong> {html.escape(id_prefix + proc_title)}{html.escape(meta_text)}</p>')
+            else:
+                lines.append('<p><strong>Procedimento oficial:</strong> ' + html.escape(str(proc)) + '</p>')
         if decision.get('pending_evidence'):
             lines.append('<p><strong>Evidência pendente:</strong> ' +
                          html.escape(', '.join(decision['pending_evidence'])) + '</p>')
@@ -702,7 +732,9 @@ def render_note(result, marker):
         review_url = origin + '/treinamento/tecnico?' + urlencode({
             'ticket': result['feedback_ticket'], 'marker': marker,
         })
-        lines.append('<p><a href="' + html.escape(review_url, quote=True) + '">Preparar resolução técnica e enviar à curadoria</a> (uso interno)</p>')
+        is_confirmed = decision.get('state') == 'PROCEDIMENTO_CONFIRMADO'
+        link_text = 'Sugerir ajuste ou melhoria neste procedimento' if is_confirmed else 'Preparar resolução técnica e enviar à curadoria'
+        lines.append(f'<p><a href="{html.escape(review_url, quote=True)}">{html.escape(link_text)}</a> (uso interno)</p>')
     lines.append('<p><small>Confira a orientação antes de responder ao cliente. ' + marker + '</small></p>')
     return ''.join(lines)
 

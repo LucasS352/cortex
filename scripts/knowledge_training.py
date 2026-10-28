@@ -895,7 +895,7 @@ def _validate_content(c):
     allowed = {image['file'] for image in procedure_images()}
     steps = {int(n) for n in re.findall(r'^\s*(\d+)\.\s', c['procedure'], re.M)}
     image_names = set()
-    for image in c.get('images') or []:
+    for idx, image in enumerate(c.get('images') or [], 1):
         placement = image.get('placement') or 'procedure'
         if placement not in ('answer', 'procedure'):
             raise ValueError('O local de exibição da imagem é inválido.')
@@ -906,17 +906,19 @@ def _validate_content(c):
         image['placement'] = placement
         image['after_step'] = image.get('after_step') if placement == 'procedure' else None
         paragraph = image.get('after_answer_paragraph')
+        if paragraph is None and placement == 'answer':
+            paragraph = idx
         if paragraph is not None and (placement != 'answer' or not isinstance(paragraph, int)
                                       or paragraph < 1 or paragraph > 100):
             raise ValueError('A posição da imagem na resposta é inválida.')
         image['after_answer_paragraph'] = paragraph if placement == 'answer' else None
-        image['name'] = sanitize(str(image.get('name') or image.get('caption') or 'Tela de referência')).strip()[:120]
+        image['name'] = sanitize(str(image.get('name') or image.get('caption') or f'Print {idx}')).strip()[:120]
         if len(image['name']) < 3:
             raise ValueError(f"O nome da imagem '{image['name']}' deve ter pelo menos 3 caracteres.")
         if norm(image['name']) in image_names:
             raise ValueError(f"Existe mais de uma imagem com o nome '{image['name']}'. Cada imagem precisa de um nome único.")
         image_names.add(norm(image['name']))
-        image['caption'] = sanitize(str(image.get('caption') or image['name'] or 'Tela de referência'))[:300]
+        image['caption'] = sanitize(str(image.get('caption') or '')).strip()[:300]
     return c
 
 
@@ -2233,10 +2235,11 @@ def _extract_inline_movidesk_images(validated_html, max_images=5):
                 image.save(TRAINING_MEDIA / file_name, 'PNG', optimize=True)
             saved.append({
                 'file': file_name,
-                'name': f'Print da resolução {idx}',
-                'caption': f'Captura de tela importada da resolução técnica (print {idx})',
+                'name': f'Print {idx}',
+                'caption': '',
                 'placement': 'answer',
                 'after_step': None,
+                'after_answer_paragraph': idx,
             })
         except Exception:
             continue

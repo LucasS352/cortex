@@ -334,6 +334,70 @@ class WorkerTests(unittest.TestCase):
         record = process_ticket_v2('raw', 'tenant', 42, data)
         self.assertNotIn('Procedimento não executado', record['solution_statement'])
 
+    def test_render_suppresses_generic_captions_and_headers(self):
+        pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+        result = worker.render_note({
+            'reply': 'Passo a passo:\n1. Acesse o menu.\n2. Salve.',
+            'images': [
+                {
+                    'name': 'Print da resolução 1',
+                    'caption': 'Captura de tela importada da resolução técnica (print 1)',
+                    'placement': 'answer',
+                    'after_answer_paragraph': 1,
+                    'data_url': pixel
+                },
+                {
+                    'name': 'Menu de Configurações',
+                    'caption': 'Configuração de impostos',
+                    'placement': 'procedure',
+                    'after_step': 2,
+                    'data_url': pixel
+                }
+            ]
+        }, 'marker')
+        # Generic caption and header must be suppressed
+        self.assertNotIn('Captura de tela importada da resolução técnica', result)
+        self.assertNotIn('Print da resolução 1', result)
+        # Custom descriptive name and caption must be rendered
+        self.assertIn('Menu de Configurações', result)
+        self.assertIn('Configuração de impostos', result)
+
+    def test_render_procedure_info_human_readable(self):
+        result = worker.render_note({
+            'reply': 'Orientações.',
+            'decision': {
+                'state': 'PROCEDIMENTO_CONFIRMADO',
+                'confidence': 'alta',
+                'procedure': {
+                    'id': 'canon:1',
+                    'title': 'relatorio Venda por produto.',
+                    'version': 1,
+                    'approved_by': 'alternativa'
+                }
+            }
+        }, 'marker')
+        self.assertIn('<strong>Procedimento oficial:</strong> #1 — relatorio Venda por produto. (v1 · aprovado por alternativa)', result)
+        self.assertNotIn('{"id":', result)
+        self.assertNotIn('canon:1', result)
+
+    def test_render_curatorship_link_confirmed_vs_pending(self):
+        with patch.dict('os.environ', {'CORTEX_PUBLIC_URL': 'http://localhost:8001'}):
+            res_confirmed = worker.render_note({
+                'reply': 'Orientações.',
+                'feedback_ticket': 132273,
+                'decision': {'state': 'PROCEDIMENTO_CONFIRMADO'}
+            }, 'marker')
+            self.assertIn('Sugerir ajuste ou melhoria neste procedimento', res_confirmed)
+            self.assertNotIn('Preparar resolução técnica e enviar à curadoria', res_confirmed)
+
+            res_pending = worker.render_note({
+                'reply': 'Orientações.',
+                'feedback_ticket': 132273,
+                'decision': {'state': 'RESPOSTA_AVALIADA'}
+            }, 'marker')
+            self.assertIn('Preparar resolução técnica e enviar à curadoria', res_pending)
+            self.assertNotIn('Sugerir ajuste ou melhoria neste procedimento', res_pending)
+
 
 if __name__ == '__main__':
     unittest.main()

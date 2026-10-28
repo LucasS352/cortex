@@ -1656,7 +1656,7 @@ function stageCandidateAnswerImages(c, imported) {
     reference.file = file;
     reference.saved_url = reference.url;
     reference.label = name;
-    prepared.push({file,name,caption:name,placement:'answer',after_step:null,
+    prepared.push({file,name,caption:'',placement:'answer',after_step:null,
       after_answer_paragraph:reference.after_answer_paragraph});
   }
   return prepared;
@@ -1747,17 +1747,29 @@ function candidateForm(c, content, related, imported = new Map()) {
 
 function contentForm(c, onlySelected = false) {
   const a = c.applicability || {};
-  const ownUploads = new Set((c.images || []).map(x => x.file));
-  const availableImages = state.images.filter(image => onlySelected ? ownUploads.has(image.file) : !/^[0-9a-f]{32}\.png$/.test(image.file) || ownUploads.has(image.file));
-  (c.images || []).forEach(img => {
-    if (img && img.file && !availableImages.some(x => x.file === img.file)) {
-      availableImages.push({
-        file: img.file,
-        label: img.name || img.caption || 'Print do procedimento',
-        url: /^[0-9a-f]{32}\.png$/.test(img.file) ? `/training-media/${img.file}` : `/procedure-images/${img.file}`
-      });
-    }
-  });
+  let availableImages = [];
+  if (onlySelected) {
+    availableImages = (c.images || []).map(img => {
+      const found = state.images.find(x => x.file === img.file);
+      return {
+        ...img,
+        label: img.name || img.caption || found?.label || 'Print do procedimento',
+        url: found?.url || (/^[0-9a-f]{32}\.png$/.test(img.file) ? `/training-media/${img.file}` : `/procedure-images/${img.file}`)
+      };
+    });
+  } else {
+    const ownUploads = new Set((c.images || []).map(x => x.file));
+    availableImages = state.images.filter(image => !/^[0-9a-f]{32}\.png$/.test(image.file) || ownUploads.has(image.file));
+    (c.images || []).forEach(img => {
+      if (img && img.file && !availableImages.some(x => x.file === img.file)) {
+        availableImages.push({
+          ...img,
+          label: img.name || img.caption || 'Print do procedimento',
+          url: /^[0-9a-f]{32}\.png$/.test(img.file) ? `/training-media/${img.file}` : `/procedure-images/${img.file}`
+        });
+      }
+    });
+  }
   return `
     <div class="form-section">
       <div class="form-section-head"><h3>1. Identificação e Classificação</h3><span>Taxonomia canônica</span></div>
@@ -1789,7 +1801,7 @@ function contentForm(c, onlySelected = false) {
         <div><label>Válido até</label><input type="text" id="a_until" placeholder="AAAA-MM-DD" value="${esc(a.valid_until)}"></div></div>
     </div>
     <div class="panel"><h3>Imagens vinculadas</h3><p>Somente imagens enviadas com esta proposta aparecem aqui. A biblioteca global não é misturada ao chamado.</p>
-    ${availableImages.length ? availableImages.map((image,i) => { const chosen = (c.images || []).find(x => x.file === image.file); return `<div class="grid2" style="margin-bottom:12px"><div><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''}> ${esc(chosen?.name || chosen?.caption || image.label)}</label><img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}" style="max-width:220px;max-height:100px;border-radius:8px;border:1px solid var(--line)"></div><div><label>Nome da imagem</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><label>Onde exibir</label><select id="img_place_${i}"><option value="answer" ${chosen?.placement === 'answer' ? 'selected' : ''}>Após a resposta final</option><option value="procedure" ${chosen?.placement !== 'answer' ? 'selected' : ''}>Após um passo</option></select><label>Número do passo</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || 1}"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"></div></div>`; }).join('') : '<p class="muted">Nenhuma imagem foi vinculada a esta proposta.</p>'}</div>`;
+    ${availableImages.length ? availableImages.map((image,i) => { const chosen = (c.images || []).find(x => x.file === image.file) || image; return `<div class="review-image-item" data-img-index="${i}" style="margin-bottom:12px;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg)"><div class="grid2"><div><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" ${chosen ? 'checked' : ''}> <b>Print ${i + 1}:</b> ${esc(chosen?.name || chosen?.caption || image.label)}</label><img src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}" style="max-width:220px;max-height:100px;border-radius:8px;border:1px solid var(--line);margin-top:6px;display:block"></div><div><label>Nome da imagem</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><label>Onde posicionar na resposta da IA</label><select id="img_place_${i}"><option value="answer" ${chosen?.placement === 'answer' ? 'selected' : ''}>Na resposta pronta (antes dos passos)</option><option value="procedure" ${chosen?.placement !== 'answer' ? 'selected' : ''}>No procedimento (junto aos passos)</option></select><div class="grid2" style="margin-top:6px"><div><label>Parágrafo da resposta</label><input type="number" min="1" max="100" id="img_paragraph_${i}" value="${chosen?.after_answer_paragraph || (i + 1)}"></div><div><label>Passo do procedimento</label><input type="number" min="1" max="100" id="img_step_${i}" value="${chosen?.after_step || (i + 1)}"></div></div><label style="margin-top:6px">Legenda (opcional — vazio oculta no chamado)</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption && !chosen.caption.startsWith('Captura de tela importada') && !chosen.caption.startsWith('Print ') ? chosen.caption : '')}" placeholder="Opcional"></div></div></div>`; }).join('') : '<p class="muted">Nenhuma imagem foi vinculada a esta proposta.</p>'}</div>`;
 }
 function bindForm() { $('#f_module').onchange = (e) => $('#f_sub').innerHTML = subOptions(e.target.value, 'general'); }
 function readForm() {
@@ -1816,16 +1828,16 @@ function readForm() {
   return { title: ($('#f_title')?.value || '').trim(), module_key: ($('#f_module')?.value || '').trim() || 'unclassified', subtopic_key: ($('#f_sub')?.value || '').trim() || 'general',
     symptom: $('#f_symptom').value.trim(), error_messages: list('#f_errors', '\n'), root_cause: $('#f_cause').value.trim(),
     customer_answer: customerAnswer, ...(customerAnswerHtml ? {customer_answer_html: customerAnswerHtml} : {}), procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
-    images: [...document.querySelectorAll('[id^="img_use_"]')].map(input => {
+    images: [...document.querySelectorAll('[id^="img_use_"]')].map((input, idx) => {
       const i = Number(input.id.split('_').pop()), placement = $('#img_place_' + i)?.value || 'answer';
-      const name = ($('#img_name_' + i)?.value || '').trim() || `Print técnico ${i + 1}`;
-      const caption = ($('#img_caption_' + i)?.value || '').trim() || name;
+      const name = ($('#img_name_' + i)?.value || '').trim() || `Print ${idx + 1}`;
+      const caption = ($('#img_caption_' + i)?.value || '').trim();
       return input.checked ? {
         file: input.dataset.file,
         name,
         placement,
-        after_step: placement === 'procedure' ? Number($('#img_step_' + i)?.value) || 1 : null,
-        after_answer_paragraph: placement === 'answer' ? Number($('#img_paragraph_' + i)?.value) || 1 : null,
+        after_step: placement === 'procedure' ? Number($('#img_step_' + i)?.value) || (idx + 1) : null,
+        after_answer_paragraph: placement === 'answer' ? Number($('#img_paragraph_' + i)?.value) || (idx + 1) : null,
         caption
       } : null;
     }).filter(Boolean),
