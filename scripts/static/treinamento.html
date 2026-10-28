@@ -1556,6 +1556,9 @@ function bindCandidateSubtree() {
 
 function bindCandidateForm() {
   $('#f_module').onchange = e => { $('#candidate-subtree').innerHTML = candidateSubtree(e.target.value, ''); bindCandidateSubtree(); };
+  if ($('#f_answer')) $('#f_answer').oninput = updateNoteLivePreview;
+  if ($('#f_proc')) $('#f_proc').oninput = updateNoteLivePreview;
+  if ($('#f_title')) $('#f_title').oninput = updateNoteLivePreview;
   bindCandidateSubtree();
 }
 
@@ -1724,7 +1727,7 @@ function candidateForm(c, content, related, imported = new Map()) {
         </details></div>
       <div class="review-card"><div class="review-step-title"><b>2</b> Imagens do conhecimento</div>
         <p class="review-muted">Os prints aparecem automaticamente na resposta. Use Borrar ou Pintar nas imagens; a cópia tratada é salva ao publicar.</p>
-        ${images.length ? images.map((image, i) => { const chosen = (content.images || []).find(x => x.file === image.file); return `<div class="review-image"><div><img data-preview-file="${esc(image.file)}" src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}"><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" checked disabled> Incluído automaticamente</label></div><div><label>Nome</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"><select id="img_place_${i}" hidden><option value="answer" selected>Na resposta</option></select><input type="hidden" id="img_step_${i}" value="1"><input type="hidden" id="img_paragraph_${i}" value="${chosen?.after_answer_paragraph || 1}"><span class="pill ok">Na resposta do técnico</span></div></div>`; }).join('') : '<p class="review-muted">Nenhum print técnico encontrado na resposta selecionada.</p>'}</div>
+        ${images.length ? images.map((image, i) => { const chosen = (content.images || []).find(x => x.file === image.file); return `<div class="review-image"><div><img data-preview-file="${esc(image.file)}" src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}"><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" checked disabled> Incluído automaticamente</label></div><div><label>Nome</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}" oninput="updateNoteLivePreview()"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}" oninput="updateNoteLivePreview()"><select id="img_place_${i}" hidden><option value="answer" selected>Na resposta</option></select><input type="hidden" id="img_step_${i}" value="1"><input type="hidden" id="img_paragraph_${i}" value="${chosen?.after_answer_paragraph || 1}"><span class="pill ok">Na resposta do técnico</span></div></div>`; }).join('') : '<p class="review-muted">Nenhum print técnico encontrado na resposta selecionada.</p>'}</div>
     </section>
     <section class="review-side" aria-label="Classificação e conferência">
       <div class="review-card"><div class="review-step-title"><b>3</b> Classificação do conhecimento</div>
@@ -1740,6 +1743,14 @@ function candidateForm(c, content, related, imported = new Map()) {
       <div class="review-card"><div class="review-step-title"><b>6</b> Checklist de qualidade</div>
         ${(c.quality_checks || []).map(q => `<div class="review-check ${q.ok ? 'ok' : 'warn'}">${q.ok ? '✓' : '⚠'} <span>${esc(q.label)}</span></div>`).join('')}
         <details class="review-extra"><summary>Critérios de seleção · ${esc(c.usefulness_score)}/100</summary>${(c.usefulness_signals || []).map(s => `<p class="review-muted">${s.weight > 0 ? '+' : ''}${s.weight} · ${esc(s.label)}</p>`).join('')}</details></div>
+      <div class="review-card candidate-note-preview">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px">
+          <h3 style="margin:0;color:#0052cc">👁️ Prévia da Resposta no Chamado</h3>
+          <span class="pill ok" style="font-size:11px">Atualizado em tempo real</span>
+        </div>
+        <p class="review-muted">Confira o texto e a ordem dos prints exatamente como serão montados na nota interna do Movidesk.</p>
+        <div id="noteLivePreview" style="padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-size:12px;line-height:1.55;overflow-wrap:anywhere"></div>
+      </div>
     </section>
   </div>`;
 }
@@ -1862,7 +1873,13 @@ function syncTargetPos(i) {
 function updateNoteLivePreview() {
   const box = $('#noteLivePreview');
   if (!box) return;
-  const rawText = $('#f_proc')?.value || '';
+  const answerEditor = $('#f_answer');
+  const answerText = answerEditor?.isContentEditable ? answerPlainText(answerEditor) : '';
+  const procedureText = $('#f_proc')?.value || '';
+  const normalizedAnswer = answerText.replace(/\s+/g, ' ').trim().toLowerCase();
+  const normalizedProcedure = procedureText.replace(/\s+/g, ' ').trim().toLowerCase();
+  const includeProcedure = normalizedProcedure && !normalizedAnswer.includes(normalizedProcedure);
+  const rawText = [answerText, includeProcedure ? procedureText : ''].filter(Boolean).join('\n');
   const lines = rawText.split('\n').filter(l => l.trim().length > 0);
   
   const imageInputs = [...document.querySelectorAll('[id^="img_use_"]')];
@@ -1871,10 +1888,15 @@ function updateNoteLivePreview() {
     if (!input.checked) return;
     const i = Number(input.id.split('_').pop());
     const place = $('#img_place_' + i)?.value || 'procedure';
-    const target = Number($('#img_target_pos_' + i)?.value) || (i + 1);
-    const itemContainer = input.closest('.review-image-item');
+    const savedTarget = place === 'answer' ? $('#img_paragraph_' + i)?.value : $('#img_step_' + i)?.value;
+    const target = Number($('#img_target_pos_' + i)?.value || savedTarget) || (i + 1);
+    const itemContainer = input.closest('.review-image-item,.review-image');
     const imgEl = itemContainer ? itemContainer.querySelector('img') : null;
-    const src = imgEl ? imgEl.src : '';
+    const inlineWrapper = [...document.querySelectorAll('.candidate-inline-image')]
+      .find(wrapper => Number(wrapper.dataset.galleryIndex) === i || wrapper.dataset.file === input.dataset.file);
+    const canvas = inlineWrapper?.querySelector('canvas');
+    const src = canvas?.width ? canvas.toDataURL('image/png')
+      : (inlineWrapper?.dataset.savedUrl || inlineWrapper?.dataset.sourceUrl || imgEl?.src || '');
     const name = ($('#img_name_' + i)?.value || '').trim() || `Print ${i + 1}`;
     const caption = ($('#img_caption_' + i)?.value || '').trim();
     activeImages.push({ index: i, place, target, src, name, caption, file: input.dataset.file });
@@ -1904,8 +1926,27 @@ function updateNoteLivePreview() {
     return `${headerHtml}<p style="margin:8px 0"><img src="${esc(img.src)}" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid var(--line);box-shadow:0 2px 8px rgba(0,0,0,0.06);display:block"></p>${capHtml}`;
   }
 
+  function previewInlineText(value) {
+    const chunks = [];
+    let start = 0;
+    for (const found of value.matchAll(/https?:\/\/[^\s<>()\[\]{},;]+/g)) {
+      chunks.push(esc(value.slice(start, found.index)));
+      let safe = '';
+      try {
+        const url = new URL(found[0]);
+        if ((url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password) safe = url.href;
+      } catch (_) {}
+      chunks.push(safe
+        ? `<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;font-weight:600">${esc(found[0])}</a>`
+        : esc(found[0]));
+      start = found.index + found[0].length;
+    }
+    chunks.push(esc(value.slice(start)));
+    return chunks.join('');
+  }
+
   lines.forEach(line => {
-    html += `<p style="margin:4px 0">${esc(line)}</p>`;
+    html += `<p style="margin:4px 0">${previewInlineText(line)}</p>`;
     paraCount++;
     (paraImages[paraCount] || []).forEach(img => html += renderImg(img));
     const stepMatch = line.trim().match(/^(\d+)\.\s/);
@@ -2114,6 +2155,7 @@ async function openCandidate(id) {
         wrapper._original.getContext('2d').drawImage(canvas, 0, 0);
         wrapper._undoStack = [];
         undo.disabled = true; clear.disabled = false;
+        updateNoteLivePreview();
       };
       original.onerror = () => { status.textContent = 'Não foi possível carregar este print. Recarregue a curadoria.'; };
       original.src = wrapper.dataset.sourceUrl;
@@ -2126,6 +2168,7 @@ async function openCandidate(id) {
         wrapper.dataset.dirty = 'true';
         status.textContent = 'Tratamento pendente · será salvo ao publicar.';
         undo.disabled = !wrapper._undoStack?.length;
+        updateNoteLivePreview();
       };
       undo.onclick = () => {
         const previous = wrapper._undoStack?.pop(); if (!previous) return;
@@ -2215,7 +2258,7 @@ async function openCandidate(id) {
     }
   }
 
-  bindCandidateForm(); bindCandidateImageEditors(); showTrainingDialog(dlg);
+  bindCandidateForm(); bindCandidateImageEditors(); showTrainingDialog(dlg); updateNoteLivePreview();
   const showError = (msg) => {
     const banner = $('#candidateReviewError');
     if (banner) {

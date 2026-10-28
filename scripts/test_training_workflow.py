@@ -120,6 +120,17 @@ class TrainingWorkflowTests(unittest.TestCase):
         guard = text.index('if (!useSubmittedSnapshot) {', submitted)
         self.assertLess(guard, hydrate)
 
+    def test_candidate_monitoring_has_live_movidesk_note_preview(self):
+        text = (Path(__file__).parent / 'static' / 'treinamento.html').read_text(encoding='utf-8')
+        candidate = text.index('function candidateForm(')
+        preview = text.index('candidate-note-preview', candidate)
+        candidate_end = text.index('function contentForm(', candidate)
+        self.assertLess(preview, candidate_end)
+        self.assertIn('Confira o texto e a ordem dos prints', text[preview:candidate_end])
+        self.assertIn("$('#f_answer').oninput = updateNoteLivePreview", text)
+        self.assertIn("answerEditor?.isContentEditable ? answerPlainText(answerEditor)", text)
+        self.assertIn("canvas.toDataURL('image/png')", text)
+
     def test_existing_training_rules(self):
         for name in dir(legacy):
             if name.startswith('test_'):
