@@ -1945,22 +1945,70 @@ function updateNoteLivePreview() {
     return chunks.join('');
   }
 
-  lines.forEach(line => {
-    html += `<p style="margin:4px 0">${previewInlineText(line)}</p>`;
-    paraCount++;
-    (paraImages[paraCount] || []).forEach(img => html += renderImg(img));
-    const stepMatch = line.trim().match(/^(\d+)\.\s/);
-    if (stepMatch) {
-      const stepNum = parseInt(stepMatch[1], 10);
-      (stepImages[stepNum] || []).forEach(img => html += renderImg(img));
-    }
-  });
+  function previewHref(value) {
+    try {
+      const url = new URL(value);
+      return (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password ? url.href : '';
+    } catch (_) { return ''; }
+  }
 
-  activeImages.forEach(img => {
-    if (!renderedFiles.has(img.file)) {
-      html += renderImg(img);
+  function renderCandidateNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) return previewInlineText(node.textContent || '');
+    if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return '';
+    if (node.matches?.('.candidate-inline-toolbar,.candidate-image-status,.answer-inline-image-tools')) return '';
+    if (node.matches?.('.candidate-inline-image')) {
+      const index = Number(node.dataset.galleryIndex);
+      const paragraphInput = $(`#img_paragraph_${index}`);
+      if (paragraphInput) paragraphInput.value = answerParagraphForImage(node, answerEditor);
+      const image = activeImages.find(item => item.index === index || item.file === node.dataset.file);
+      return image ? renderImg(image) : '';
     }
-  });
+    if (node.nodeName === 'IMG') {
+      const source = node.getAttribute('src') || '';
+      return /^(https?:|data:image\/png;base64,)/i.test(source)
+        ? `<p style="margin:8px 0"><img src="${esc(source)}" style="max-width:100%;max-height:240px;border-radius:6px;border:1px solid var(--line);display:block"></p>`
+        : '';
+    }
+    if (node.nodeName === 'BR') return '<br>';
+    if (node.nodeName === 'A') {
+      const href = previewHref(node.getAttribute('href') || '');
+      const label = esc(node.textContent || href);
+      return href ? `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;font-weight:600">${label}</a>` : label;
+    }
+    const inner = [...node.childNodes].map(renderCandidateNode).join('');
+    if (/^(P|DIV|H[1-6]|BLOCKQUOTE|PRE)$/.test(node.nodeName)) return `<div style="margin:4px 0">${inner}</div>`;
+    if (node.nodeName === 'UL') return `<ul>${inner}</ul>`;
+    if (node.nodeName === 'OL') return `<ol>${inner}</ol>`;
+    if (node.nodeName === 'LI') return `<li>${inner}</li>`;
+    if (/^(STRONG|B)$/.test(node.nodeName)) return `<strong>${inner}</strong>`;
+    if (/^(EM|I)$/.test(node.nodeName)) return `<em>${inner}</em>`;
+    if (node.nodeName === 'U') return `<u>${inner}</u>`;
+    if (node.nodeName === 'CODE') return `<code>${inner}</code>`;
+    return inner;
+  }
+
+  if (answerEditor?.isContentEditable) {
+    // The technician's editor is already the source of truth. Traverse its DOM
+    // in order instead of rebuilding the answer from stale paragraph indexes.
+    html += [...answerEditor.childNodes].map(renderCandidateNode).join('');
+  } else {
+    lines.forEach(line => {
+      html += `<p style="margin:4px 0">${previewInlineText(line)}</p>`;
+      paraCount++;
+      (paraImages[paraCount] || []).forEach(img => html += renderImg(img));
+      const stepMatch = line.trim().match(/^(\d+)\.\s/);
+      if (stepMatch) {
+        const stepNum = parseInt(stepMatch[1], 10);
+        (stepImages[stepNum] || []).forEach(img => html += renderImg(img));
+      }
+    });
+
+    activeImages.forEach(img => {
+      if (!renderedFiles.has(img.file)) {
+        html += renderImg(img);
+      }
+    });
+  }
 
   const title = ($('#f_title')?.value || 'Procedimento oficial').trim();
   html += `<p style="margin-top:14px;padding-top:8px;border-top:1px dashed var(--line);color:var(--muted);font-size:12px"><strong>Procedimento oficial:</strong> ${esc(title)} (v1 · aprovado por alternativa)</p>`;

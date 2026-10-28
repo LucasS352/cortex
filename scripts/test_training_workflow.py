@@ -130,6 +130,10 @@ class TrainingWorkflowTests(unittest.TestCase):
         self.assertIn("$('#f_answer').oninput = updateNoteLivePreview", text)
         self.assertIn("answerEditor?.isContentEditable ? answerPlainText(answerEditor)", text)
         self.assertIn("canvas.toDataURL('image/png')", text)
+        self.assertIn('function renderCandidateNode(node)', text)
+        self.assertIn("if (answerEditor?.isContentEditable) {", text)
+        self.assertIn("[...answerEditor.childNodes].map(renderCandidateNode).join('')", text)
+        self.assertIn('answerParagraphForImage(node, answerEditor)', text)
 
     def test_existing_training_rules(self):
         for name in dir(legacy):
