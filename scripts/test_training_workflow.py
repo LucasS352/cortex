@@ -135,6 +135,14 @@ class TrainingWorkflowTests(unittest.TestCase):
         self.assertIn("[...answerEditor.childNodes].map(renderCandidateNode).join('')", text)
         self.assertIn('answerParagraphForImage(node, answerEditor)', text)
 
+    def test_candidate_uses_unified_answer_when_separate_procedure_is_empty(self):
+        text = (Path(__file__).parent / 'static' / 'treinamento.html').read_text(encoding='utf-8')
+        self.assertIn("const publishedProcedure = explicitProcedure || customerAnswer || '';", text)
+        self.assertIn('const publishedAnswer = explicitProcedure ? customerAnswer : null;', text)
+        self.assertIn('procedure: publishedProcedure', text)
+        self.assertIn("'content.procedure': 'Passo a passo / resposta pronta'", text)
+        self.assertIn("'content.procedure':'#f_proc'", text)
+
     def test_existing_training_rules(self):
         for name in dir(legacy):
             if name.startswith('test_'):

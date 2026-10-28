@@ -1197,7 +1197,18 @@ async function api(path, opts = {}) {
     } else if (Array.isArray(data.detail)) {
       msg = data.detail.map(d => {
         const field = (d.loc || []).filter(p => p !== 'body').join('.');
-        return field ? `${field}: ${d.msg}` : d.msg;
+        const labels = {
+          'content.title': 'Título do procedimento',
+          'content.symptom': 'Sintoma',
+          'content.root_cause': 'Causa raiz',
+          'content.procedure': 'Passo a passo / resposta pronta',
+          'content.module_key': 'Categoria principal',
+          'content.subtopic_key': 'Subcategoria',
+        };
+        const label = labels[field] || field;
+        if (d.type === 'string_too_short') return `${label}: informe pelo menos ${d.ctx?.min_length || 1} caracteres.`;
+        if (d.type === 'string_too_long') return `${label}: o limite é de ${d.ctx?.max_length || 'menos'} caracteres.`;
+        return label ? `${label}: ${d.msg}` : d.msg;
       }).join(';\n') || 'Erro de validação';
     } else if (data.detail?.message) {
       msg = data.detail.message;
@@ -2043,9 +2054,14 @@ function readForm() {
     customerAnswer = answerPlainText(cleanEditor) || null;
     customerAnswerHtml = cleanEditor.innerHTML.trim() || null;
   }
+  const explicitProcedure = $('#f_proc').value.trim();
+  const publishedProcedure = explicitProcedure || customerAnswer || '';
+  // A proposta técnica pode trazer a solução inteira em um único editor. Nesse
+  // caso ela vira o procedimento oficial e não é repetida como resposta + passo a passo.
+  const publishedAnswer = explicitProcedure ? customerAnswer : null;
   return { title: ($('#f_title')?.value || '').trim(), module_key: ($('#f_module')?.value || '').trim() || 'unclassified', subtopic_key: ($('#f_sub')?.value || '').trim() || 'general',
     symptom: $('#f_symptom').value.trim(), error_messages: list('#f_errors', '\n'), root_cause: $('#f_cause').value.trim(),
-    customer_answer: customerAnswer, ...(customerAnswerHtml ? {customer_answer_html: customerAnswerHtml} : {}), procedure: $('#f_proc').value.trim(), prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
+    customer_answer: publishedAnswer, ...(customerAnswerHtml ? {customer_answer_html: customerAnswerHtml} : {}), procedure: publishedProcedure, prerequisites: $('#f_pre').value.trim() || null, expected_result: $('#f_exp').value.trim() || null,
     images: [...document.querySelectorAll('[id^="img_use_"]')].map((input, idx) => {
       const i = Number(input.id.split('_').pop()), placement = $('#img_place_' + i)?.value || 'answer';
       const name = ($('#img_name_' + i)?.value || '').trim() || `Print ${idx + 1}`;
@@ -2323,6 +2339,23 @@ async function openCandidate(id) {
       banner.style.display = 'none';
     }
   };
+  const focusInvalidField = (error) => {
+    const detail = Array.isArray(error?.detail) ? error.detail[0] : null;
+    const field = (detail?.loc || []).filter(part => part !== 'body').join('.');
+    const selector = ({
+      'content.title':'#f_title',
+      'content.symptom':'#f_symptom',
+      'content.root_cause':'#f_cause',
+      'content.procedure':'#f_proc',
+      'content.module_key':'#f_module',
+      'content.subtopic_key':'#f_sub',
+    })[field];
+    const control = selector ? $(selector) : null;
+    if (control) {
+      control.scrollIntoView({behavior:'smooth',block:'center'});
+      control.focus?.();
+    }
+  };
 
   dlg.querySelectorAll('[data-act]').forEach(b => b.onclick = async () => {
     clearError();
@@ -2385,6 +2418,7 @@ async function openCandidate(id) {
       if (!isStandaloneCandidateReview()) refresh();
     } catch (e) {
       showError(e.message);
+      focusInvalidField(e);
     } finally {
       allBtns.forEach(btn => btn.disabled = false);
       b.textContent = origText;
