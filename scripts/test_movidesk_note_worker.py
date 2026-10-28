@@ -310,6 +310,14 @@ class WorkerTests(unittest.TestCase):
         self.assertNotIn('<script>', result)
         self.assertIn('&lt;script&gt;', result)
 
+    def test_render_identifies_youtube_url_as_a_visible_link(self):
+        url = 'https://www.youtube.com/watch?v=Q5m3pZ341zQ'
+        result = worker.render_note({'reply': 'Vídeo tutorial: ' + url}, 'marker')
+        self.assertIn('href="' + url + '"', result)
+        self.assertIn('target="_blank"', result)
+        self.assertIn('color:#2563eb', result)
+        self.assertIn('text-decoration:underline', result)
+
     def test_named_images_follow_answer_and_selected_procedure_step(self):
         pixel = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
         result = worker.render_note({'reply':'Resposta pronta.\n1. Abra o menu.\n2. Selecione o relatório.',

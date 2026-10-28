@@ -260,6 +260,15 @@ class MappedReplyTests(unittest.TestCase):
         self.assertEqual(mapped.safe_url(mapped.NFE_QUERY_URL), mapped.NFE_QUERY_URL)
         self.assertEqual(mapped.safe_url(mapped.NFE_INUTILIZATION_URL + '&redirect=https://example.com'), '')
 
+    def test_youtube_links_are_validated_and_canonicalized(self):
+        canonical = 'https://www.youtube.com/watch?v=Q5m3pZ341zQ'
+        self.assertEqual(mapped.safe_url(canonical), canonical)
+        self.assertEqual(mapped.safe_url('https://youtu.be/Q5m3pZ341zQ?t=45'),
+                         'https://youtu.be/Q5m3pZ341zQ')
+        self.assertEqual(mapped.safe_url(canonical + '&si=tracking'), canonical)
+        self.assertEqual(mapped.safe_url('https://www.youtube.com/watch?v=invalid'), '')
+        self.assertEqual(mapped.safe_url('https://youtube.example/watch?v=Q5m3pZ341zQ'), '')
+
     def test_untrusted_inline_image_data_is_rejected(self):
         for value in ('data:text/html;base64,PHNjcmlwdD4=',
                       'data:image/png;base64,PHNjcmlwdD4=',

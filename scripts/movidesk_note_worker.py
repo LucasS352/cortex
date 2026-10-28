@@ -568,8 +568,15 @@ def render_note(result, marker):
         for found in re.finditer(r'https?://[^\s<>()\[\]{},;]+', value):
             chunks.append(html.escape(value[start:found.start()]))
             url = mapped_replies.safe_url(found.group(0))
-            chunks.append('<a href="' + html.escape(url, quote=True) + '">' + html.escape(url) + '</a>'
-                          if url else html.escape(found.group(0)))
+            if url:
+                youtube = re.fullmatch(r'https://www\.youtube\.com/watch\?v=[A-Za-z0-9_-]{11}', url)
+                attrs = (' target="_blank" rel="noopener noreferrer" '
+                         'style="color:#2563eb;text-decoration:underline;font-weight:600"'
+                         if youtube else '')
+                chunks.append('<a href="' + html.escape(url, quote=True) + '"' + attrs + '>' +
+                              html.escape(url) + '</a>')
+            else:
+                chunks.append(html.escape(found.group(0)))
             start = found.end()
         chunks.append(html.escape(value[start:]))
         rendered = ''.join(chunks)

@@ -4,7 +4,7 @@ Mappings require the current diagnostic message, not merely a related subject.
 Media stays behind the existing Cortex login; never expose the manual library.
 """
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 import base64
 import io
 import os
@@ -17,6 +17,9 @@ NFE_INUTILIZATION_URL = ('https://www.nfe.fazenda.gov.br/portal/consulta.aspx?'
 NFE_QUERY_URL = ('https://www.nfe.fazenda.gov.br/portal/consultaRecaptcha.aspx?'
                  'tipoConsulta=resumo&tipoConteudo=7PhJ+gAVw2g=')
 OFFICIAL_QUERY_URLS = {NFE_INUTILIZATION_URL, NFE_QUERY_URL}
+YOUTUBE_WATCH_HOSTS = {'youtube.com', 'www.youtube.com', 'm.youtube.com'}
+YOUTUBE_SHORT_HOSTS = {'youtu.be', 'www.youtu.be'}
+YOUTUBE_VIDEO_ID = re.compile(r'[A-Za-z0-9_-]{11}')
 
 
 def safe_url(value):
@@ -25,6 +28,23 @@ def safe_url(value):
         return value
     try:
         url = urlsplit(value)
+        hostname = (url.hostname or '').lower()
+        if url.scheme == 'https' and not url.username and not url.password:
+            video_id = None
+            canonical_host = None
+            if hostname in YOUTUBE_WATCH_HOSTS and url.path == '/watch':
+                ids = parse_qs(url.query, keep_blank_values=True).get('v', [])
+                video_id = ids[0] if len(ids) == 1 else None
+                canonical_host = 'www.youtube.com'
+            elif hostname in YOUTUBE_SHORT_HOSTS:
+                parts = [part for part in url.path.split('/') if part]
+                video_id = parts[0] if len(parts) == 1 else None
+                canonical_host = 'youtu.be'
+            if video_id and YOUTUBE_VIDEO_ID.fullmatch(video_id):
+                # Canonicalize the destination and discard tracking/timestamp
+                # parameters instead of forwarding arbitrary query strings.
+                return (f'https://youtu.be/{video_id}' if canonical_host == 'youtu.be'
+                        else f'https://www.youtube.com/watch?v={video_id}')
         if (url.scheme in {'https', 'http'} and url.hostname and not url.username
                 and not url.password and not url.query and not url.fragment
                 and not re.search(r'[\s\\<>"\x00-\x1f]', value)):
