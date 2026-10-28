@@ -124,18 +124,37 @@ class CurationPublicationTests(unittest.TestCase):
         self.assertIn(SOURCE['solution'], reply)
         if not prerequisites:
             self.assertEqual(reply, SOURCE['solution'])
-        image_data = ('data:image/png;base64,'
-                      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==')
-        images = [{'data_url': image_data, 'name': 'Print QA ' + str(index),
-                   'caption': 'Print QA ' + str(index), 'placement': 'answer',
-                   'after_answer_paragraph': paragraph}
-                  for index, paragraph in ((1, 3), (2, 4))]
+        image_data_1 = ('data:image/png;base64,'
+                        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aWQAAAABJRU5ErkJggg==')
+        image_data_2 = ('data:image/png;base64,'
+                        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=')
+        images = [
+            {'data_url': image_data_1, 'name': 'Print QA 1', 'caption': 'Print QA 1',
+             'placement': 'answer', 'after_answer_paragraph': 3},
+            {'data_url': image_data_2, 'name': 'Print QA 2', 'caption': 'Print QA 2',
+             'placement': 'answer', 'after_answer_paragraph': 4},
+        ]
         html = render_note({'reply': reply, 'images': images,
                             'answer_paragraph_offset': meta['answer_paragraph_offset']}, 'qa')
-        self.assertLess(html.index('informamos o código de fora'), html.index('Print QA 1'))
-        self.assertLess(html.index('Print QA 1'), html.index('Após o ajuste'))
-        self.assertLess(html.index('Após o ajuste'), html.index('Print QA 2'))
-        self.assertLess(html.index('Print QA 2'), html.index('1. Abra Relação'))
+        # Generic Print QA names and captions are suppressed from the rendered HTML note
+        self.assertNotIn('Print QA 1', html)
+        self.assertNotIn('Print QA 2', html)
+        # Images remain present and strictly follow the paragraph positions
+        self.assertLess(html.index('informamos o código de fora'), html.index(image_data_1))
+        self.assertLess(html.index(image_data_1), html.index('Após o ajuste'))
+        self.assertLess(html.index('Após o ajuste'), html.index(image_data_2))
+        self.assertLess(html.index(image_data_2), html.index('1. Abra Relação'))
+
+        # Descriptive titles and captions continue to be rendered normally
+        descriptive_images = [
+            {'data_url': image_data_1, 'name': 'Tela de Relação',
+             'caption': 'Preenchimento do código externo', 'placement': 'answer',
+             'after_answer_paragraph': 3}
+        ]
+        html_desc = render_note({'reply': reply, 'images': descriptive_images,
+                                 'answer_paragraph_offset': meta['answer_paragraph_offset']}, 'qa')
+        self.assertIn('Tela de Relação', html_desc)
+        self.assertIn('Preenchimento do código externo', html_desc)
 
 
 if __name__ == '__main__':
