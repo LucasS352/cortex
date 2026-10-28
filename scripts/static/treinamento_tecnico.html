@@ -1845,6 +1845,11 @@ let state = {
   files: [],
 };
 
+if (params.get('sent') === '1') {
+  history.replaceState({}, '', '/treinamento/tecnico');
+  setTimeout(() => toast('Solução enviada com sucesso para a curadoria administrativa!'), 50);
+}
+
 if (state.ticketId > 0) {
   $('#ticket').value = state.ticketId;
 }
@@ -2682,7 +2687,16 @@ $('#submitBtn').addEventListener('click', async () => {
     );
     $('#footerAuditStatus').innerHTML =
       `<span>✓ Enviado para curadoria administrativa (Candidato <b>#${esc(res.candidate_id || res.id)}</b>) por <b>${esc(state.technicianName)}</b>.</span>`;
-    toast('Solução enviada com sucesso para a fila de curadoria administrativa!');
+    toast('Solução enviada com sucesso para a curadoria administrativa!', 1800);
+    setTimeout(() => {
+      // A curadoria abre esta tela em uma nova aba, portanto o fechamento é
+      // permitido nesse fluxo. Em acesso direto, o navegador pode bloquear
+      // window.close(); nesse caso voltamos para uma tela limpa com confirmação.
+      window.close();
+      setTimeout(() => {
+        if (!window.closed) window.location.replace('/treinamento/tecnico?sent=1');
+      }, 200);
+    }, 1100);
   } catch (e) {
     toast(e.message);
   } finally {

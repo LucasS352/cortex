@@ -1724,7 +1724,6 @@ function candidateForm(c, content, related, imported = new Map()) {
         </details></div>
       <div class="review-card"><div class="review-step-title"><b>2</b> Imagens do conhecimento</div>
         <p class="review-muted">Os prints aparecem automaticamente na resposta. Use Borrar ou Pintar nas imagens; a cópia tratada é salva ao publicar.</p>
-        ${images.length ? '<label class="candidate-print-confirm"><input type="checkbox" id="printsReviewed"> Revisei os prints e ocultei os dados de outros clientes.</label>' : ''}
         ${images.length ? images.map((image, i) => { const chosen = (content.images || []).find(x => x.file === image.file); return `<div class="review-image"><div><img data-preview-file="${esc(image.file)}" src="${esc(image.url)}" alt="${esc(chosen?.caption || image.label)}"><label><input type="checkbox" id="img_use_${i}" data-file="${esc(image.file)}" checked disabled> Incluído automaticamente</label></div><div><label>Nome</label><input type="text" id="img_name_${i}" value="${esc(chosen?.name || image.label)}"><label>Legenda</label><input type="text" id="img_caption_${i}" value="${esc(chosen?.caption || image.label)}"><select id="img_place_${i}" hidden><option value="answer" selected>Na resposta</option></select><input type="hidden" id="img_step_${i}" value="1"><input type="hidden" id="img_paragraph_${i}" value="${chosen?.after_answer_paragraph || 1}"><span class="pill ok">Na resposta do técnico</span></div></div>`; }).join('') : '<p class="review-muted">Nenhum print técnico encontrado na resposta selecionada.</p>'}</div>
     </section>
     <section class="review-side" aria-label="Classificação e conferência">
@@ -1999,13 +1998,20 @@ function openStaging(id) {
 async function openCandidate(id) {
   if (!isStandaloneCandidateReview()) return openCandidateTab(id);
   const c = await api(`/candidatos/${id}`); const x = c.extraction;
-  await hydrateCandidateAnswerFromTicket(c);
   const imported = new Map();
   let autoImages = [];
-  try { autoImages = stageCandidateAnswerImages(c, imported); }
-  catch (error) {
-    toast(`Não consegui preparar todos os prints do técnico: ${error.message}. Recarregue a curadoria para tentar novamente.`);
-    return;
+  // Uma proposta enviada pela tela do técnico já contém o snapshot exato
+  // do editor e somente os prints presentes naquela resposta. Não reconstrua
+  // imagens a partir do histórico inteiro do ticket, pois isso duplica anexos e
+  // pode reintroduzir prints removidos pelo técnico antes do envio.
+  const useSubmittedSnapshot = c.extractor === 'technician_proposal';
+  if (!useSubmittedSnapshot) {
+    await hydrateCandidateAnswerFromTicket(c);
+    try { autoImages = stageCandidateAnswerImages(c, imported); }
+    catch (error) {
+      toast(`Não consegui preparar todos os prints do técnico: ${error.message}. Recarregue a curadoria para tentar novamente.`);
+      return;
+    }
   }
   const content = { ...x, images:[...(x.images || []), ...autoImages], module_key: c.suggested_module, subtopic_key: c.suggested_subtopic };
   const related = c.similar_items || [];
@@ -2265,11 +2271,6 @@ async function openCandidate(id) {
         : `Nova versão publicada a partir do chamado #${c.ticket_external_id}`;
     } else if (act === 'new') {
       reason = `Publicado como novo procedimento canônico a partir do chamado #${c.ticket_external_id}`;
-    }
-
-    if ((act === 'new' || act === 'revise') && (c._answerImageRefs || []).length && !$('#printsReviewed')?.checked) {
-      $('#printsReviewed')?.focus();
-      return showError('Confira todos os prints e marque a confirmação "Revisei os prints e ocultei os dados de outros clientes" antes de publicar.');
     }
 
     const allBtns = dlg.querySelectorAll('[data-act]');

@@ -105,6 +105,21 @@ class TrainingWorkflowTests(unittest.TestCase):
         self.assertIn('image.dataset.candidateFile = chosen.file', text)
         self.assertIn('/imagens-salvas/${encodeURIComponent(wrapper.dataset.file)}/revisar', text)
 
+    def test_technician_candidate_uses_only_submitted_snapshot_images(self):
+        text = (Path(__file__).parent / 'static' / 'treinamento.html').read_text(encoding='utf-8')
+        self.assertIn("const useSubmittedSnapshot = c.extractor === 'technician_proposal';", text)
+        self.assertIn('if (!useSubmittedSnapshot) {', text)
+
+    def test_candidate_images_do_not_require_a_separate_confirmation(self):
+        text = (Path(__file__).parent / 'static' / 'treinamento.html').read_text(encoding='utf-8')
+        self.assertIn('Imagens do conhecimento', text)
+        self.assertNotIn('id="printsReviewed"', text)
+        self.assertNotIn('Revisei os prints e ocultei os dados de outros clientes', text)
+        submitted = text.index("const useSubmittedSnapshot = c.extractor === 'technician_proposal';")
+        hydrate = text.index('await hydrateCandidateAnswerFromTicket(c);', submitted)
+        guard = text.index('if (!useSubmittedSnapshot) {', submitted)
+        self.assertLess(guard, hydrate)
+
     def test_existing_training_rules(self):
         for name in dir(legacy):
             if name.startswith('test_'):
@@ -466,6 +481,12 @@ class TrainingWorkflowTests(unittest.TestCase):
         self.assertNotIn('Contexto e informações do chamado', html)
         self.assertNotIn('Buscar chamados, conhecimento', html)
         self.assertNotIn('2 de 15', html)
+
+    def test_technician_submission_confirms_and_closes_review_tab(self):
+        html = (Path(__file__).parent / 'static' / 'treinamento_tecnico.html').read_text(encoding='utf-8')
+        self.assertIn('Solução enviada com sucesso para a curadoria administrativa!', html)
+        self.assertIn('window.close();', html)
+        self.assertIn("window.location.replace('/treinamento/tecnico?sent=1')", html)
 
     def test_parse_cortex_note_extracts_clean_reply_sources_and_confidence(self):
         raw_note = (
