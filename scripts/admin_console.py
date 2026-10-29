@@ -313,7 +313,7 @@ def webhook_receipts(request: Request):
     selected = state.get('pilot_organization_ids') or []
     requesters = state.get('pilot_requester_emails') or []
     enabled = (not state.get('pilot_paused', True) and
-               state.get('auto_internal_note', False) and bool(selected) and bool(requesters))
+               state.get('auto_internal_note', False) and bool(selected))
     result['ceiling_mode'] = ceiling
     result['effective_mode'] = ('internal_note' if ceiling == 'internal_note' and enabled else
                                 'dry_run' if ceiling in {'dry_run', 'internal_note'} else 'disabled')
@@ -321,7 +321,7 @@ def webhook_receipts(request: Request):
     result['selected_requesters'] = len(requesters)
     result['pilot_paused'] = state.get('pilot_paused', True)
     result['requested_auto_internal_note'] = state.get('auto_internal_note', False)
-    pilot_ready = (not result['pilot_paused'] and bool(selected) and bool(requesters))
+    pilot_ready = (not result['pilot_paused'] and bool(selected))
     result['manual_mode'] = ('internal_note' if ceiling == 'internal_note' and pilot_ready else 'disabled')
     # Backward-compatible name used by older panels.
     result['configured_mode'] = result['effective_mode']

@@ -105,6 +105,7 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(_app):
     web_auth.validate_configuration()
+    web_auth.ensure_bootstrap_admin()
     ticket_sync_control.start_scheduler()
     try:
         yield
@@ -140,6 +141,8 @@ app.include_router(tech_desk_router)
 app.include_router(master_telemetry_router)
 app.include_router(technician_workbench_router)
 app.include_router(admin_console_router)
+from account_settings import router as account_settings_router
+app.include_router(account_settings_router)
 app.include_router(knowledge_training_router)
 app.mount("/tech-assets", StaticFiles(directory=str(Path(__file__).parent / "static")), name="tech-assets")
 

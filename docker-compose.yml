@@ -12,6 +12,9 @@ services:
       - ./infra/005_company_workbench.sql:/docker-entrypoint-initdb.d/03-company-workbench.sql:ro
       - ./infra/006_canonical_knowledge.sql:/docker-entrypoint-initdb.d/04-canonical-knowledge.sql:ro
       - ./infra/007_vector_halfvec_hnsw.sql:/docker-entrypoint-initdb.d/05-vector-halfvec-hnsw.sql:ro
+      - ./infra/008_cortex_workforce.sql:/docker-entrypoint-initdb.d/06-cortex-workforce.sql:ro
+      - ./infra/009_account_sessions.sql:/docker-entrypoint-initdb.d/07-account-sessions.sql:ro
+      - ./infra/010_technician_pins.sql:/docker-entrypoint-initdb.d/08-technician-pins.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U deskcortex -d deskcortex"]
       interval: 10s

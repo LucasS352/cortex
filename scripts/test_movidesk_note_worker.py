@@ -125,9 +125,13 @@ class WorkerTests(unittest.TestCase):
         active = worker.effective_settings(base, state_file)
         self.assertEqual(active.mode, 'internal_note')
         self.assertEqual(active.organizations, frozenset({'464'}))
+        # Empty pilot_requester_emails is also valid when organizations are selected
+        state_file.write_text(json.dumps({'pilot_organization_ids': ['464'],
+                                          'pilot_requester_emails': [],
+                                          'pilot_paused': False, 'auto_internal_note': True}), encoding='utf-8')
+        active_all_requesters = worker.effective_settings(base, state_file)
+        self.assertEqual(active_all_requesters.mode, 'internal_note')
         for update in ({'pilot_organization_ids': [], 'pilot_requester_emails': ['lucas.teste@alternativa.com.br'],
-                        'pilot_paused': False, 'auto_internal_note': True},
-                       {'pilot_organization_ids': ['464'], 'pilot_requester_emails': [],
                         'pilot_paused': False, 'auto_internal_note': True},
                        {'pilot_organization_ids': ['464'], 'pilot_requester_emails': ['lucas.teste@alternativa.com.br'],
                         'pilot_paused': True, 'auto_internal_note': True},

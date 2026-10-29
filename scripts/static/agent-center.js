@@ -70,7 +70,7 @@ function renderPilotRequesterTags() {
   const container = $('pilot-requester-tags-container');
   if (!container) return;
   if (!studioState.pilotRequesterEmails.length) {
-    container.innerHTML = '<span class="muted" style="font-size:12px; padding:6px 0;">Nenhum solicitante autorizado. A publicação fica bloqueada.</span>';
+    container.innerHTML = '<span class="muted" style="font-size:12px; padding:6px 0;">Todos os solicitantes das empresas autorizadas estão liberados (sem filtro por e-mail).</span>';
     return;
   }
   container.innerHTML = studioState.pilotRequesterEmails.map((email, idx) => `
@@ -154,16 +154,18 @@ function renderStudioSettings(settings) {
   const pill = $('studio-mode-pill');
   if (settings.pilot_paused) {
     badge.className = 'studio-badge-pulse paused';
-    badge.textContent = '⏸ PILOTO PAUSADO';
+    badge.textContent = 'PILOTO PAUSADO';
     pill.textContent = 'Nenhuma nota será publicada';
-  } else if (studioState.selectedCompanyIds.length && studioState.pilotRequesterEmails.length) {
+  } else if (studioState.selectedCompanyIds.length) {
     badge.className = 'studio-badge-pulse';
-    badge.textContent = '● PILOTO CONTROLADO ATIVO';
-    pill.textContent = `Restrito a ${studioState.selectedCompanyIds.length} empresa(s) e ${studioState.pilotRequesterEmails.length} solicitante(s)`;
+    badge.textContent = 'PILOTO CONTROLADO ATIVO';
+    pill.textContent = studioState.pilotRequesterEmails.length
+      ? `Restrito a ${studioState.selectedCompanyIds.length} empresa(s) e ${studioState.pilotRequesterEmails.length} solicitante(s)`
+      : `Liberado para todas as pessoas de ${studioState.selectedCompanyIds.length} empresa(s) autorizada(s)`;
   } else {
     badge.className = 'studio-badge-pulse paused';
-    badge.textContent = '⚠ AUTORIZAÇÃO INCOMPLETA';
-    pill.textContent = 'Publicação bloqueada';
+    badge.textContent = 'SELECIONE EMPRESAS';
+    pill.textContent = 'Nenhuma empresa autorizada';
   }
 
   // Sliders

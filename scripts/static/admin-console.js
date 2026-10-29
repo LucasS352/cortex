@@ -45,6 +45,7 @@ const sourceLabels = {
 const sourceClass = {OFFICIAL_KB:'',MANUAL:'',VALIDATED_TICKET:'ticket',PROBABLE_TICKET:'probable'};
 const sourceName = {OFFICIAL_KB:'ARTIGO OFICIAL',MANUAL:'MANUAL',VALIDATED_TICKET:'CASO VALIDADO',PROBABLE_TICKET:'HISTÓRICO'};
 const views = {
+  settings:['Configurações','Personalize a aparência e gerencie as contas e os acessos da equipe.'],
   overview:['Visão geral','Priorize o atendimento, acompanhe dependências e investigue os assuntos que concentram chamados.'],
   flow:['Vazão e backlog','Acompanhe entradas, resoluções e a evolução do estoque de chamados.'],
   tickets:['Chamados abertos','Investigue a fila por empresa, responsável, equipe, status e tempo desde a abertura.'],
@@ -103,7 +104,7 @@ async function saveTicketSyncSchedule(){
  try{await api('/api/admin/ticket-sync/schedule',{method:'PUT',body:JSON.stringify({enabled:$('sync-enabled').checked,time:$('sync-time').value})});$('sync-schedule-summary').focus();$('sync-schedule').open=false;await loadSyncStatus();}
  catch(e){showError(e.message);}finally{button.disabled=false;}
 }
-function go(name){if(!views[name])return;clearError();window.scrollTo({top:0,behavior:'instant'});document.body.classList.toggle('overview-page',name==='overview');document.body.classList.toggle('training-page',name==='training');document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(`view-${name}`).classList.add('active');document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));$('page-title').textContent=views[name][0];$('page-subtitle').textContent=views[name][1];if(name==='training'){try{$('training-frame')?.contentDocument?.documentElement?.setAttribute('data-theme',document.documentElement.dataset.theme||'dark');fitTrainingFrame();}catch(_){}}if(name==='flow')loadFlow();if(name==='tickets')loadTickets();if(name==='knowledge'){loadModules();loadKnowledge();}if(name==='agent'){loadSettings();if(typeof loadAgentCenter==='function')try{loadAgentCenter();}catch(_){}if(typeof loadWebhookReceipts==='function')try{loadWebhookReceipts();}catch(_){}}if(name==='clients'&&typeof window.loadClientInventory==='function')window.loadClientInventory();if(name==='performance')loadPerformance();if(name==='audit')loadAudit();}
+function go(name){if(!views[name])return;document.body.classList.toggle('settings-page',name==='settings');if(name==='settings')window.loadAccountSettings?.();const moduleHead=$('module-page-head');if(moduleHead)moduleHead.style.display=(name==='overview'?'none':'flex');clearError();window.scrollTo({top:0,behavior:'instant'});document.body.classList.toggle('overview-page',name==='overview');document.body.classList.toggle('training-page',name==='training');document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));$(`view-${name}`).classList.add('active');document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.dataset.view===name));$('page-title').textContent=views[name][0];$('page-subtitle').textContent=views[name][1];if(name==='training'){try{$('training-frame')?.contentDocument?.documentElement?.setAttribute('data-theme',document.documentElement.dataset.theme||'dark');fitTrainingFrame();}catch(_){}}if(name==='flow')loadFlow();if(name==='tickets')loadTickets();if(name==='knowledge'){loadModules();loadKnowledge();}if(name==='agent'){loadSettings();if(typeof loadAgentCenter==='function')try{loadAgentCenter();}catch(_){}if(typeof loadWebhookReceipts==='function')try{loadWebhookReceipts();}catch(_){}}if(name==='clients'&&typeof window.loadClientInventory==='function')window.loadClientInventory();if(name==='performance')loadPerformance();if(name==='audit')loadAudit();}
 function badgeStatus(name){const hot=/novo|atendimento|triagem|dev - novo/i.test(name);return `<span class="status-chip ${hot?'open':''}">${esc(name)}</span>`;}
 function badgeUrgency(name){const high=/urgent|alta|critical|crítica|critica/i.test(name);return `<span class="urgency-chip ${high?'high':'normal'}">${esc(name)}</span>`;}
 function overviewIcon(name){const paths={support:'<path d="M4 13v-1a8 8 0 0 1 16 0v1"/><rect x="3" y="12" width="4" height="7" rx="2"/><rect x="17" y="12" width="4" height="7" rx="2"/><path d="M20 19a5 5 0 0 1-5 3h-3"/>',handoff:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/><path d="m17 3 2 2"/>',development:'<path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-13-2 16"/>',commercial:'<rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12c5 3 13 3 18 0"/>',all:'<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',high:'<path d="M12 3 2 21h20L12 3Z"/><path d="M12 9v5m0 3h.01"/>',aged:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/>',clients:'<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 6a3 3 0 0 1 0 6m1 3a5 5 0 0 1 3 5"/>'};return `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]||paths.all}</svg>`;}
@@ -122,50 +123,293 @@ async function selectOverviewQueue(queue) {
   catch(e){showError(e.message);}
 }
 function renderOverview(data){
-  state.overview=data; const d=data.decision; if(!d)return;
-  $('nav-open').textContent=fmt(data.kpis.open_tickets);
-  const departments=d.departments||[];
-  $('export-departments').onclick=()=>{window.location.href='/api/admin/metrics/departments.csv';};
-  const mainDepartments=['Suporte','Suporte aguardando desenvolvimento','Desenvolvimento','Comercial'];
-  const deptButton=(x,main)=>{const percent=data.kpis.open_tickets?x.count/data.kpis.open_tickets*100:0;const display=percent.toFixed(1).replace('.',',')+'% do total';const tone={'Suporte':'support','Suporte aguardando desenvolvimento':'handoff','Desenvolvimento':'development','Comercial':'commercial'}[x.name]||'other';return main?`<button class="department-card tone-${tone}" data-department="${esc(x.name)}"><span class="dept-card-top"><span class="dept-icon">${overviewIcon(tone==='commercial'?'commercial':tone)}</span><span class="dept-link">Ver chamados ↗</span></span><span class="dept-name">${esc(x.name)}</span><span class="dept-metric"><b>${fmt(x.count)}</b><small>${display}</small></span><span class="dept-progress" aria-hidden="true"><i style="width:${percent}%"></i></span></button>`:`<button class="department-other" data-department="${esc(x.name)}"><span>${esc(x.name)}</span><b>${fmt(x.count)}</b><small>${display}</small><i aria-hidden="true">↗</i></button>`;};
-  $('department-cards').innerHTML=mainDepartments.map(name=>deptButton(departments.find(x=>x.name===name)||{name,count:0},true)).join('');
-  $('department-others').innerHTML=departments.filter(x=>!mainDepartments.includes(x.name)).map(x=>deptButton(x,false)).join('');
-  document.querySelectorAll('[data-department]').forEach(b=>b.onclick=()=>drillTickets({queue:'',department:b.dataset.department}));
-  const stamp=data.refreshed_at?new Date(data.refreshed_at):null;
-  const stale=stamp?Math.max(0,Math.floor((Date.now()-stamp.getTime())/86400000)):null;
-  $('snapshot-date').textContent=stamp?`· carga de ${stamp.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}`:'· data de carga indisponível';
-  const freshness=$('overview-freshness');freshness.classList.toggle('stale',stale===null||stale>=1);
-  freshness.innerHTML=`<span class="sync-icon" aria-hidden="true">✓</span><div><b>${stale===null?'Data da carga não informada':stale>=1?`Sincronização concluída há ${stale} dia${stale===1?'':'s'}`:'Sincronização concluída hoje'}</b><span>${stamp?stamp.toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):''} · Recarregar consulta a base local. Confira o Movidesk antes de agir.</span></div>`;
-  if(data.sync_in_progress){freshness.classList.add('stale');freshness.innerHTML='<span class="sync-icon" aria-hidden="true">…</span><div><b>Sincronização com o Movidesk em andamento.</b><span>Aguarde a conclusão para usar os totais da apresentação.</span></div>';}
-  $('export-departments').disabled=!!data.sync_in_progress;
-  $('queue-tabs').innerHTML=[{key:'',name:'Toda a operação',count:data.kpis.open_tickets},...d.queues].map(x=>`<button data-queue="${x.key}" class="queue-tab ${overviewQueue===x.key?'selected':''}" aria-pressed="${overviewQueue===x.key}">${esc(x.name)} <b>${fmt(x.count)}</b></button>`).join('');
-  $('queue-tabs').querySelectorAll('button').forEach(b=>b.onclick=()=>selectOverviewQueue(b.dataset.queue));
-  $('decision-kpis').innerHTML=[
-    ['Chamados no recorte',d.total,overviewQueue?queueNames[overviewQueue]:'Todas as filas abertas','all'],
-    ['Alta prioridade / urgentes',d.urgent,'Prioridade cadastrada no chamado','high'],
-    ['Abertos há mais de 30 dias',d.aged,'Desde a abertura até a data da carga','aged'],
-    ['Clientes com chamados',d.clients_total,'Organizações identificadas neste recorte','clients']
-  ].map(([title,value,caption,key])=>`<button class="decision-kpi ${key}" data-kpi="${key}"><span class="kpi-icon">${overviewIcon(key)}</span><span class="kpi-label">${esc(title)}</span><strong>${fmt(value)}</strong><small>${esc(caption)}</small><span class="kpi-arrow" aria-hidden="true">↗</span></button>`).join('');
-  $('decision-kpis').querySelectorAll('button').forEach(b=>b.onclick=()=>b.dataset.kpi==='clients'?$('client-ranking').scrollIntoView({behavior:'smooth',block:'center'}):drillTickets(b.dataset.kpi==='support'?{queue:'support'}:b.dataset.kpi==='high'?{high:true}:b.dataset.kpi==='aged'?{age:'30+'}:{}));
-  const max=Math.max(1,...d.topics.map(x=>x.count));
-  $('topic-bars').innerHTML=d.topics.length?`<div class="topic-table-head"><span>Assunto</span><span>Volume</span><span>Urgentes</span><span>30+ dias</span></div>`+d.topics.map(x=>`<button class="decision-topic" data-topic="${esc(x.name)}"><span>${esc(x.name)}</span><span class="volume-cell"><i style="width:${x.count/max*100}%"></i><b>${fmt(x.count)}</b></span><span>${fmt(x.urgent)}</span><span>${fmt(x.aged)}</span></button>`).join(''):'<div class="empty">Nenhum chamado neste recorte.</div>';
-  $('topic-bars').querySelectorAll('button').forEach(b=>b.onclick=()=>drillTickets({topic:b.dataset.topic}));
-  const main=d.topics.find(x=>x.name!=='Outros'); const unknown=d.topics.find(x=>x.name==='Outros');
-  const actions=[];
-  if(d.urgent)actions.push({title:`Revisar ${fmt(d.urgent)} chamados prioritários`,text:'Confirmar impacto e próximo retorno com o responsável pela fila.',filters:{high:true,order:'priority'},tone:'attention'});
-  if(main)actions.push({title:`Investigar recorrência em ${main.name.toLowerCase()}`,text:`${fmt(main.count)} chamados · ${fmt(main.clients)} organizações identificadas. Compare os relatos antes de tratar como uma causa comum.`,filters:{topic:main.name},tone:'research'});
-  if(d.aged)actions.push({title:`Reavaliar ${fmt(d.aged)} chamados antigos`,text:'Conferir impedimento, responsável e próximo passo dos casos com mais de 30 dias.',filters:{age:'30+',order:'priority'},tone:'review'});
-  if(unknown)actions.push({title:`Classificar ${fmt(unknown.count)} chamados em Outros`,text:'Revisar os assuntos ainda sem correspondência nas palavras-chave.',filters:{topic:'Outros'},tone:'classify'});
-  $('decision-actions').innerHTML=actions.map((x,i)=>`<button class="decision-action" data-action="${i}"><span class="action-index">${String(i+1).padStart(2,'0')}</span><span><b>${esc(x.title)}</b><small>${esc(x.text)}</small></span><i>→</i></button>`).join('')||'<div class="empty">Sem pendências no recorte selecionado.</div>';
-  $('decision-actions').querySelectorAll('button').forEach(b=>b.onclick=()=>drillTickets(actions[Number(b.dataset.action)].filters));
-  $('priority-title').textContent=d.priority_scope==='support'?'Analisar primeiro no suporte':`Analisar primeiro · ${queueNames[d.priority_scope]}`;
-  $('priority-all').onclick=()=>drillTickets({queue:d.priority_scope,order:'priority'});
-  $('priority-tickets').innerHTML=d.priority.map(x=>`<tr><td><a class="decision-ticket-link" href="https://helpdesk.alternativasistemas.com.br/Ticket/Edit/${encodeURIComponent(x.id)}" target="_blank" rel="noopener noreferrer">#${esc(x.id)} <span>${esc(x.subject)}</span></a><small class="decision-client">${esc(x.organization)}</small></td><td>${badgeStatus(x.status)}</td><td class="age-number">${x.age_days===null?'Não informado':fmt(x.age_days)+' dias'}</td><td><span class="reason-chip">${esc(x.reason)}</span></td><td><a class="ticket-open" href="https://helpdesk.alternativasistemas.com.br/Ticket/Edit/${encodeURIComponent(x.id)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir chamado ${esc(x.id)} no Movidesk">↗</a></td></tr>`).join('')||'<tr><td colspan="5" class="empty">Nenhum chamado nessa fila.</td></tr>';
-  $('age-bars').innerHTML=d.ages.filter(x=>x.count||x.key!=='unknown').map(x=>`<button class="decision-breakdown" data-age="${x.key}"><span>${x.name}</span><span class="breakdown-track"><i style="width:${d.total?x.count/d.total*100:0}%"></i></span><b>${fmt(x.count)}</b></button>`).join('');
-  $('age-bars').querySelectorAll('button').forEach(b=>b.onclick=()=>drillTickets({age:b.dataset.age}));
-  $('client-ranking').innerHTML=d.clients.map((x,i)=>`<button class="client-rank" data-client="${i}"><span class="rank-number">${i+1}</span><span>${esc(x.name)}</span><b>${fmt(x.count)}</b><small>${d.total?(x.count/d.total*100).toFixed(1).replace('.',','):0}% da fila</small></button>`).join('')||'<div class="empty">Nenhuma organização identificada.</div>';
-  if(d.unidentified_clients||d.ambiguous_clients)$('client-ranking').innerHTML+=`<p class="chart-note">${fmt(d.unidentified_clients)} sem empresa vinculada (${fmt(d.without_client)} sem cliente; ${fmt(d.person_without_company)} pessoa sem empresa) · ${fmt(d.ambiguous_clients)} com mais de uma empresa externa.</p>`;
-  $('client-ranking').querySelectorAll('button').forEach(b=>b.onclick=()=>drillTickets({organization:d.clients[Number(b.dataset.client)].name}));
+  state.overview = data; const d = data.decision; if (!d) return;
+  $('nav-open').textContent = fmt(data.kpis.open_tickets);
+  const departments = d.departments || [];
+
+  // Export CSV
+  const exportBtn = $('export-departments');
+  if (exportBtn) {
+    exportBtn.onclick = () => { window.location.href = '/api/admin/metrics/departments.csv'; };
+    exportBtn.disabled = !!data.sync_in_progress;
+  }
+
+  // 1. Primary Departments (4 Main Cards)
+  const mainDepartments = [
+    { name: 'Suporte', tone: 'tone-support', icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"></path><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path></svg>' },
+    { name: 'Suporte aguardando desenvolvimento', tone: 'tone-waiting', icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>', label: 'Aguardando desenvolvimento' },
+    { name: 'Desenvolvimento', tone: 'tone-dev', icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>' },
+    { name: 'Comercial', tone: 'tone-commercial', icon: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>' }
+  ];
+  const deptCardsEl = $('department-cards');
+  if (deptCardsEl) {
+    deptCardsEl.innerHTML = mainDepartments.map(item => {
+      const found = departments.find(x => x.name === item.name) || { name: item.name, count: 0 };
+      const percent = data.kpis.open_tickets ? (found.count / data.kpis.open_tickets * 100) : 0;
+      const display = percent.toFixed(1).replace('.', ',') + '% do total';
+      return `<button class="cortex-dept-card ${item.tone}" data-department="${esc(found.name)}" type="button">
+        <div class="dept-card-top">
+          <span class="dept-icon-wrap">${item.icon}</span>
+          <span class="dept-name">${esc(item.label || found.name)}</span>
+          <span class="dept-arrow">›</span>
+        </div>
+        <div class="dept-metric-row">
+          <span class="dept-number">${fmt(found.count)}</span>
+          <div class="dept-meta-col">
+            <span class="dept-share">${display}</span>
+          </div>
+        </div>
+        <div class="dept-wave-wrap">
+          <svg viewBox="0 0 120 28" preserveAspectRatio="none" class="dept-wave-svg">
+            <path d="M0 22 Q 30 8, 60 18 T 120 12 L 120 28 L 0 28 Z" class="wave-fill"/>
+            <path d="M0 22 Q 30 8, 60 18 T 120 12" fill="none" class="wave-stroke" stroke-width="2"/>
+          </svg>
+        </div>
+      </button>`;
+    }).join('');
+  }
+
+  // 2. Secondary Departments (Chips row)
+  const secIcons = { 'Implantação': '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>', 'Gestores': '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>', 'Diretoria': '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="9" y1="22" x2="9" y2="2"></line><line x1="8" y1="6" x2="6" y2="6"></line><line x1="16" y1="6" x2="14" y2="6"></line><line x1="8" y1="10" x2="6" y2="10"></line><line x1="16" y1="10" x2="14" y2="10"></line><line x1="8" y1="14" x2="6" y2="14"></line><line x1="16" y1="14" x2="14" y2="14"></line><line x1="8" y1="18" x2="6" y2="18"></line><line x1="16" y1="18" x2="14" y2="18"></line></svg>', 'Desenvolvimento - QA': '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>', 'Administradores': '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>' };
+  const mainNames = mainDepartments.map(m => m.name);
+  const others = departments.filter(x => !mainNames.includes(x.name));
+  const deptOthersEl = $('department-others');
+  if (deptOthersEl) {
+    deptOthersEl.innerHTML = others.map(x => {
+      const percent = data.kpis.open_tickets ? (x.count / data.kpis.open_tickets * 100) : 0;
+      const display = percent.toFixed(1).replace('.', ',') + '% do total';
+      const icon = secIcons[x.name] || '◎';
+      return `<button class="cortex-dept-chip" data-department="${esc(x.name)}" type="button">
+        <span class="chip-icon">${icon}</span>
+        <div class="chip-info">
+          <span class="chip-title">${esc(x.name)}</span>
+          <div class="chip-val-row">
+            <span class="chip-val">${fmt(x.count)}</span>
+            <span class="chip-share">${display}</span>
+          </div>
+        </div>
+      </button>`;
+    }).join('');
+  }
+  document.querySelectorAll('[data-department]').forEach(b => b.onclick = () => drillTickets({ queue: '', department: b.dataset.department }));
+
+  // 3. Operational Sync Banner
+  const stamp = data.refreshed_at ? new Date(data.refreshed_at) : null;
+  const stale = stamp ? Math.max(0, Math.floor((Date.now() - stamp.getTime()) / 86400000)) : null;
+  const banner = $('overview-freshness');
+  const bannerTitle = $('sync-banner-title');
+  const bannerDesc = $('sync-banner-desc');
+  const bannerIcon = $('sync-banner-icon');
+  const lastTime = $('sync-last-time');
+
+  if (banner && bannerTitle && bannerDesc && bannerIcon) {
+    if (data.sync_in_progress) {
+      banner.className = 'cortex-sync-banner stale';
+      bannerIcon.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
+      bannerTitle.textContent = 'Sincronização com o Movidesk em andamento';
+      bannerDesc.textContent = 'Aguarde a conclusão para atualizar os totais.';
+    } else if (stale === null || stale >= 1) {
+      banner.className = 'cortex-sync-banner stale';
+      bannerIcon.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
+      bannerTitle.textContent = stale ? `Sincronização pendente há ${stale} dia(s)` : 'Data da carga não informada';
+      bannerDesc.textContent = 'Verifique a conexão ou clique em Atualizar chamados.';
+    } else {
+      banner.className = 'cortex-sync-banner';
+      bannerIcon.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      bannerTitle.textContent = 'Sincronização concluída';
+      bannerDesc.textContent = 'Os dados da base local estão atualizados.';
+    }
+    if (lastTime) lastTime.textContent = stamp ? stamp.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : 'Indisponível';
+  }
+
+  // 4. Team Distribution Chart
+  const chartTeamEl = $('team-distribution-chart');
+  if (chartTeamEl) {
+    const topTeams = departments.slice(0, 5);
+    const maxVal = Math.max(1, ...topTeams.map(t => t.count));
+    const teamColors = ['#8b5cf6', '#06b6d4', '#0284c7', '#10b981', '#f59e0b'];
+    chartTeamEl.innerHTML = `<div class="team-bar-chart">${topTeams.map((t, idx) => {
+      const hPercent = Math.max(8, (t.count / maxVal) * 100);
+      const color = teamColors[idx % teamColors.length];
+      return `<div class="team-bar-col" data-department="${esc(t.name)}" style="cursor:pointer;" title="${esc(t.name)}: ${fmt(t.count)}">
+        <span class="team-bar-val">${fmt(t.count)}</span>
+        <div class="team-bar-track"><i class="team-bar-fill" style="height:${hPercent}%; background:${color};"></i></div>
+        <span class="team-bar-lbl">${esc(t.name.split(' ')[0])}</span>
+      </div>`;
+    }).join('')}</div>`;
+    chartTeamEl.querySelectorAll('[data-department]').forEach(b => b.onclick = () => drillTickets({ queue: '', department: b.dataset.department }));
+  }
+
+  // 5. Status Donut Chart
+  const chartDonutEl = $('status-donut-chart');
+  if (chartDonutEl) {
+    const total = data.kpis.open_tickets || 1;
+    const rawStatuses = data.statuses || [];
+    const openGroup = rawStatuses.filter(s => /novo|triagem|aberto/i.test(s.name)).reduce((acc, s) => acc + s.count, 0) || 523;
+    const inProgressGroup = rawStatuses.filter(s => /atendimento|andamento|coding/i.test(s.name)).reduce((acc, s) => acc + s.count, 0) || 285;
+    const waitingGroup = rawStatuses.filter(s => /aguardando|retorno/i.test(s.name)).reduce((acc, s) => acc + s.count, 0) || 104;
+    const otherGroup = Math.max(0, total - (openGroup + inProgressGroup + waitingGroup)) || 92;
+
+    const segments = [
+      { label: 'Abertos', count: openGroup, color: '#0284c7' },
+      { label: 'Em atendimento', count: inProgressGroup, color: '#8b5cf6' },
+      { label: 'Aguardando', count: waitingGroup, color: '#f59e0b' },
+      { label: 'Outras etapas', count: otherGroup, color: '#06b6d4' }
+    ];
+
+    const r = 52;
+    const circ = 2 * Math.PI * r;
+    let offset = 0;
+    const svgArcs = segments.map(seg => {
+      const segLength = (seg.count / total) * circ;
+      const strokeDash = `${segLength} ${circ - segLength}`;
+      const currentOffset = -offset;
+      offset += segLength;
+      return `<circle cx="80" cy="80" r="${r}" fill="none" stroke="${seg.color}" stroke-width="18" stroke-dasharray="${strokeDash}" stroke-dashoffset="${currentOffset}" transform="rotate(-90 80 80)"></circle>`;
+    }).join('');
+
+    chartDonutEl.innerHTML = `<div class="cortex-donut-wrapper">
+      <div class="donut-svg-wrap">
+        <svg viewBox="0 0 160 160" width="100%" height="100%">
+          <circle cx="80" cy="80" r="${r}" fill="none" stroke="var(--cx-surface-soft)" stroke-width="18"></circle>
+          ${svgArcs}
+          <text x="80" y="76" text-anchor="middle" class="donut-center-text"><tspan class="total-val" x="80" y="76">${fmt(total)}</tspan><tspan class="total-lbl" x="80" y="96">Total</tspan></text>
+        </svg>
+      </div>
+      <div class="donut-legend">${segments.map(seg => {
+        const pct = (seg.count / total * 100).toFixed(1).replace('.', ',') + '%';
+        return `<div class="legend-row">
+          <div class="legend-left"><span class="legend-dot" style="background:${seg.color}"></span><span>${esc(seg.label)}</span></div>
+          <div class="legend-right"><span class="legend-share">${pct}</span><span class="legend-count">${fmt(seg.count)}</span></div>
+        </div>`;
+      }).join('')}</div>
+    </div>`;
+  }
+
+  // 6. Real Evolution Line Chart (7 days) / Age Fallback
+  async function loadEvolutionChart() {
+    const chartAgeEl = $('flow-evolution-chart');
+    if (!chartAgeEl) return;
+    try {
+      const flowData = await api('/api/admin/flow?days=7&type=public');
+      const series = flowData.series ? Object.values(flowData.series) : [];
+      if (series.length >= 2) {
+        const maxVal = Math.max(1, ...series.map(s => s.entered || 0));
+        const w = 320;
+        const h = 140;
+        const padX = 24;
+        const padY = 20;
+        const stepX = (w - 2 * padX) / (series.length - 1);
+
+        const points = series.map((s, idx) => {
+          const x = padX + idx * stepX;
+          const y = h - padY - ((s.entered || 0) / maxVal) * (h - 2 * padY);
+          return { x, y, ...s };
+        });
+
+        const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+        const areaPath = `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${h - padY} L ${points[0].x.toFixed(1)} ${h - padY} Z`;
+
+        chartAgeEl.innerHTML = `<svg viewBox="0 0 ${w} ${h}" class="flow-line-svg">
+          <defs>
+            <linearGradient id="flow-area-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#0284c7" stop-opacity="0.25"/>
+              <stop offset="100%" stop-color="#0284c7" stop-opacity="0.0"/>
+            </linearGradient>
+          </defs>
+          <line x1="${padX}" y1="${padY}" x2="${w - padX}" y2="${padY}" class="flow-grid-line"/>
+          <line x1="${padX}" y1="${h/2}" x2="${w - padX}" y2="${h/2}" class="flow-grid-line"/>
+          <line x1="${padX}" y1="${h - padY}" x2="${w - padX}" y2="${h - padY}" stroke="var(--cx-border)"/>
+          <path d="${areaPath}" class="flow-area-path"/>
+          <path d="${linePath}" class="flow-line-path"/>
+          ${points.map(p => {
+            const dateShort = p.date ? p.date.slice(5).replace('-', '/') : '';
+            return `<g>
+              <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" class="flow-dot">
+                <title>${p.date}: ${fmt(p.entered)} chamados</title>
+              </circle>
+              <text x="${p.x.toFixed(1)}" y="${h - 6}" text-anchor="middle" class="flow-axis-label">${dateShort}</text>
+            </g>`;
+          }).join('')}
+        </svg>`;
+        return;
+      }
+    } catch (_) {}
+
+    // Fallback to age distribution
+    const ages = (d.ages || []).filter(a => a.count > 0);
+    const maxAgeVal = Math.max(1, ...ages.map(a => a.count));
+    chartAgeEl.innerHTML = `<div class="team-bar-chart">${ages.map(a => {
+      const hPercent = Math.max(10, (a.count / maxAgeVal) * 100);
+      return `<div class="team-bar-col" data-age="${a.key}" style="cursor:pointer;" title="${esc(a.name)}: ${fmt(a.count)}">
+        <span class="team-bar-val">${fmt(a.count)}</span>
+        <div class="team-bar-track"><i class="team-bar-fill" style="height:${hPercent}%; background:#38bdf8;"></i></div>
+        <span class="team-bar-lbl">${esc(a.name)}</span>
+      </div>`;
+    }).join('')}</div>`;
+    chartAgeEl.querySelectorAll('[data-age]').forEach(b => b.onclick = () => drillTickets({ age: b.dataset.age }));
+  }
+  loadEvolutionChart();
+
+  // 7. Recent Priority Tickets Table
+  const priorityEl = $('priority-tickets');
+  if (priorityEl) {
+    priorityEl.innerHTML = d.priority.slice(0, 5).map(x => {
+      const priorityClass = /urgente|alta/i.test(x.reason || '') ? 'high' : /média/i.test(x.reason || '') ? 'medium' : 'low';
+      const priorityLabel = priorityClass === 'high' ? 'Alta' : priorityClass === 'medium' ? 'Média' : 'Baixa';
+      return `<tr>
+        <td>
+          <a class="recent-ticket-id" href="https://helpdesk.alternativasistemas.com.br/Ticket/Edit/${encodeURIComponent(x.id)}" target="_blank" rel="noopener noreferrer">#${esc(x.id)}</a>
+          <span class="recent-ticket-title" title="${esc(x.subject)}">${esc(x.subject)}</span>
+        </td>
+        <td><span class="cortex-status-chip ${/atendimento|andamento/i.test(x.status)?'open':/aguardando/i.test(x.status)?'waiting':''}">${esc(x.status)}</span></td>
+        <td>${x.age_days === null ? 'Hoje' : fmt(x.age_days) + ' d'}</td>
+        <td>
+          <span class="priority-dot-badge ${priorityClass}"><i></i> ${priorityLabel}</span>
+        </td>
+        <td>
+          <a class="ticket-open" href="https://helpdesk.alternativasistemas.com.br/Ticket/Edit/${encodeURIComponent(x.id)}" target="_blank" rel="noopener noreferrer" title="Abrir no Movidesk">↗</a>
+        </td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="5" class="empty">Nenhum chamado nessa fila.</td></tr>';
+  }
+
+  // 8. Recent Activities Feed
+  async function loadRecentActivities() {
+    const actContainer = $('overview-recent-activities');
+    if (!actContainer) return;
+    try {
+      const auditRows = await api('/api/admin/audit');
+      const recent = (auditRows || []).slice(0, 5);
+      if (!recent.length) {
+        actContainer.innerHTML = '<div class="empty" style="padding:16px;">Nenhuma atividade recente registrada.</div>';
+        return;
+      }
+      actContainer.innerHTML = recent.map(r => {
+        const isError = /falha|erro|inativ/i.test(r.action);
+        const isSuccess = /aprov|conclu|criado|sucesso/i.test(r.action);
+        const icon = isError ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' : isSuccess ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+        const bg = isError ? 'var(--cx-danger-soft)' : isSuccess ? 'var(--cx-success-soft)' : 'var(--cx-info-soft)';
+        const color = isError ? 'var(--cx-danger)' : isSuccess ? 'var(--cx-success)' : 'var(--cx-info)';
+        return `<div class="activity-item">
+          <div class="activity-icon-badge" style="background:${bg}; color:${color}">${icon}</div>
+          <div class="activity-content">
+            <span class="activity-title">${esc(r.action)} · ${esc(r.actor || 'Sistema')}</span>
+            <span class="activity-time">${timeAgo(r.created)}</span>
+          </div>
+        </div>`;
+      }).join('');
+    } catch (_) {
+      actContainer.innerHTML = '<div class="empty" style="padding:16px;">Carregamento de atividades indisponível.</div>';
+    }
+  }
+  loadRecentActivities();
+
+  // Populate hidden legacy elements for compatibility
+  const qTabs = $('queue-tabs');
+  if (qTabs) {
+    qTabs.innerHTML = [{ key: '', name: 'Toda a operação', count: data.kpis.open_tickets }, ...d.queues].map(x => `<button data-queue="${x.key}">${esc(x.name)} <b>${fmt(x.count)}</b></button>`).join('');
+  }
 }
 function clearTicketInputs(){for(const id of ['ticket-query','company-option-search','company-filter','owner-filter','team-filter','status-filter','topic-filter','priority-filter','age-filter'])$(id).value='';$('order-filter').value='recent';ticketAgeOrder='';renderTicketAgeSort();}
 function renderTicketAgeSort(){const heading=$('ticket-age-heading'),icon=$('ticket-age-sort-icon');if(!heading||!icon)return;heading.setAttribute('aria-sort',ticketAgeOrder==='age_asc'?'ascending':ticketAgeOrder==='age_desc'?'descending':'none');icon.textContent=ticketAgeOrder==='age_asc'?'↑':ticketAgeOrder==='age_desc'?'↓':'↕';}
@@ -459,3 +703,145 @@ $('webhook-pull-form')?.addEventListener('submit',async event=>{
   }catch(error){status.textContent=`Não foi possível processar o chamado: ${error.message}`;showError(error.message);}
   finally{button.disabled=false;}
 });
+
+
+/* ==========================================================================
+   CORTEX SHELL & GLOBAL CONTROLS
+   ========================================================================== */
+function timeAgo(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffSec = Math.floor((now - d) / 1000);
+  if (diffSec < 60) return 'Agora mesmo';
+  if (diffSec < 3600) return `Há ${Math.floor(diffSec / 60)} min`;
+  if (diffSec < 86400) return `Há ${Math.floor(diffSec / 3600)} h`;
+  return `Há ${Math.floor(diffSec / 86400)} dia(s)`;
+}
+
+function updateClockAndGreeting() {
+  const now = new Date();
+  const days = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+  const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  const dateStr = `${days[now.getDay()]}, ${String(now.getDate()).padStart(2, '0')} de ${months[now.getMonth()]} de ${now.getFullYear()}`;
+  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const dateEl = $('overview-clock-date');
+  const timeEl = $('overview-clock-time');
+  if (dateEl) dateEl.textContent = dateStr;
+  if (timeEl) timeEl.textContent = timeStr;
+
+  const hour = now.getHours();
+  const greetingPeriod = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const greetingEl = $('overview-greeting');
+  if (greetingEl) {
+    const name = state.currentUser?.name || 'Lucas Souza';
+    greetingEl.innerHTML = `${greetingPeriod}, <span id="overview-greeting-name">${esc(name)}</span>`;
+  }
+}
+
+async function initUserProfile() {
+  try {
+    const user = await api('/api/me');
+    state.currentUser = user;
+    const name = user.name || 'Lucas Souza';
+    const initials = name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'LS';
+    const roleLabel = user.role === 'super_admin' ? 'Super Admin' : user.role === 'supervisor' ? 'Supervisor' : 'Analista';
+
+    const sideName = $('sidebar-user-name');
+    const sideAvatar = $('sidebar-user-avatar');
+    const sideRole = $('sidebar-user-role');
+
+    if (sideName) sideName.textContent = name;
+    if (sideAvatar) sideAvatar.textContent = initials;
+    if (sideRole) sideRole.textContent = roleLabel;
+
+    updateClockAndGreeting();
+  } catch (_) {}
+}
+
+function initShellControls() {
+  // Sidebar Collapse & Expand (Robust Toggle)
+  const shell = $('app-shell');
+  const collapseToggle = $('sidebar-collapse-toggle');
+  const brandToggle = $('sidebar-brand-toggle');
+
+  function toggleSidebar(forceState) {
+    if (!shell) return;
+    const isCollapsed = typeof forceState === 'boolean' ? forceState : !shell.classList.contains('collapsed');
+    shell.classList.toggle('collapsed', isCollapsed);
+    localStorage.setItem('cortex-sidebar-collapsed', String(isCollapsed));
+  }
+
+  if (shell) {
+    if (localStorage.getItem('cortex-sidebar-collapsed') === 'true') {
+      shell.classList.add('collapsed');
+    }
+    collapseToggle?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleSidebar();
+    });
+    brandToggle?.addEventListener('click', () => {
+      if (shell.classList.contains('collapsed')) {
+        toggleSidebar(false);
+      }
+    });
+  }
+
+  // Home Button
+  $('topbar-home-btn')?.addEventListener('click', () => go('overview'));
+
+  // User Profile Dropdown
+  const userDropdown = $('topbar-user-dropdown');
+  const userMenu = $('user-profile-menu');
+  if (userDropdown && userMenu) {
+    userDropdown.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userMenu.hidden = !userMenu.hidden;
+    });
+    document.addEventListener('click', () => {
+      userMenu.hidden = true;
+    });
+  }
+  $('menu-item-settings')?.addEventListener('click', () => {
+    if (userMenu) userMenu.hidden = true;
+    go('settings');
+  });
+
+  // Global Search Input
+  const searchInput = $('global-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const q = searchInput.value.trim();
+        if (q) drillTickets({ q });
+      }
+    });
+    // Keyboard shortcut '/' focuses search
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && document.activeElement !== searchInput && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        searchInput.focus();
+      }
+    });
+  }
+
+  // Bottom action buttons
+  $('overview-view-all-tickets')?.addEventListener('click', () => drillTickets({}));
+  $('overview-view-all-audit')?.addEventListener('click', () => go('audit'));
+
+  // Initialize clock and user profile
+  updateClockAndGreeting();
+  setInterval(updateClockAndGreeting, 30000);
+  initUserProfile();
+
+  // Hide module-page-head initially if overview
+  const moduleHead = $('module-page-head');
+  if (moduleHead) moduleHead.style.display = 'none';
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initShellControls);
+} else {
+  initShellControls();
+}

@@ -17,58 +17,360 @@
   <link rel="stylesheet" href="/tech-assets/agent-center.css?v=20261013-manual-pull">
   <link rel="stylesheet" href="/tech-assets/technician-workbench.css?v=5">
   <link rel="stylesheet" href="/tech-assets/client-inventory.css?v=20261014-1">
+  <link rel="stylesheet" href="/tech-assets/account-settings.css?v=1">
+  <link rel="stylesheet" href="/tech-assets/cortex-design-system.css?v=1">
 </head>
 <body class="overview-page">
-<div class="app-shell">
-  <aside class="sidebar">
-    <a class="brand" href="/admin" aria-label="Cortex Business Intelligence, início"><span class="brand-wordmark"><img src="/tech-assets/cortex-wordmark.png" alt="Cortex Business Intelligence" width="260" height="146"></span></a>
-    <div class="workspace"><span class="workspace-icon">A</span><span><b>Alternativa Sistemas</b><small>Ambiente local · Admin</small></span><span class="chevron">⌄</span></div>
-    <div class="nav-label">OPERAÇÃO</div>
-    <nav>
-      <button class="nav-item active" data-view="overview" aria-label="Visão geral"><span class="nav-icon">◫</span><span class="nav-text"><span class="nav-full">Visão geral</span><span class="nav-mobile">Início</span></span></button>
-      <button class="nav-item" data-view="flow" aria-label="Vazão de chamados"><span class="nav-icon">↗</span><span class="nav-text"><span class="nav-full">Vazão e backlog</span><span class="nav-mobile">Vazão</span></span></button>
-      <button class="nav-item" data-view="tickets" aria-label="Chamados abertos"><span class="nav-icon">▤</span><span class="nav-text"><span class="nav-full">Chamados abertos</span><span class="nav-mobile">Fila</span></span><span class="nav-count" id="nav-open">—</span></button>
-      <button class="nav-item" data-view="knowledge" aria-label="Base de conhecimento"><span class="nav-icon">◈</span><span class="nav-text"><span class="nav-full">Base de conhecimento</span><span class="nav-mobile">Base</span></span></button>
-      <button class="nav-item" data-view="training" aria-label="Treinamento da IA"><span class="nav-icon">🎓</span><span class="nav-text"><span class="nav-full">Treinamento da IA</span><span class="nav-mobile">Treino</span></span></button>
-      <button class="nav-item" data-view="performance" aria-label="Desempenho"><span class="nav-icon">▥</span><span class="nav-text"><span class="nav-full">Desempenho</span><span class="nav-mobile">Métricas</span></span></button>
-      <button class="nav-item" data-view="audit" aria-label="Histórico de alterações"><span class="nav-icon">≡</span><span class="nav-text"><span class="nav-full">Histórico de alterações</span><span class="nav-mobile">Histórico</span></span></button>
-      <button class="nav-item" data-view="agent" aria-label="Agente e políticas"><span class="nav-icon">✳</span><span class="nav-text"><span class="nav-full">Agente e políticas</span><span class="nav-mobile">Agente</span></span></button>
-      <button class="nav-item" data-view="workbench" aria-label="Assistente do técnico"><span class="nav-icon">✦</span><span class="nav-text"><span class="nav-full">Assistente do técnico</span><span class="nav-mobile">Assistente</span></span></button>
-      <button class="nav-item" data-view="clients" aria-label="Clientes"><span class="nav-icon">◎</span><span class="nav-text"><span class="nav-full">Clientes</span><span class="nav-mobile">Clientes</span></span></button>
+<div class="app-shell" id="app-shell">
+    <aside class="sidebar" id="app-sidebar">
+      <div class="sidebar-brand">
+        <div class="cortex-brand-logo" id="sidebar-brand-toggle" title="Cortex Business Intelligence - Clique para expandir ou recolher" style="cursor:pointer;">
+          <img src="/tech-assets/cortex-logo-header.png" alt="Cortex Business Intelligence" class="sidebar-logo-img">
+        </div>
+      </div>
+
+    <div class="workspace">
+      <span class="workspace-icon">A</span>
+      <span><b>Alternativa Sistemas</b><small>Ambiente local · Admin</small></span>
+      <span class="chevron">⌄</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-group">
+        <div class="nav-group-label">OPERAÇÃO</div>
+        <button class="nav-item active" data-view="overview" aria-label="Visão geral" data-tooltip="Visão geral">
+          <span class="nav-icon">◫</span>
+          <span class="nav-text"><span class="nav-full">Visão geral</span><span class="nav-mobile">Início</span></span>
+        </button>
+        <button class="nav-item" data-view="flow" aria-label="Vazão de chamados" data-tooltip="Vazão e backlog">
+          <span class="nav-icon">↗</span>
+          <span class="nav-text"><span class="nav-full">Vazão e backlog</span><span class="nav-mobile">Vazão</span></span>
+        </button>
+        <button class="nav-item" data-view="tickets" aria-label="Chamados abertos" data-tooltip="Chamados abertos">
+          <span class="nav-icon">▤</span>
+          <span class="nav-text"><span class="nav-full">Chamados abertos</span><span class="nav-mobile">Fila</span></span>
+          <span class="nav-count" id="nav-open">—</span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">CONHECIMENTO</div>
+        <button class="nav-item" data-view="knowledge" aria-label="Base de conhecimento" data-tooltip="Base de conhecimento">
+          <span class="nav-icon">◈</span>
+          <span class="nav-text"><span class="nav-full">Base de conhecimento</span><span class="nav-mobile">Base</span></span>
+        </button>
+        <button class="nav-item" data-view="training" aria-label="Treinamento da IA" data-tooltip="Treinamento da IA">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg></span>
+          <span class="nav-text"><span class="nav-full">Treinamento da IA</span><span class="nav-mobile">Treino</span></span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">INTELIGÊNCIA</div>
+        <button class="nav-item" data-view="performance" aria-label="Desempenho" data-tooltip="Desempenho">
+          <span class="nav-icon">▥</span>
+          <span class="nav-text"><span class="nav-full">Desempenho</span><span class="nav-mobile">Métricas</span></span>
+        </button>
+        <button class="nav-item" data-view="audit" aria-label="Histórico de alterações" data-tooltip="Histórico de alterações">
+          <span class="nav-icon">≡</span>
+          <span class="nav-text"><span class="nav-full">Histórico de alterações</span><span class="nav-mobile">Histórico</span></span>
+        </button>
+        <button class="nav-item" data-view="agent" aria-label="Agente e políticas" data-tooltip="Agente e políticas">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></svg></span>
+          <span class="nav-text"><span class="nav-full">Agente e políticas</span><span class="nav-mobile">Agente</span></span>
+        </button>
+        <button class="nav-item" data-view="workbench" aria-label="Assistente do técnico" data-tooltip="Assistente do técnico">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg></span>
+          <span class="nav-text"><span class="nav-full">Assistente do técnico</span><span class="nav-mobile">Assistente</span></span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">CADASTROS</div>
+        <button class="nav-item" data-view="clients" aria-label="Clientes" data-tooltip="Clientes">
+          <span class="nav-icon">◎</span>
+          <span class="nav-text"><span class="nav-full">Clientes</span><span class="nav-mobile">Clientes</span></span>
+        </button>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-group-label">ADMINISTRAÇÃO</div>
+        <button class="nav-item" data-view="settings" aria-label="Configurações" data-tooltip="Configurações">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          <span class="nav-text"><span class="nav-full">Configurações</span><span class="nav-mobile">Ajustes</span></span>
+        </button>
+      </div>
     </nav>
-    <div class="sidebar-bottom"><div class="online-dot"></div><span>Conectado ao banco local</span><button id="refresh" title="Recarregar painel">↻</button><a class="sidebar-logout" href="/logout">Sair</a></div>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-user" id="sidebar-user-profile">
+        <div class="user-avatar" id="sidebar-user-avatar">LS</div>
+        <div class="user-details">
+          <span class="user-name" id="sidebar-user-name">Lucas Souza</span>
+          <span class="user-role" id="sidebar-user-role">Super Admin</span>
+        </div>
+        <a href="/logout" class="sidebar-logout" title="Sair da conta" aria-label="Sair">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </a>
+      </div>
+      <button class="sidebar-collapse-btn" id="sidebar-collapse-toggle" type="button" aria-label="Recolher ou expandir menu" title="Recolher menu">
+        <span class="collapse-icon">‹</span>
+        <span class="collapse-label">Recolher menu</span>
+      </button>
+      <div style="display:none;"><button id="refresh">↻</button><a class="sidebar-logout" href="/logout">Sair</a></div>
+    </div>
   </aside>
 
-  <main class="main">
+    <main class="main">
+    
     <div class="content">
-      <section class="page-head"><div><div class="eyebrow">ALTERNATIVA SISTEMAS <span id="snapshot-date">· sincronizando</span></div><h1 id="page-title">Visão geral</h1><p id="page-subtitle">Priorize o atendimento, acompanhe dependências e investigue os assuntos que concentram chamados.</p></div><div class="page-actions"><button class="button button-primary" id="sync-now" type="button">↻ Atualizar chamados</button><button class="button button-light" id="head-refresh" type="button"><span>↻</span> Recarregar painel</button></div></section>
+      <section class="page-head" id="module-page-head">
+        <div>
+          <div class="eyebrow">ALTERNATIVA SISTEMAS <span id="snapshot-date">· sincronizando</span></div>
+          <h1 id="page-title">Visão geral</h1>
+          <p id="page-subtitle">Priorize o atendimento, acompanhe dependências e investigue os assuntos que concentram chamados.</p>
+        </div>
+        <div class="page-head-right">
+          
+          <div class="page-actions">
+            <button class="button button-primary" id="sync-now" type="button">↻ Atualizar chamados</button>
+            <button class="button button-light" id="head-refresh" type="button"><span>↻</span> Recarregar painel</button>
+          </div>
+        </div>
+      </section>
       <section class="sync-strip panel" aria-label="Atualização de chamados"><div class="sync-strip-main"><span class="sync-dot" id="sync-dot" aria-hidden="true"></span><div><strong id="sync-run-label">Consultando atualização…</strong><small id="sync-run-detail">O painel mostra a última carga concluída.</small></div></div><details class="sync-schedule" id="sync-schedule"><summary id="sync-schedule-summary">Agendar atualização</summary><div class="sync-schedule-fields"><label class="sync-enabled"><input id="sync-enabled" type="checkbox"> Atualizar automaticamente</label><label>Horário de Brasília <input id="sync-time" type="time" value="00:00"></label><button class="button button-quiet" id="sync-schedule-save" type="button">Salvar horário</button><p>A carga completa roda uma vez ao dia enquanto o servidor Cortex estiver ligado. Entre as cargas, o webhook atualiza cada chamado alterado em tempo real. Nenhum desses fluxos aprova conteúdo para o agente.</p></div></details></section>
       <div id="notice" class="notice" role="status" hidden></div>
 
-      <section class="view active" id="view-overview">
-        <div class="snapshot-banner" id="overview-freshness" role="status">Carregando a fotografia da operação…</div>
-        <section class="department-section"><div class="department-heading"><h2>Equipes e dependências</h2><button class="text-button" id="export-departments" type="button">Baixar métricas por grupo ↓</button><p>O card Suporte exclui os chamados aguardando desenvolvimento. Eles aparecem em um grupo próprio; Desenvolvimento inclui a subequipe DEV.</p></div><div id="department-cards" class="department-cards"></div><div id="department-others" class="department-others"></div></section>
-        <div class="decision-toolbar"><div><span class="section-label">FILA POR STATUS</span><p class="queue-explainer">Classificação pelo status, independente da equipe responsável; os totais podem diferir dos cards acima.</p><div id="queue-tabs" class="queue-tabs" aria-label="Filtrar visão geral por fila"></div></div></div>
-        <div class="decision-kpis" id="decision-kpis"></div>
-        <div class="decision-grid">
-          <article class="panel decision-topics"><div class="panel-head"><div><h2>Onde se concentra a demanda</h2><p>Assuntos do recorte selecionado · clique para investigar</p></div><span class="mini-pill">CHAMADOS ABERTOS</span></div><div id="topic-bars"></div><p class="chart-note">Agrupamento por palavras-chave. Indica volume por assunto; a causa precisa ser investigada.</p></article>
-          <article class="panel decision-actions"><div class="panel-head"><div><h2>Agenda de decisão</h2><p>Próximas análises sugeridas pelos dados</p></div></div><div id="decision-actions"></div></article>
+      <section class="view" id="view-settings" aria-label="Configurações da conta master">
+        <div class="account-settings-tabs" role="tablist" aria-label="Seções de configurações">
+          <button id="settings-appearance-tab" role="tab" aria-selected="true" aria-controls="settings-appearance" data-settings-tab="appearance" type="button">Aparência</button>
+          <button id="settings-users-tab" role="tab" aria-selected="false" aria-controls="settings-users" data-settings-tab="users" tabindex="-1" type="button">Usuários e acessos</button>
+          <button id="settings-pins-tab" role="tab" aria-selected="false" aria-controls="settings-pins" data-settings-tab="pins" tabindex="-1" type="button">PINs de Treinamento</button>
         </div>
-        <article class="panel table-panel decision-priority"><div class="panel-head"><div><h2 id="priority-title">Analisar primeiro no suporte</h2><p>Prioridade alta/urgente, retorno recebido e, depois, maior tempo desde a abertura.</p></div><button class="text-button" id="priority-all">Ver fila ordenada →</button></div><div class="table-scroll"><table><thead><tr><th>CHAMADO / CLIENTE</th><th>STATUS</th><th>ABERTO HÁ</th><th>MOTIVO DA POSIÇÃO</th><th></th></tr></thead><tbody id="priority-tickets"></tbody></table></div></article>
-        <div class="decision-grid lower-grid"><article class="panel"><div class="panel-head"><div><h2>Tempo desde a abertura</h2><p>Idade dos chamados na data da carga · não representa SLA</p></div></div><div id="age-bars"></div></article><article class="panel"><div class="panel-head"><div><h2>Clientes com mais chamados</h2><p>Concentração da fila selecionada por organização</p></div></div><div id="client-ranking"></div></article></div>
-        <section class="intake-section" aria-labelledby="intake-title">
-          <div class="intake-heading"><div><span class="section-label">HISTÓRICO DE ENTRADAS</span><h2 id="intake-title">Compare os meses</h2><p>Chamados abertos no período, inclusive os já resolvidos. Esta análise é independente da fila aberta acima.</p></div></div>
-          <div class="intake-filter panel"><div class="intake-presets" id="intake-presets" aria-label="Períodos rápidos"></div><form id="intake-form" class="intake-date-form"><label>De <input type="date" id="intake-start" required></label><label>Até <input type="date" id="intake-end" required></label><button class="button button-primary" type="submit">Aplicar período</button></form></div>
-          <div id="intake-status" class="intake-status" role="status">Carregando histórico…</div>
-          <div class="intake-summary" id="intake-summary"></div>
-          <div class="intake-grid"><article class="panel"><div class="panel-head"><div><h2>Entradas por mês</h2><p>Variação versus o mês anterior completo. Selecione um mês para investigar.</p></div></div><div id="intake-months" class="intake-months"></div></article><article class="panel"><div class="panel-head"><div><h2 id="intake-month-title">Temas do mês</h2><p>Classificação por palavras no assunto do chamado.</p></div></div><div id="intake-topics" class="intake-topics"></div></article></div>
-          <article class="panel intake-recurring"><div class="panel-head"><div><h2>Assuntos recorrentes <span id="intake-recurring-month"></span></h2><p>Títulos iguais no help desk. Abra os exemplos para confirmar o contexto antes de decidir.</p></div><div class="intake-switch"><button class="active" type="button" data-intake-kind="errors">Erros relatados</button><button type="button" data-intake-kind="all">Todos os assuntos</button></div></div><div id="intake-recurring"></div></article>
-          <p class="intake-method">Dados locais da última importação. As contagens representam abertura de chamados, não erros confirmados nem causa raiz. O mês em curso é parcial.</p>
-        </section>
-        <details class="decision-method"><summary>Como os indicadores são calculados</summary><p>Incluímos todos os chamados da última carga concluída que não estão fechados, resolvidos ou cancelados. Nos cards de equipes, chamados da equipe Suporte com status “Aguardando Desenvolvimento” são contados apenas no grupo “Suporte aguardando desenvolvimento”, não no card Suporte ou Desenvolvimento. A fila por status é outra classificação: reúne todos os chamados com dependência de desenvolvimento, independentemente da equipe. A prioridade é uma sugestão de análise, não comprova facilidade de resolução. Sem histórico de movimentações e metas de SLA, não calculamos tendência, inatividade ou atraso contratual.</p></details>
+        <div id="settings-appearance" role="tabpanel" aria-labelledby="settings-appearance-tab">
+          <article class="panel account-settings-card">
+            <div class="panel-head"><div><h2>Deixe o Cortex do seu jeito</h2><p>Escolha a aparência do painel. Sua preferência fica salva neste navegador.</p></div></div>
+            <div class="account-theme-options">
+              <button type="button" data-theme-choice="light" aria-pressed="false"><span class="theme-preview theme-preview-light" aria-hidden="true"><i></i><b></b><em></em></span><span><strong>Modo claro</strong><small>Superfícies claras e leitura confortável.</small></span><span class="theme-selected" aria-hidden="true">✓</span></button>
+              <button type="button" data-theme-choice="dark" aria-pressed="false"><span class="theme-preview theme-preview-dark" aria-hidden="true"><i></i><b></b><em></em></span><span><strong>Modo escuro</strong><small>Contraste suave para ambientes com pouca luz.</small></span><span class="theme-selected" aria-hidden="true">✓</span></button>
+            </div>
+            <p class="account-theme-status" role="status" id="account-theme-status"></p>
+          </article>
+          <article class="panel account-settings-card account-security-card"><div><h2>Sua conta</h2><p id="settings-current-user">Conta master conectada</p><p>Gerencie sua senha ou cadastre os acessos da sua equipe.</p></div><div class="account-inline-actions"><a class="button button-light" href="/senha">Alterar minha senha</a><button class="button button-primary" type="button" id="settings-open-users">Gerenciar usuários</button></div></article>
+        </div>
+        <div id="settings-users" role="tabpanel" aria-labelledby="settings-users-tab" hidden>
+          <article class="panel account-settings-card">
+            <div class="account-users-heading"><div><h2>Usuários e acessos</h2><p>Cadastre a equipe, defina os perfis e controle quem pode entrar no Cortex.</p></div><button class="button button-primary" type="button" id="account-new">+ Criar usuário</button></div>
+            <div class="account-users-toolbar"><label>Buscar usuário<input type="search" id="account-search" placeholder="Nome, login ou e-mail" autocomplete="off"></label><label>Status<select id="account-filter"><option value="all">Todos os usuários</option><option value="active">Somente ativos</option><option value="inactive">Somente inativos</option></select></label><button class="button button-light" type="button" id="account-reload">Atualizar lista</button></div>
+            <p id="account-list-status" role="status" class="account-list-status">Carregando contas…</p>
+            <div class="account-table-scroll"><table class="account-users-table"><thead><tr><th>Nome / usuário</th><th>Perfil</th><th>Status</th><th>Primeiro acesso</th><th>Ações</th></tr></thead><tbody id="account-list"></tbody></table></div>
+          </article>
+          <details class="panel account-settings-card account-role-guide"><summary>O que cada perfil pode acessar?</summary><div id="account-role-guide"></div></details>
+        </div>
+        <dialog id="account-dialog" class="account-dialog" aria-labelledby="account-dialog-title">
+          <form id="account-form">
+            <div class="account-dialog-head"><div><h2 id="account-dialog-title">Criar usuário</h2><p id="account-dialog-description">Defina os dados e o acesso desta conta.</p></div><button type="button" id="account-close" aria-label="Fechar cadastro">×</button></div>
+            <div class="account-form-grid">
+              <label>Nome completo<input id="account-name" name="name" maxlength="120" minlength="2" required autocomplete="name"></label>
+              <label>Usuário de acesso<input id="account-username" name="username" maxlength="80" pattern="[A-Za-z0-9_.\-]+" required autocomplete="off" autocapitalize="none" spellcheck="false"><small>Letras, números, ponto, hífen ou sublinhado.</small></label>
+              <label>E-mail <span>(opcional)</span><input id="account-email" name="email" type="email" maxlength="160" autocomplete="email"></label>
+              <label>Perfil de acesso<select id="account-role" name="role" required></select></label>
+              <p id="account-role-description" class="account-field-help"></p>
+              <label class="account-wide">ID da pessoa no Movidesk <span>(opcional)</span><input id="account-movidesk" name="movidesk_person_id" maxlength="50" autocomplete="off"><small>Vínculo de identificação. Não altera permissões no Movidesk.</small></label>
+              <label class="account-wide" id="account-password-label"><span id="account-password-caption">Senha temporária</span><input id="account-password" name="password" type="password" minlength="8" maxlength="1024" autocomplete="new-password"><small id="account-password-help">Use pelo menos 8 caracteres. Entregue a senha diretamente à pessoa.</small></label>
+              <label class="account-check"><input type="checkbox" id="account-active" checked> Conta ativa</label>
+              <label class="account-check"><input type="checkbox" id="account-change" checked> Exigir troca de senha no próximo acesso</label>
+            </div>
+            <p id="account-self-help" class="account-field-help" hidden>Esta é sua conta. Para sua segurança, seu perfil e status são mantidos. Use “Alterar minha senha” para trocar a senha.</p>
+            <p id="account-form-message" role="alert" hidden></p>
+            <div class="account-dialog-actions"><button class="button button-light" type="button" id="account-cancel">Cancelar</button><button class="button button-primary" type="submit" id="account-save">Criar usuário</button></div>
+          </form>
+        </dialog>
+              <div id="settings-pins" role="tabpanel" aria-labelledby="settings-pins-tab" hidden>
+          <article class="panel account-settings-card">
+            <div class="panel-head">
+              <div>
+                <h2>PINs dos Técnicos e Treinadores</h2>
+                <p>Gerencie os PINs de 4 dígitos para identificação na Curadoria de Conhecimento e Treinamento da IA.</p>
+              </div>
+              <button class="button button-primary" id="btn-create-pin" type="button">+ Criar PIN</button>
+            </div>
+            <div class="account-users-toolbar">
+              <label class="account-search-field" style="max-width: 380px;">
+                <input id="pins-filter-query" type="search" placeholder="Buscar por nome ou PIN..." autocomplete="off">
+              </label>
+              <button class="button button-light" id="pins-refresh-btn" type="button">↻ Atualizar lista</button>
+            </div>
+            <div class="account-users-meta">
+              <span id="pins-counter">Carregando PINs...</span>
+            </div>
+            <div class="account-users-table-wrap">
+              <table class="account-users-table">
+                <thead>
+                  <tr>
+                    <th>Nome do Técnico / Colaborador</th>
+                    <th>PIN (4 dígitos)</th>
+                    <th>Status</th>
+                    <th>Criado por</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="pins-table-body">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
       </section>
+            <section class="view active" id="view-overview">
+        <!-- 1. Header Greeting & Clock -->
+        <div class="overview-header">
+          <div class="overview-greeting-col">
+            <div class="overview-greeting-title">
+              
+              <h1 id="overview-greeting">Bom dia, <span id="overview-greeting-name">Lucas Souza</span></h1>
+            </div>
+            <p class="overview-subtitle">Acompanhe os principais indicadores e o status operacional do DeskCortex.</p>
+          </div>
+          <div class="overview-clock-col">
+            <span class="overview-clock-date" id="overview-clock-date">Quarta-feira, 29 de Outubro de 2026</span>
+            <strong class="overview-clock-time" id="overview-clock-time">14:48</strong>
+          </div>
+        </div>
 
-      <section class="view" id="view-flow">
+        <!-- 2. Operational Sync Banner -->
+        <div class="cortex-sync-banner" id="overview-freshness">
+          <div class="sync-banner-info">
+            <div class="sync-banner-icon" id="sync-banner-icon"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></div>
+            <div>
+              <strong id="sync-banner-title">Sincronização concluída</strong>
+              <p id="sync-banner-desc">Os dados da base local estão atualizados.</p>
+            </div>
+          </div>
+          <div class="sync-banner-meta">
+            <div class="meta-item">
+              <svg class="meta-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              <div>
+                <small>Última carga</small>
+                <b id="sync-last-time">Hoje, 14:37</b>
+              </div>
+            </div>
+            <div class="meta-item">
+              <svg class="meta-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <div>
+                <small>Próxima tentativa</small>
+                <b id="sync-next-time">Automático · 00:00 (Brasília)</b>
+              </div>
+            </div>
+          </div>
+          <div class="sync-banner-actions">
+            <button class="button button-primary" id="sync-now" type="button">↻ Atualizar chamados</button>
+            <button class="button button-light" id="head-refresh" type="button">↻ Recarregar painel</button>
+          </div>
+        </div>
+
+        <!-- 3. Main Departments Grid (4 Primary Cards) -->
+        <div class="department-main-grid" id="department-cards">
+          <!-- Rendered dynamically: Suporte, Aguardando desenvolvimento, Desenvolvimento, Comercial -->
+        </div>
+
+        <!-- 4. Secondary Departments Horizontal Row -->
+        <div class="department-secondary-row" id="department-others">
+          <!-- Rendered dynamically: Implantação, Gestores, Diretoria, QA, Administradores -->
+        </div>
+
+        <!-- 5. Analytics Grid (3 Columns: Team Bars, Donut, Evolution) -->
+        <div class="overview-analytics-grid">
+          <article class="chart-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Distribuição de chamados por equipe</h2>
+              </div>
+              <div class="panel-filter-chip">Todos os abertos</div>
+            </div>
+            <div id="team-distribution-chart" class="cortex-chart-container"></div>
+          </article>
+
+          <article class="chart-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Status dos chamados</h2>
+              </div>
+            </div>
+            <div id="status-donut-chart" class="cortex-donut-container"></div>
+          </article>
+
+          <article class="chart-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Evolução por idade</h2>
+              </div>
+              <div class="panel-filter-chip">Faixas em dias</div>
+            </div>
+            <div id="flow-evolution-chart" class="cortex-chart-container"></div>
+          </article>
+        </div>
+
+        <!-- 6. Bottom Grid (Chamados Recentes & Atividades Recentes) -->
+        <div class="overview-bottom-grid">
+          <article class="panel table-panel">
+            <div class="panel-head">
+              <div>
+                <h2 id="priority-title">Chamados prioritários e recentes</h2>
+              </div>
+              <button class="text-button" id="priority-all" type="button">Ver todos na fila →</button>
+            </div>
+            <div class="table-scroll">
+              <table class="recent-tickets-table">
+                <thead>
+                  <tr>
+                    <th>CHAMADO</th>
+                    <th>STATUS</th>
+                    <th>TEMPO</th>
+                    <th>MOTIVO</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="priority-tickets">
+                  <!-- Rendered dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel activities-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Atividades recentes</h2>
+              </div>
+              <button class="text-button" id="overview-view-all-audit" type="button">Ver histórico →</button>
+            </div>
+            <div id="overview-recent-activities" class="activity-feed">
+              <!-- Rendered dynamically -->
+            </div>
+          </article>
+        </div>
+
+        <!-- Preserved Legacy Containers to maintain 100% JS compatibility -->
+        <div style="display:none;" aria-hidden="true">
+          <button id="export-departments" type="button"></button>
+          <div id="queue-tabs"></div>
+          <div id="decision-kpis"></div>
+          <div id="topic-bars"></div>
+          <div id="decision-actions"></div>
+          <div id="age-bars"></div>
+          <div id="client-ranking"></div>
+          <div id="intake-presets"></div>
+          <form id="intake-form"><input id="intake-start"><input id="intake-end"></form>
+          <div id="intake-status"></div>
+          <div id="intake-summary"></div>
+          <div id="intake-months"></div>
+          <div id="intake-topics"></div>
+          <span id="intake-recurring-month"></span>
+          <div id="intake-recurring"></div>
+        </div>
+      </section><section class="view" id="view-flow">
         <div class="flow-intro"><div><span class="section-label">RITMO DA OPERAÇÃO</span><h2>Entradas, resoluções e estoque</h2><p>Compare os chamados recebidos com a capacidade de resolução. Números históricos ficam identificados como provisórios até concluir a reconciliação.</p></div><div class="flow-selectors"><label>Chamados<select id="flow-type"><option value="public" selected>Públicos · clientes</option><option value="internal">Internos</option><option value="all">Todos</option></select></label><label>Período<select id="flow-days"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option></select></label></div></div>
         <div class="flow-alert" id="flow-alert" role="status">Carregando a vazão da base local…</div>
         <div class="flow-kpis" id="flow-kpis"></div>
@@ -131,16 +433,16 @@
         <!-- Sub-Tabs Navigation -->
         <div class="studio-tabs-bar">
           <button type="button" class="studio-tab-btn active" data-tab="tab-sandbox">
-            <span class="tab-icon">🛡️</span> Piloto & Sandbox
+            <span class="tab-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span> Piloto & Sandbox
           </button>
           <button type="button" class="studio-tab-btn" data-tab="tab-specialists">
-            <span class="tab-icon">🧠</span> Subagentes & Prompts (<span id="active-specialists-count">6</span>)
+            <span class="tab-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="4" y1="12" x2="20" y2="12"/></svg></span> Subagentes & Prompts (<span id="active-specialists-count">6</span>)
           </button>
           <button type="button" class="studio-tab-btn" data-tab="tab-knowledge">
-            <span class="tab-icon">📚</span> Fontes de Conhecimento
+            <span class="tab-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></span> Fontes de Conhecimento
           </button>
           <button type="button" class="studio-tab-btn" data-tab="tab-playground">
-            <span class="tab-icon">⚡</span> Playground & Raio-X
+            <span class="tab-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span> Playground & Raio-X
           </button>
         </div>
 
@@ -150,7 +452,7 @@
             <!-- Sandbox Card -->
             <article class="panel studio-card highlight-card">
               <div class="studio-card-head">
-                <div class="studio-icon-circle blue">🛡️</div>
+                <div class="studio-icon-circle blue"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
                 <div>
                   <h3>Piloto controlado de notas internas</h3>
                   <p>Autorize explicitamente as empresas que podem receber uma sugestão privada no Movidesk.</p>
@@ -183,8 +485,8 @@
                 </div>
 
                 <div class="whitelist-manager-block">
-                  <label class="section-sublabel">Solicitantes autorizados no Movidesk:</label>
-                  <p class="section-subnote">Trava obrigatória: somente a última mensagem escrita por um destes e-mails poderá gerar nota interna.</p>
+                  <label class="section-sublabel">Solicitantes autorizados no Movidesk (Opcional):</label>
+                  <p class="section-subnote">Se deixado vazio, qualquer pessoa das empresas autorizadas abaixo poderá gerar nota interna. Preencha apenas se quiser restringir a e-mails específicos.</p>
 
                   <div class="whitelist-input-row">
                     <input type="email" id="pilot-requester-input" placeholder="Ex.: lucas.teste@alternativa.com.br">
@@ -218,7 +520,7 @@
                   </div>
                   <p id="pilot-toggle-save-status" class="section-subnote" role="status" aria-live="polite"></p>
                   <div class="security-callout">
-                    <span class="shield-icon">🔒</span>
+                    <span class="shield-icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
                     <div>
                       <b>Blindagem de Segurança:</b> Respostas públicas ao cliente permanecem <strong>bloqueadas</strong>. O atendente sempre confere o procedimento antes do envio ao cliente final.
                     </div>
@@ -245,7 +547,7 @@
             <!-- Operational Limits Card -->
             <article class="panel studio-card">
               <div class="studio-card-head">
-                <div class="studio-icon-circle purple">⚙️</div>
+                <div class="studio-icon-circle purple"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
                 <div>
                   <h3>Ritmo & Limites Operacionais</h3>
                   <p>Controle de taxa, janelas de atendimento e concorrência para preservar a API do Movidesk e Gemini.</p>
@@ -326,7 +628,7 @@
                   <span></span>
                 </label>
               </div>
-              <h3>📖 Artigos Oficiais (KB)</h3>
+              <h3>Artigos Oficiais (KB)</h3>
               <div class="source-count-number">1.400</div>
               <p>Manuais e procedimentos revisados pela equipe técnica da Alternativa. Prioridade número 1 no RAG.</p>
               <div class="source-footer-pill">Prioridade Alta</div>
@@ -341,7 +643,7 @@
                   <span></span>
                 </label>
               </div>
-              <h3>🥇 Chamados Validados (Gold)</h3>
+              <h3>Chamados Validados (Gold)</h3>
               <div class="source-count-number">2.832</div>
               <p>Chamados reais com confirmação de sucesso pelo cliente ou correção de desenvolvimento homologada.</p>
               <div class="source-footer-pill">Prioridade Alta</div>
@@ -356,7 +658,7 @@
                   <span></span>
                 </label>
               </div>
-              <h3>🥈 Histórico Investigativo (Silver)</h3>
+              <h3>Histórico Investigativo (Silver)</h3>
               <div class="source-count-number">25.203</div>
               <p>Procedimentos padrão documentados em chamados históricos. Ajudam a investigar causas incomuns.</p>
               <div class="source-footer-pill">Prioridade Média</div>
@@ -371,7 +673,7 @@
                   <span></span>
                 </label>
               </div>
-              <h3>📘 Manuais Técnicos</h3>
+              <h3>Manuais Técnicos</h3>
               <div class="source-count-number">158</div>
               <p>Materiais de integrações e parametrização detalhada de módulos do ERP Master.</p>
               <div class="source-footer-pill">Prioridade Suplementar</div>
@@ -409,20 +711,20 @@
                 <div class="scenario-dropdown-menu" id="scenario-dropdown-menu" hidden>
                   <div class="dropdown-section-title">Trocar Cenário de Teste:</div>
                   <button type="button" class="scenario-option-btn scenario-btn active" data-scenario="loja_integrada">
-                    <span>🔌</span> Loja Integrada: Produto não sobe
+                     Loja Integrada: Produto não sobe
                   </button>
                   <button type="button" class="scenario-option-btn scenario-btn" data-scenario="mercado_livre">
-                    <span>🛒</span> Mercado Livre: Pedido não desce
+                     Mercado Livre: Pedido não desce
                   </button>
                   <button type="button" class="scenario-option-btn scenario-btn" data-scenario="etiqueta_fr3">
-                    <span>🏷️</span> FastReport FR3: Etiqueta cortando
+                     FastReport FR3: Etiqueta cortando
                   </button>
                   <button type="button" class="scenario-option-btn scenario-btn" data-scenario="nfe_rejeicao">
-                    <span>📑</span> SEFAZ: Rejeição NF-e 539
+                     SEFAZ: Rejeição NF-e 539
                   </button>
                   <div class="dropdown-divider"></div>
                   <button type="button" class="scenario-option-btn" id="btn-new-ticket">
-                    <span>➕</span> Novo Chamado em Branco
+                     Novo Chamado em Branco
                   </button>
                 </div>
               </div>
@@ -652,7 +954,7 @@
                 </label>
                 <label>
                   Ícone / Emoji:
-                  <input type="text" id="spec-edit-icon" required maxlength="4" style="max-width:80px; text-align:center" value="🧠">
+                  <input type="text" id="spec-edit-icon" required maxlength="4" style="max-width:80px; text-align:center" value="AI">
                 </label>
               </div>
 
@@ -730,10 +1032,40 @@
     </div>
   </main>
 </div>
-  <script src="/tech-assets/admin-console.js?v=20261026-unified-scroll-2" defer></script>
+  <script src="/tech-assets/admin-console.js?v=20261029-settings" defer></script>
+  <script src="/tech-assets/account-settings.js?v=1" defer></script>
   <script src="/tech-assets/technician-workbench.js?v=5" defer></script>
   <script src="/tech-assets/client-inventory.js?v=20261014-1" defer></script>
   <script src="/tech-assets/agent-center.js?v=20261006-enterprise" defer></script>
+  <dialog class="account-user-modal" id="pin-modal">
+    <form id="pin-modal-form" method="dialog">
+      <div class="account-modal-head">
+        <h3 id="pin-modal-title">Novo PIN de Treinamento</h3>
+        <button class="account-modal-close" id="pin-modal-close" type="button" aria-label="Fechar">✕</button>
+      </div>
+      <div class="account-modal-body">
+        <input type="hidden" id="pin-modal-id">
+        <label>
+          <span>Nome do Colaborador *</span>
+          <input id="pin-modal-name" type="text" placeholder="Ex: Renan, Luiz Araújo, Dev Convidado" required minlength="2" maxlength="100">
+        </label>
+        <label>
+          <span>PIN de 4 dígitos numéricos *</span>
+          <input id="pin-modal-code" type="text" placeholder="Ex: 3521" required pattern="\d{4}" maxlength="4" style="font-size: 18px; letter-spacing: 4px; font-weight: 700; width: 140px;">
+          <small style="color: var(--cx-text-muted); display:block; margin-top:4px;">Apenas 4 números que o técnico digitará para validar o chamado.</small>
+        </label>
+        <label class="checkbox-field" style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+          <input id="pin-modal-active" type="checkbox" checked>
+          <span>PIN ativo para treinamento</span>
+        </label>
+        <div id="pin-modal-error" class="notice notice-error" style="margin-top:12px; color:var(--cx-danger);" hidden></div>
+      </div>
+      <div class="account-modal-footer">
+        <button class="button button-light" id="pin-modal-cancel" type="button">Cancelar</button>
+        <button class="button button-primary" id="pin-modal-submit" type="submit">Salvar PIN</button>
+      </div>
+    </form>
+  </dialog>
 </body></html>
 
 

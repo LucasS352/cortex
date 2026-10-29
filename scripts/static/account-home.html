@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07182d">
+  <title>Cortex · Central de Inteligência</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, -apple-system, sans-serif; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; min-height: 100svh;
+      display: grid; place-items: center; padding: 24px 16px;
+      background: radial-gradient(ellipse at top, #0f2444, #071222 70%);
+      color: #f1f5f9;
+    }
+    main {
+      width: min(100%, 540px); padding: 36px 32px;
+      background: #0d1b2e; border: 1px solid #1f3756;
+      border-radius: 20px; box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+      text-align: center;
+    }
+    .brand {
+      display: flex; justify-content: center; margin-bottom: 28px;
+    }
+    .brand img {
+      max-width: 220px; height: auto; border-radius: 8px;
+    }
+    .welcome-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 20px;
+      background: #142842; border: 1px solid #284c77;
+      color: #60a5fa; font-size: 13px; font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .welcome-badge span {
+      width: 8px; height: 8px; border-radius: 50%; background: #34d399;
+      box-shadow: 0 0 8px #34d399;
+    }
+    h1 {
+      font-size: 26px; margin: 0 0 10px; letter-spacing: -.6px;
+    }
+    p.user-role {
+      font-size: 14px; color: #94a8c2; margin: 0 0 24px;
+    }
+    .status-card {
+      background: #071220; border: 1px solid #1a324f; border-radius: 12px;
+      padding: 24px 20px; margin: 24px 0; text-align: left;
+    }
+    .status-card h2 {
+      font-size: 15px; margin: 0 0 8px; color: #e2e8f0;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .status-card p {
+      font-size: 13px; line-height: 1.6; color: #889bb4; margin: 0;
+    }
+    .actions {
+      display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 28px;
+    }
+    .button {
+      padding: 11px 20px; border-radius: 9px; font-size: 13px; font-weight: 600;
+      text-decoration: none; cursor: pointer; transition: .15s;
+    }
+    .button-quiet {
+      background: #14253a; color: #cbd7e6; border: 1px solid #284466;
+    }
+    .button-quiet:hover { background: #1c324e; border-color: #3b5f8a; color: #fff; }
+    .button-danger {
+      background: transparent; color: #f87171; border: 1px solid #7f1d1d;
+    }
+    .button-danger:hover { background: #451a1a; color: #fca5a5; }
+    footer {
+      margin-top: 30px; padding-top: 20px; border-top: 1px solid #1e334d;
+      color: #6d8299; font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">
+      <img src="/tech-assets/cortex-logo-header.png" alt="Cortex Business Intelligence">
+    </div>
+    <div class="welcome-badge">
+      <span></span> Conectado com sucesso
+    </div>
+    <h1>Olá, <!-- NAME --></h1>
+    <p class="user-role">Perfil de acesso: <strong><!-- ROLE --></strong></p>
+
+    <div class="status-card">
+      <h2>✦ Ambiente em preparação</h2>
+      <p>O seu painel operacional personalizado está em fase final de configuração. Em breve você terá acesso direto às suas métricas e ferramentas exclusivas.</p>
+    </div>
+
+    <div class="actions">
+      <a href="/senha" class="button button-quiet">Alterar minha senha</a>
+      <a href="/logout" class="button button-danger">Sair da conta</a>
+    </div>
+
+    <footer>Alternativa Sistemas · Central de Inteligência</footer>
+  </main>
+</body>
+</html>

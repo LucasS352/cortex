@@ -84,7 +84,7 @@ def effective_settings(settings, state_file=None):
         pilot_ready, automatic_enabled = False, False
     else:
         pilot_ready = (not bool(state.get('pilot_paused', True)) and
-                       bool(organizations) and bool(requester_emails))
+                       bool(organizations))
         automatic_enabled = bool(state.get('auto_internal_note', False))
     enabled = pilot_ready and automatic_enabled
     if settings.mode == 'disabled':
@@ -287,7 +287,7 @@ def eligible(ticket, settings):
     history = actions(ticket, settings)
     if not history or not customer_action(history[-1], ticket):
         return False, 'sem_nova_mensagem_do_cliente'
-    if requester_email(history[-1], ticket) not in settings.requester_emails:
+    if settings.requester_emails and requester_email(history[-1], ticket) not in settings.requester_emails:
         return False, 'solicitante_fora_do_piloto'
     return True, ''
 

@@ -40,11 +40,12 @@ def eligibility(ticket: dict | None, settings: dict, *, now: datetime | None = N
     elif org_id not in settings.get("pilot_organization_ids", []):
         reasons.append("Empresa fora da lista do piloto.")
     authorized_emails = {str(value).strip().casefold()
-                         for value in settings.get("pilot_requester_emails", [])}
+                         for value in settings.get("pilot_requester_emails", [])
+                         if str(value).strip()}
     client_emails = {str(client.get("email") or "").strip().casefold()
                      for client in (ticket.get("clients") or [])
                      if not client.get("isDeleted") and str(client.get("profileType")) != "1"}
-    if not authorized_emails or not (authorized_emails & client_emails):
+    if authorized_emails and not (authorized_emails & client_emails):
         reasons.append("Solicitante fora da lista do piloto.")
     if str(ticket.get("type")) != "2":
         reasons.append("A origem precisa ser um chamado público.")

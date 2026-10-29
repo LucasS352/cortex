@@ -3,43 +3,55 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0b1220">
-  <title>Entrar · Alternativa Sistemas</title>
-  <style>
-    :root { color-scheme: dark; font-family: system-ui, -apple-system, sans-serif; }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; min-height: 100svh; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(ellipse at top, #172a47, #0b1220 70%); color: #f1f5f9; }
-    main { width: min(100%, 420px); padding: 32px; background: #111c2e; border: 1px solid #2b3b52; border-radius: 20px; box-shadow: 0 24px 80px #0005; }
-    .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 36px; }
-    .mark { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: #2675e8; font-size: 25px; font-weight: 800; }
-    .brand strong { display: block; font-size: 19px; letter-spacing: -.4px; }
-    .brand small { color: #a6b6cb; font-size: 12px; }
-    h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.6px; }
-    p { color: #a6b6cb; line-height: 1.5; margin: 0 0 26px; font-size: 14px; }
-    label { display: block; margin: 20px 0 8px; font-size: 14px; font-weight: 600; }
-    input { width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid #435571; border-radius: 9px; background: #0b1423; color: #fff; font: inherit; }
-    input:focus-visible, button:focus-visible { outline: 3px solid #83b6ff; outline-offset: 3px; }
-    button { width: 100%; min-height: 48px; margin-top: 26px; padding: 12px; border: 0; border-radius: 9px; background: #2675e8; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
-    button:hover { background: #3485fb; }
-    footer { margin-top: 28px; padding-top: 20px; border-top: 1px solid #2b3b52; color: #a6b6cb; font-size: 12px; text-align: center; }
-    .error { margin: 20px 0 0; padding: 12px; background: #482530; border: 1px solid #ab5368; border-radius: 8px; color: #ffd1da; }
-    @media (max-width: 380px) { main { padding: 24px; } }
-  </style>
+  <meta name="theme-color" content="#061225">
+  <title>Entrar · Cortex | Alternativa Sistemas</title>
+  <link rel="stylesheet" href="/tech-assets/login/login.css?v=3">
+  <script src="/tech-assets/login/login-form.js?v=2" defer></script>
+  <script src="/tech-assets/login/neural-scene.js?v=5" defer></script>
 </head>
 <body>
-  <main>
-    <div class="brand"><span class="mark" aria-hidden="true">A</span><div><strong>Alternativa</strong><small>SISTEMAS</small></div></div>
-    <h1>Acesse o Cortex</h1>
-    <p>Entre com suas credenciais para acessar a central de inteligência.</p>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M3 22v-3a7 7 0 0 1 7-7h4a7 7 0 0 1 7 7v3"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="12" rx="2"/><path d="M7 10V6a5 5 0 0 1 10 0v4M12 15v3"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-document" viewBox="0 0 32 32"><path d="M8 3h11l7 7v19H8zM19 3v8h7M12 16h10M12 21h10M12 25h6"/></symbol>
+    <symbol id="i-chip" viewBox="0 0 32 32"><rect x="7" y="7" width="18" height="18" rx="2"/><path d="M12 1v6M20 1v6M12 25v6M20 25v6M1 12h6M1 20h6M25 12h6M25 20h6M12 21V11h5v10M12 16h5M21 11v10"/></symbol>
+    <symbol id="i-headset" viewBox="0 0 32 32"><path d="M5 19v-5a11 11 0 0 1 22 0v5M27 23c0 5-6 6-11 6"/><rect x="3" y="15" width="6" height="10" rx="3"/><rect x="23" y="15" width="6" height="10" rx="3"/><path d="M14 29h5"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 32 32"><path d="M5 20h5v10H5zM14 12h5v18h-5zM23 3h5v27h-5z"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M3 12h17M14 5l7 7-7 7"/></symbol>
+  </defs></svg>
+  <header class="institutional-brand"><img src="/tech-assets/login/alternativa.svg" alt="Alternativa Sistemas" width="1000" height="220"></header>
+  <div class="neural-scene" aria-hidden="true">
+    <div class="brain-region"><img class="brain-structure" src="/tech-assets/login/neural-brain.png" alt="" width="1392" height="1120" fetchpriority="high"></div>
+    <canvas id="neural-static"></canvas>
+    <canvas id="neural-canvas"></canvas>
+    <canvas id="neural-wave"></canvas>
+    <div class="floating-modules">
+      <div class="neural-module module-knowledge"><svg><use href="#i-document"/></svg><span>CONHECIMENTO</span></div>
+      <div class="neural-module module-ai"><svg><use href="#i-chip"/></svg><span>IA</span></div>
+      <div class="neural-module module-support"><svg><use href="#i-headset"/></svg><span>SUPORTE</span></div>
+      <div class="neural-module module-results"><svg><use href="#i-chart"/></svg><span>RESULTADOS</span></div>
+    </div>
+  </div>
+  <main class="login-panel" aria-labelledby="login-title">
+    <img class="cortex-brand" src="/tech-assets/login/cortex-logo.png?v=2" alt="Cortex Business Intelligence" width="2138" height="735">
+    <h1 id="login-title">Bem-vindo ao <span>Cortex</span></h1>
+    <p class="intro">Acesse sua central de inteligência.</p>
     <!-- LOGIN_ERROR -->
-    <form method="post" action="/login">
+    <form method="post" action="/login" id="login-form">
       <label for="user">Usuário</label>
-      <input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="80" required autofocus>
+      <div class="input-wrap"><svg aria-hidden="true"><use href="#i-user"/></svg><input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="80" placeholder="Digite seu usuário" required></div>
       <label for="pass">Senha</label>
-      <input id="pass" type="password" name="password" autocomplete="current-password" maxlength="1024" required>
-      <button type="submit">Entrar</button>
+      <div class="input-wrap"><svg aria-hidden="true"><use href="#i-lock"/></svg><input id="pass" type="password" name="password" autocomplete="current-password" maxlength="1024" placeholder="Digite sua senha" required><button class="password-toggle" type="button" aria-label="Mostrar senha" aria-pressed="false" aria-controls="pass" hidden><svg aria-hidden="true"><use href="#i-eye"/><path class="eye-slash" d="m3 3 18 18"/></svg></button></div>
+      <div class="form-options">
+        <label class="remember"><input type="hidden" name="remember" value="0"><input type="checkbox" name="remember" value="1" checked><span>Lembrar-me</span></label>
+        <button class="recovery-link" type="button" aria-expanded="false" aria-controls="recovery-help" hidden>Esqueci minha senha</button>
+      </div>
+      <p id="recovery-help" class="recovery-help" hidden>Para redefinir sua senha, entre em contato com o administrador da Alternativa Sistemas.</p>
+      <button class="submit-button" type="submit"><span>Entrar</span><svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      <span class="sr-only" id="login-status" role="status" aria-live="polite"></span>
     </form>
-    <footer>Alternativa Sistemas · Acesso restrito</footer>
+    <footer>Acesso restrito <span aria-hidden="true">•</span> Alternativa Sistemas</footer>
   </main>
 </body>
 </html>

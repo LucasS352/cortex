@@ -22,6 +22,24 @@ _technician_failures: dict[str, list[float]] = {}
 _technician_failure_lock = threading.Lock()
 
 
+def _lookup_db_pin(candidate: str) -> str | None:
+    try:
+        from config import POSTGRES_DSN
+        import psycopg
+        with psycopg.connect(POSTGRES_DSN, connect_timeout=3) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT name FROM cortex_technician_pins WHERE pin = %s AND is_active = true LIMIT 1",
+                    (candidate,)
+                )
+                row = cur.fetchone()
+                if row:
+                    return str(row[0])
+    except Exception:
+        pass
+    return None
+
+
 def _technician_name(pin: str, request: Request) -> str:
     ip = request.client.host if request.client else 'unknown'
     now = time.time()
@@ -37,6 +55,14 @@ def _technician_name(pin: str, request: Request) -> str:
         _technician_failures[ip] = attempts
         if len(attempts) >= 8:
             raise HTTPException(429, 'Muitas tentativas. Aguarde alguns minutos.')
+
+        # 1. Check database first
+        db_name = _lookup_db_pin(candidate)
+        if db_name:
+            _technician_failures.pop(ip, None)
+            return db_name
+
+        # 2. Check fallback environment
         for code, name in identities:
             if hmac.compare_digest(candidate.encode(), code.encode()):
                 _technician_failures.pop(ip, None)
