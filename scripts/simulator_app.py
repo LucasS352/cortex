@@ -119,7 +119,7 @@ app = FastAPI(title="DeskCortex — Simulador de Atendimento", lifespan=lifespan
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
-    return Response(status_code=204)
+    return FileResponse(Path(__file__).parent / "static" / "favicon.ico", media_type="image/x-icon")
 
 
 @app.exception_handler(RequestValidationError)

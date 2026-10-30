@@ -1419,6 +1419,7 @@ body.overview-page {
   flex-direction: column;
   height: 100vh;
   box-sizing: border-box;
+  background: linear-gradient(90deg, #07182d 7%, #031220 96%);
 }
 
 .sidebar nav {
@@ -1439,13 +1440,23 @@ body.overview-page {
 
 .sidebar-logo-img {
   width: 100%;
-  max-width: 195px;
+  max-width: 220px;
   height: auto;
-  max-height: 50px;
+  max-height: 82px;
   object-fit: contain;
   display: block;
-  filter: drop-shadow(0 0 8px rgba(14, 165, 233, 0.3));
   transition: all 0.2s ease;
+}
+.sidebar-brand { padding: 0 0 12px; justify-content: center; }
+.cortex-brand-logo { width: 100%; justify-content: center; }
+.sidebar .workspace { min-height: 47px; justify-content: flex-start; }
+.sidebar .workspace-symbol { display: block; width: 48px; height: 33px; object-fit: contain; flex: none; }
+html[data-theme] body:not(.overview-page) .sync-strip { display: none; }
+.sidebar .workspace-label { min-width: 0; }
+.app-shell.collapsed .sidebar .workspace { display: none; }
+@media (max-width: 780px) {
+  .sidebar .sidebar-brand,
+  .sidebar .workspace { display: none; }
 }
 
 .app-shell.collapsed .sidebar {

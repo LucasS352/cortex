@@ -22,6 +22,7 @@ LOGIN_ASSETS = frozenset({
     "/tech-assets/login/login.css", "/tech-assets/login/login-form.js",
     "/tech-assets/login/neural-scene.js", "/tech-assets/login/alternativa.svg",
     "/tech-assets/login/cortex-logo.png", "/tech-assets/login/neural-brain.png",
+    "/tech-assets/cortex-favicon.png",
 })
 _failures: dict[str, list[float]] = {}
 
@@ -236,6 +237,11 @@ def _database_ready() -> bool:
 
 async def gate(request: Request, call_next):
     path = request.url.path
+    if request.method in {"GET", "HEAD"} and path == "/favicon.ico":
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "public, max-age=3600"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
     if request.method in {"GET", "HEAD"} and path in LOGIN_ASSETS:
         response = await call_next(request)
         response.headers["Cache-Control"] = "public, max-age=3600"

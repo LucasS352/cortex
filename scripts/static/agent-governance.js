@@ -115,9 +115,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const policyGrid = document.createElement("div");
   policyGrid.className = "gov-policy-grid";
   company.before(policyGrid);
-  const people = document.createElement("div");
-  people.append(company, requester);
-  policyGrid.append(people, actions);
+  const policyOptions = document.createElement("div");
+  policyOptions.className = "gov-policy-options";
+  policyOptions.append(requester, actions);
+  policyGrid.append(company, policyOptions);
   $("setting-sandbox-mode")
     .closest(".toggle-setting-row")
     .querySelector("b").textContent = "Governança operacional habilitada";

@@ -113,14 +113,19 @@ function renderPilotCompanies() {
     </button>`).join('');
 }
 
+let pilotCompanyRequest = 0;
+let pilotCompanySearchTimer;
 async function loadPilotCompanies(search = '') {
+  const request = ++pilotCompanyRequest;
   const container = $('pilot-company-results');
   if (container) container.innerHTML = '<p class="muted">Consultando empresas…</p>';
   try {
     const data = await api(`/api/admin/pilot/companies?search=${encodeURIComponent(search)}&limit=30`);
+    if (request !== pilotCompanyRequest) return;
     studioState.pilotCompanies = data.items || [];
     renderPilotCompanies();
   } catch (err) {
+    if (request !== pilotCompanyRequest) return;
     if (container) container.innerHTML = '<p class="muted">Não foi possível consultar as empresas.</p>';
     showError(err.message);
   }
@@ -872,9 +877,20 @@ function initAgentStudio() {
       addPilotRequesterEmail(e.currentTarget.value);
     }
   });
-  $('pilot-company-search-btn')?.addEventListener('click', () => loadPilotCompanies($('pilot-company-search').value.trim()));
+  $('pilot-company-search-btn')?.addEventListener('click', () => {
+    clearTimeout(pilotCompanySearchTimer);
+    loadPilotCompanies($('pilot-company-search').value.trim());
+  });
+  $('pilot-company-search')?.addEventListener('input', (e) => {
+    clearTimeout(pilotCompanySearchTimer);
+    pilotCompanySearchTimer = setTimeout(() => loadPilotCompanies(e.target.value.trim()), 300);
+  });
   $('pilot-company-search')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); loadPilotCompanies(e.currentTarget.value.trim()); }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      clearTimeout(pilotCompanySearchTimer);
+      loadPilotCompanies(e.currentTarget.value.trim());
+    }
   });
   $('pilot-company-results')?.addEventListener('click', async (e) => {
     const row = e.target.closest('.pilot-company-row');

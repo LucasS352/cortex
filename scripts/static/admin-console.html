@@ -7,19 +7,19 @@
   <meta name="apple-mobile-web-app-title" content="Cortex">
   <title>Cortex · Central de Inteligência</title>
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('cortex-theme')==='light'?'light':'dark'}catch(_){document.documentElement.dataset.theme='dark'}</script>
-  <link rel="icon" type="image/png" href="/tech-assets/cortex-brain-v2.png">
-  <link rel="apple-touch-icon" href="/tech-assets/cortex-brain-v2.png">
+  <link rel="icon" type="image/png" href="/tech-assets/cortex-favicon.png?v=3">
+  <link rel="apple-touch-icon" href="/tech-assets/cortex-favicon.png?v=3">
   <link rel="manifest" href="/tech-assets/cortex.webmanifest" crossorigin="use-credentials">
   <link rel="stylesheet" href="/tech-assets/admin-console.css?v=20261005-11">
   <link rel="stylesheet" href="/tech-assets/overview-dashboard.css?v=20261005-1">
   <link rel="stylesheet" href="/tech-assets/admin-theme.css?v=20261005-2">
   <link rel="stylesheet" href="/tech-assets/cortex-polish.css?v=20261026-unified-scroll">
   <link rel="stylesheet" href="/tech-assets/agent-center.css?v=20261013-manual-pull">
-  <link rel="stylesheet" href="/tech-assets/agent-governance.css?v=1">
+  <link rel="stylesheet" href="/tech-assets/agent-governance.css?v=2">
   <link rel="stylesheet" href="/tech-assets/technician-workbench.css?v=5">
   <link rel="stylesheet" href="/tech-assets/client-inventory.css?v=20261014-1">
   <link rel="stylesheet" href="/tech-assets/account-settings.css?v=1">
-  <link rel="stylesheet" href="/tech-assets/cortex-design-system.css?v=1">
+  <link rel="stylesheet" href="/tech-assets/cortex-design-system.css?v=7">
 </head>
 <body class="overview-page">
 <div class="app-shell" id="app-shell">
@@ -31,8 +31,8 @@
       </div>
 
     <div class="workspace">
-      <span class="workspace-icon">A</span>
-      <span><b>Alternativa Sistemas</b><small>Ambiente local · Admin</small></span>
+      <img class="workspace-symbol" src="/tech-assets/alternativa-symbol.png?v=1" alt="" aria-hidden="true">
+      <span class="workspace-label"><b>Alternativa Sistemas</b><small>Admin</small></span>
       <span class="chevron">⌄</span>
     </div>
 
@@ -97,7 +97,7 @@
       <div class="nav-group">
         <div class="nav-group-label">ADMINISTRAÇÃO</div>
         <button class="nav-item" data-view="settings" aria-label="Configurações" data-tooltip="Configurações">
-          <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
           <span class="nav-text"><span class="nav-full">Configurações</span><span class="nav-mobile">Ajustes</span></span>
         </button>
       </div>
@@ -130,13 +130,6 @@
           <div class="eyebrow">ALTERNATIVA SISTEMAS <span id="snapshot-date">· sincronizando</span></div>
           <h1 id="page-title">Visão geral</h1>
           <p id="page-subtitle">Priorize o atendimento, acompanhe dependências e investigue os assuntos que concentram chamados.</p>
-        </div>
-        <div class="page-head-right">
-          
-          <div class="page-actions">
-            <button class="button button-primary" id="sync-now" type="button">↻ Atualizar chamados</button>
-            <button class="button button-light" id="head-refresh" type="button"><span>↻</span> Recarregar painel</button>
-          </div>
         </div>
       </section>
       <section class="sync-strip panel" aria-label="Atualização de chamados"><div class="sync-strip-main"><span class="sync-dot" id="sync-dot" aria-hidden="true"></span><div><strong id="sync-run-label">Consultando atualização…</strong><small id="sync-run-detail">O painel mostra a última carga concluída.</small></div></div><details class="sync-schedule" id="sync-schedule"><summary id="sync-schedule-summary">Agendar atualização</summary><div class="sync-schedule-fields"><label class="sync-enabled"><input id="sync-enabled" type="checkbox"> Atualizar automaticamente</label><label>Horário de Brasília <input id="sync-time" type="time" value="00:00"></label><button class="button button-quiet" id="sync-schedule-save" type="button">Salvar horário</button><p>A carga completa roda uma vez ao dia enquanto o servidor Cortex estiver ligado. Entre as cargas, o webhook atualiza cada chamado alterado em tempo real. Nenhum desses fluxos aprova conteúdo para o agente.</p></div></details></section>
@@ -1037,8 +1030,8 @@
   <script src="/tech-assets/account-settings.js?v=1" defer></script>
   <script src="/tech-assets/technician-workbench.js?v=5" defer></script>
   <script src="/tech-assets/client-inventory.js?v=20261014-1" defer></script>
-  <script src="/tech-assets/agent-center.js?v=20261029-governance" defer></script>
-  <script src="/tech-assets/agent-governance.js?v=1" defer></script>
+  <script src="/tech-assets/agent-center.js?v=20261030-company-search" defer></script>
+  <script src="/tech-assets/agent-governance.js?v=2" defer></script>
   <dialog class="account-user-modal" id="pin-modal">
     <form id="pin-modal-form" method="dialog">
       <div class="account-modal-head">
