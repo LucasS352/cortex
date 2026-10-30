@@ -672,7 +672,7 @@ async function loadWebhookReceipts(){
     const noteToggle=$('setting-auto-internal-note');
     if(noteToggle){noteToggle.checked=!!d.requested_auto_internal_note;noteToggle.disabled=d.ceiling_mode!=='internal_note';noteToggle.title=noteToggle.disabled?'O .env.server precisa usar CORTEX_AUTONOTE_MODE=internal_note.':'';}
     const labels={received:'Na fila',processing:'Em análise',retry:'Aguardando nova tentativa',completed:'Concluído',preview:'Prévia gerada',skipped:'Sem geração necessária',failed:'Falha',needs_review:'Requer revisão'};
-    $('webhook-list').innerHTML=d.recent.length?d.recent.map(x=>`<div class="webhook-event"><b>#${esc(x.ticket_id)}</b> <span>${dateTime(x.received_at)}</span> <small>${esc(labels[x.state]||x.state)} — ${esc(x.last_error||x.outcome||'')}</small></div>`).join(''):'<p class="muted">Nenhum evento recebido.</p>';
+    $('webhook-list').innerHTML=d.recent.length?d.recent.map(x=>`<div class="webhook-event"><b>#${esc(x.ticket_id)}</b> <span>${dateTime(x.received_at)}</span> <small>${x.outcome==='reanalise_agendada'?'Mensagem atualizada — nova análise agendada':`${esc(labels[x.state]||x.state)} — ${esc(x.last_error||x.outcome||'')}`}</small></div>`).join(''):'<p class="muted">Nenhum evento recebido.</p>';
     $('webhook-notes').innerHTML=(d.notes||[]).map(n=>`<details><summary>Nota #${esc(n.ticket_id)} · ${esc(n.state)}</summary><pre style="white-space:pre-wrap">${esc(n.text)}</pre></details>`).join('');
     return d;
   }catch(e){$('webhook-summary').textContent='Não foi possível consultar o worker.';showError(e.message);}

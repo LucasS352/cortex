@@ -787,6 +787,13 @@ def claim(settings):
             WHERE state='needs_review' AND outcome='contexto_insuficiente'
             AND EXISTS (SELECT 1 FROM internal_note_outbox o
                 WHERE o.ticket_id=webhook_events.ticket_id AND o.state='review')""", (now,))
+        # Old workers discarded a prepared note on any status transition,
+        # including Novo -> Triagem. Recover only that unsent failure class.
+        db.execute("""UPDATE webhook_events SET state='retry',attempts=0,available_at=?,
+            outcome='reavaliacao_contexto',finished_at=NULL
+            WHERE state='skipped' AND outcome='mensagem_alterada_durante_analise'
+            AND EXISTS (SELECT 1 FROM internal_note_outbox o
+                WHERE o.ticket_id=webhook_events.ticket_id AND o.state IN ('prepared','preview'))""", (now,))
         # Serialize all jobs even if another worker is accidentally started.
         if db.execute("SELECT 1 FROM webhook_events WHERE state='processing' AND lease_until>? LIMIT 1", (now,)).fetchone():
             return None
@@ -973,9 +980,26 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
         finish(event, 'completed', 'nota_confirmada_no_movidesk')
         return
     ok, reason = eligible(fresh, settings)
-    if not ok or identity(fresh, settings)[0] != message_key or fresh.get('status') != ticket.get('status'):
-        finish(event, 'skipped', reason or 'mensagem_alterada_durante_analise')
+    if not ok:
+        finish(event, 'skipped', reason)
         return
+    fresh_key, fresh_action = identity(fresh, settings)
+    if fresh_key != message_key:
+        # Preserve the original webhook for audit and durably schedule the
+        # current message. An edited action must not be compared forever with
+        # the old webhook Description, nor receive the obsolete prepared note.
+        from movidesk_webhook import enqueue_payload
+        followup = {'Id': int(fresh['id']), 'Actions': [{'Id': int(fresh_action)}],
+                    'CortexReanalysis': fresh_key}
+        if manual_pull_event(event):
+            followup['CortexManualPull'] = True
+        enqueue_payload(followup)
+        trace(event, 'reanalysis_queued')
+        finish(event, 'skipped', 'reanalise_agendada')
+        return
+    # Status is not part of message identity. The mandatory scope below checks
+    # the fresh status/team: normal support transitions may proceed, while
+    # closed/development/commercial tickets remain blocked.
     try:
         with ticket_agent_control.publication_guard(ticket['id']) as allowed:
             if not allowed:

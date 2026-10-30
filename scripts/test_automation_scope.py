@@ -141,3 +141,25 @@ class WorkerAdmissionTests(unittest.TestCase):
         self.f.enqueue(Actions=[{'Id':1}])
         worker.run_once(self.f.settings,self.f.api,generate)
         self.assertFalse(self.f.api.writes)
+
+    def test_status_transitions_during_generation_use_current_scope_not_exact_status_equality(self):
+        import movidesk_webhook as receiver
+        for status, expected in [('SUP - Triagem', 'nota_interna_publicada'),
+                                 ('Em atendimento', 'nota_interna_publicada'),
+                                 ('DEV - Novo', 'status_bloqueado_desenvolvimento'),
+                                 ('Comercial', 'status_bloqueado_comercial'),
+                                 ('Fechado', 'chamado_finalizado')]:
+            with self.subTest(status=status):
+                with receiver._connect() as db:
+                    db.execute('DELETE FROM webhook_events')
+                    db.execute('DELETE FROM internal_note_outbox')
+                    db.execute('DELETE FROM ticket_webhook_snapshots')
+                self.f.api = fixtures.FakeApi()
+                self.f.api.data.update({**TICKET, 'status': 'Novo'})
+                def generate(*_):
+                    self.f.api.data['status'] = status
+                    return {'reply': 'Resposta preparada para a mesma mensagem.'}
+                self.f.enqueue()
+                worker.run_once(self.f.settings, self.f.api, generate)
+                self.assertEqual(receiver.receipt_summary()['recent'][0]['outcome'], expected)
+                self.assertEqual(len(self.f.api.writes), int(expected == 'nota_interna_publicada'))

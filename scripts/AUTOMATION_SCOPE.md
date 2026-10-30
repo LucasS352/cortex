@@ -22,6 +22,10 @@ A ausência de um procedimento confirmado não impede publicar uma resposta inte
 
 O worker recupera automaticamente eventos antigos retidos especificamente como `contexto_insuficiente` com nota em `review`. Ele consulta o chamado atual, reaplica permissões, datas, status e pausas e gera outra resposta; não envia diretamente o HTML antigo. O botão manual também regenera essa minuta. Envios incertos, rejeitados ou esgotados não são liberados por essa recuperação. Marcador e idempotência continuam impedindo duplicação de notas.
 
+### Atualizações durante a análise
+
+Uma transição entre status permitidos (por exemplo, Novo → SUP - Triagem) não invalida a resposta à mesma mensagem. Antes de publicar, o worker confere novamente a autorização, a mensagem atual, o status/equipe e as pausas. Se a mensagem for editada ou complementada, a minuta anterior não é enviada: uma nova análise é colocada na fila durável, sem depender de outro webhook externo. O painel informa "Mensagem atualizada — nova análise agendada". Eventos antigos descartados como `mensagem_alterada_durante_analise` com nota preparada e não enviada são reavaliados automaticamente; envios incertos continuam sujeitos à reconciliação por marcador.
+
 Atualizar aplicação, webhook e note-worker para a mesma imagem. Depois, conferir as empresas e solicitantes autorizados e salvar as configurações para confirmar a data de liberação mostrada em Agente e políticas. A atualização por si só não libera chamados antigos.
 
 Regressões incluem o chamado Novo seguido pelo recibo automático do Movidesk, permissões de outros status operacionais, bloqueio de Desenvolvimento/Comercial, recuperação auditada das datas e continuidade do bloqueio dos chamados anteriores à liberação. O painel de processamento consulta o estado automaticamente a cada 15 segundos enquanto estiver visível. Os testes usam dados isolados e não publicam notas reais.

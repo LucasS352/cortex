@@ -291,10 +291,60 @@ class WorkerTests(unittest.TestCase):
         def generate(*_):
             self.api.data['actions'][0]['description'] = 'Na verdade é outro erro.'
             return {'reply': 'Sugestão antiga'}
-        self.enqueue()
+        self.enqueue(Actions=[{'Id': 1, 'Description': self.api.data['actions'][0]['description']}])
         worker.run_once(self.settings, self.api, generate)
         self.assertEqual(self.api.writes, [])
-        self.assertEqual(self.states(), ['skipped'])
+        with receiver._connect() as db:
+            original = db.execute("SELECT outcome FROM webhook_events WHERE state='skipped'").fetchone()
+            self.assertEqual(original[0], 'reanalise_agendada')
+            self.assertEqual(db.execute("SELECT count(*) FROM webhook_events WHERE state='received'").fetchone()[0], 1)
+        self.generate.return_value = {'reply': 'Resposta para a mensagem atualizada.'}
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(len(self.api.writes), 1)
+        self.assertIn('mensagem atualizada', self.api.writes[0][1])
+        self.assertNotIn('Sugestão antiga', self.api.writes[0][1])
+        self.assertFalse(worker.run_once(self.settings, self.api, self.generate))
+
+    def test_new_customer_action_is_automatically_reanalyzed_without_new_external_webhook(self):
+        def generate(*_):
+            self.api.data['actions'].append({'id': 2, 'type': 2, 'description': 'Complemento do cliente.',
+                'createdDate': '2026-10-09T12:00:00Z', 'createdBy': {'id': 'client', 'profileType': 2}})
+            return {'reply': 'Rascunho anterior ao complemento.'}
+        self.enqueue()
+        worker.run_once(self.settings, self.api, generate)
+        self.assertFalse(self.api.writes)
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(len(self.api.writes), 1)
+        self.assertEqual(self.generate.call_args.args[0]['actions'][-1]['description'], 'Complemento do cliente.')
+        self.assertFalse(worker.run_once(self.settings, self.api, self.generate))
+
+    def test_legacy_status_discard_recovers_prepared_note_and_deduplicates_manual_pull(self):
+        self.enqueue()
+        key, action = worker.identity(self.api.data, self.settings)
+        marker = worker.PREFIX + key
+        with receiver._connect() as db:
+            db.execute("UPDATE webhook_events SET state='skipped',outcome='mensagem_alterada_durante_analise'")
+            db.execute('INSERT INTO internal_note_outbox VALUES (?,?,?,?,?,?,?,?)',
+                (key, 42, action, marker, '<p>Nota já preparada.</p>' + marker, 'prepared', 1, 1))
+        self.api.data['status'] = 'SUP - Triagem'
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_not_called()
+        self.assertEqual(len(self.api.writes), 1)
+        self.enqueue(CortexManualPull=True)
+        worker.run_once(worker.replace(self.settings, manual_internal_note=True), self.api, self.generate)
+        self.assertEqual(len(self.api.writes), 1)
+
+    def test_manual_reanalysis_preserves_manual_mode_when_automatic_publication_is_off(self):
+        settings = worker.replace(self.settings, mode='dry_run', manual_internal_note=True)
+        def generate(*_):
+            self.api.data['actions'][0]['description'] = 'Mensagem corrigida.'
+            return {'reply': 'Resposta obsoleta.'}
+        self.enqueue(CortexManualPull=True)
+        worker.run_once(settings, self.api, generate)
+        self.assertFalse(self.api.writes)
+        worker.run_once(settings, self.api, self.generate)
+        self.assertEqual(len(self.api.writes), 1)
+        self.assertNotIn('Resposta obsoleta', self.api.writes[0][1])
 
     def test_timeout_after_write_reconciles_without_second_patch(self):
         self.enqueue()

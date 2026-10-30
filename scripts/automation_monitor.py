@@ -9,6 +9,7 @@ from agent_control import organization
 from automation_rules import evaluate
 
 LABELS = {
+    'reanalise_agendada': 'Mensagem atualizada: nova análise agendada',
     'status_bloqueado_desenvolvimento':'Chamado de Desenvolvimento: agente bloqueado',
     'status_bloqueado_comercial':'Chamado Comercial: agente bloqueado',
     'status_indisponivel':'Status do chamado indisponível',
