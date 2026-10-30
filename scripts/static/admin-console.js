@@ -294,6 +294,8 @@ function renderOverview(data){
       const flowData = await api('/api/admin/flow?days=7&type=public');
       const series = flowData.series ? Object.values(flowData.series) : [];
       if (series.length >= 2) {
+        $('flow-evolution-title').textContent = 'Novos chamados por dia';
+        $('flow-evolution-period').textContent = 'Últimos 7 dias';
         const maxVal = Math.max(1, ...series.map(s => s.entered || 0));
         const w = 320;
         const h = 140;
@@ -326,7 +328,7 @@ function renderOverview(data){
             const dateShort = p.date ? p.date.slice(5).replace('-', '/') : '';
             return `<g>
               <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" class="flow-dot">
-                <title>${p.date}: ${fmt(p.entered)} chamados</title>
+                <title>${p.date}: ${fmt(p.entered)} novos chamados públicos</title>
               </circle>
               <text x="${p.x.toFixed(1)}" y="${h - 6}" text-anchor="middle" class="flow-axis-label">${dateShort}</text>
             </g>`;
@@ -337,6 +339,8 @@ function renderOverview(data){
     } catch (_) {}
 
     // Fallback to age distribution
+    $('flow-evolution-title').textContent = 'Chamados por idade';
+    $('flow-evolution-period').textContent = 'Faixas em dias';
     const ages = (d.ages || []).filter(a => a.count > 0);
     const maxAgeVal = Math.max(1, ...ages.map(a => a.count));
     chartAgeEl.innerHTML = `<div class="team-bar-chart">${ages.map(a => {
