@@ -15,7 +15,8 @@ import simulator_app
 
 
 def public_ticket(company_id='company_7', *, age=0, kind='2'):
-    return {'ticket_id': 131216, 'type': kind, 'base_status': 'Open', 'status': 'Novo',
+    return {'ticket_id': 131216, 'type': kind, 'base_status': 'Open', 'status': 'Triagem',
+            'created_date':datetime.now(timezone.utc),
             'current_as_of': datetime.now(timezone.utc) - timedelta(hours=age),
             'clients': [{'id': 'person_1', 'personType': 1, 'profileType': 2,
                          'email': 'lucas.teste@alternativa.com.br',
@@ -25,7 +26,8 @@ def public_ticket(company_id='company_7', *, age=0, kind='2'):
 class EligibilityTest(unittest.TestCase):
     def setUp(self):
         self.settings = {**admin_console.DEFAULT_STATE, 'pilot_paused': False,
-                         'pilot_organization_ids': ['company_7']}
+                         'pilot_organization_ids': ['company_7'], 'automation_released_at':1,
+                         'company_authorized_at':{'company_7':1}}
 
     def test_selected_public_ticket_is_eligible(self):
         result = agent_control.eligibility(public_ticket(), self.settings)

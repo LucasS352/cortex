@@ -9,6 +9,11 @@ from agent_control import organization
 from automation_rules import evaluate
 
 LABELS = {
+    'fora_da_triagem':'Chamado fora de Triagem',
+    'automacao_pausada':'Automação pausada',
+    'liberacao_sem_data_registrada':'Liberação ainda não confirmada',
+    'data_de_abertura_indisponivel':'Data de abertura indisponível',
+    'chamado_anterior_a_liberacao':'Chamado criado antes da liberação',
     'limite_operacional': 'Limite operacional de geração atingido',
     'fora_do_piloto': 'Empresa não autorizada', 'solicitante_fora_do_piloto': 'Solicitante não autorizado',
     'automatico_desativado': 'Publicação automática desabilitada',
@@ -77,6 +82,9 @@ def report(state, ticket_id=None):
         ticket = snapshots.get(ticket_id)
         if ticket:
             ok, reason = eligible(ticket, settings)
+            from automation_scope import evaluate as scope_evaluate
+            scope = scope_evaluate(ticket, state, organization(ticket.get('clients'))[0])
+            if not scope['allowed']: ok, reason = False, scope['reason']
             key = identity(ticket, settings)[0] if ok else None
             result['ticket'] = {'eligible': ok, 'reason': LABELS.get(reason, reason),
                                 'published_message': key in sent, 'snapshot_only': True,

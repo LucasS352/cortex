@@ -33,7 +33,7 @@ class BulkCompanyAuthorizationTests(unittest.TestCase):
         self.assertEqual(result['added'],200)
         self.assertEqual(set(after['pilot_organization_ids']),set(ids+['existing']))
         for key in before:
-            if key != 'pilot_organization_ids': self.assertEqual(after[key],before[key],key)
+            if key not in {'pilot_organization_ids','company_authorized_at'}: self.assertEqual(after[key],before[key],key)
         self.assertEqual(self.audit.call_args.args[1]['actor'],'qa-admin')
 
     def test_changed_catalog_requires_new_confirmation_and_has_no_partial_write(self):

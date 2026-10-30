@@ -57,6 +57,16 @@ def eligibility(ticket: dict | None, settings: dict, *, now: datetime | None = N
         reasons.append("A fotografia do chamado está desatualizada; atualize os chamados.")
     if settings.get("pilot_paused", True):
         reasons.append("O piloto está pausado.")
+    from automation_scope import evaluate
+    scope = evaluate(ticket, settings, org_id)
+    if not scope['allowed']:
+        scope_messages = {'fora_da_triagem':'O chamado não está em Triagem.',
+            'automacao_pausada':'O piloto está pausado.',
+            'liberacao_sem_data_registrada':'Confirme a liberação para registrar sua data.',
+            'data_de_abertura_indisponivel':'A data de abertura do chamado não está disponível.',
+            'chamado_anterior_a_liberacao':'O chamado foi criado antes da liberação ou autorização da empresa.'}
+        message = scope_messages[scope['reason']]
+        if message not in reasons: reasons.append(message)
     return {"eligible": not reasons, "reasons": reasons,
             "organization_id": org_id, "organization_name": org_name,
             "snapshot_at": as_of.isoformat() if as_of else None}
@@ -139,7 +149,7 @@ def ticket_snapshot(ticket_id: int) -> dict | None:
     return {"ticket_id": row['external_id'], "subject": data.get('subject') or '',
             "status": data.get('status') or '', "base_status": data.get('base_status'),
             "clients": data.get('clients'), "type": row['ticket_type'],
-            "current_as_of": row['current_as_of']}
+            "current_as_of": row['current_as_of'], "created_date": data.get('created_date')}
 
 
 def catalog() -> dict:

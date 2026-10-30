@@ -53,6 +53,9 @@ class WorkerTests(unittest.TestCase):
         patch.object(agent_operations, 'OPERATIONS_DB', Path(self.tmp.name) / 'operations.sqlite3').start()
         patch.object(worker, 'ADMIN_STATE_FILE', Path(self.tmp.name) / 'state.json').start()
         patch.object(worker, 'runtime_state', return_value={'min_interval_seconds': 0, 'max_per_minute': 60, 'max_concurrent': 2}).start()
+        # Existing tests exercise delivery/rules with admission already allowed;
+        # mandatory date/status boundaries are covered by test_automation_scope.
+        patch.object(worker, 'new_ticket_scope', return_value={'allowed':True,'reason':''}).start()
         self.operational_sync = patch.object(worker, 'persist_operational_ticket').start()
         self.client = TestClient(receiver.app)
         self.settings = worker.Settings('internal_note', 'bot', frozenset({'464'}),

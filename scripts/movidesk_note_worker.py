@@ -18,6 +18,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 import mapped_replies
+from automation_scope import evaluate as new_ticket_scope
 
 from config import MOVIDESK_BASE_URL, MOVIDESK_TOKEN
 from movidesk_webhook import _connect
@@ -866,6 +867,10 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
     from agent_control import organization
     from automation_rules import evaluate
     state = runtime_state()
+    scope = new_ticket_scope(ticket, state, org_id)
+    if not scope['allowed']:
+        finish(event, 'skipped', scope['reason'])
+        return
     decision = evaluate(ticket, payload, previous, state.get('automation_rules', {}), organization(ticket.get('clients'))[0])
     with _connect() as db:
         prior = db.execute('SELECT decision_json FROM webhook_events WHERE digest=?', (event['digest'],)).fetchone()
@@ -965,6 +970,12 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
         with ticket_agent_control.publication_guard(ticket['id']) as allowed:
             if not allowed:
                 finish(event, 'skipped', 'agente_pausado_no_chamado')
+                return
+            # This mandatory scope also applies when optional rules are off or
+            # the event is a manual pull. Never reuse a cached admission decision.
+            scope = new_ticket_scope(fresh, runtime_state(), org_id)
+            if not scope['allowed']:
+                finish(event, 'skipped', scope['reason'])
                 return
             # Commit intent before any network write. A crash requires reconciliation.
             outbox_state(key, 'sending')

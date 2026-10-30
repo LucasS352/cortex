@@ -141,6 +141,13 @@ async function togglePilotCompany(companyId, selected) {
 
 // --- Render Studio Settings ---
 function renderStudioSettings(settings) {
+  if ($('pilot-scope-status')) {
+    const released = settings.automation_released_at;
+    const date = released ? new Date(released * 1000).toLocaleString('pt-BR', {timeZone:'America/Sao_Paulo'}) : null;
+    $('pilot-scope-status').textContent = 'Somente chamados criados após a liberação e enquanto estiverem em Triagem. ' +
+      (date ? `Liberação: ${date} (Brasília). Novas empresas contam a partir da própria autorização.` :
+        'A data de liberação será registrada ao ativar a governança e salvar as configurações.');
+  }
   window.governanceSettings = settings;
   window.refreshGovernance?.();
   studioState.whitelist = Array.isArray(settings.whitelist) ? [...settings.whitelist] : ['lucas.teste@alternativa.com.br'];
@@ -164,6 +171,10 @@ function renderStudioSettings(settings) {
     badge.className = 'studio-badge-pulse paused';
     badge.textContent = 'AUTOMAÇÃO PAUSADA';
     pill.textContent = 'Nenhuma nota será publicada';
+  } else if (!settings.automation_released_at) {
+    badge.className = 'studio-badge-pulse paused';
+    badge.textContent = 'CONFIRME A LIBERAÇÃO';
+    pill.textContent = 'Salve as configurações para liberar somente chamados novos em Triagem';
   } else if (studioState.selectedCompanyIds.length) {
     badge.className = 'studio-badge-pulse';
     badge.textContent = 'EMPRESAS AUTORIZADAS';

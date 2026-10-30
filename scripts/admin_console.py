@@ -166,6 +166,8 @@ DEFAULT_STATE = {
     "sandbox_mode": True,
     "whitelist": ["lucas.teste@alternativa.com.br"],
     "auto_internal_note": False,
+    "automation_released_at": None,
+    "company_authorized_at": {},
     "specialists": DEFAULT_SPECIALISTS,
 }
 
@@ -209,6 +211,11 @@ def get_state():
 
 
 def set_state(update: dict, actor=None):
+    with _lock:
+        return _set_state(update, actor)
+
+
+def _set_state(update: dict, actor=None):
     allowed = {
         "draft_generation_enabled", "source_types", "min_interval_seconds",
         "max_per_minute", "max_concurrent", "pilot_person_ids", "pilot_organization_ids",
@@ -276,6 +283,17 @@ def set_state(update: dict, actor=None):
             state[key] = sorted(set(values))
     state["human_review_required"] = True
     state["auto_send_enabled"] = False
+    now = time.time()
+    selected = set(state['pilot_organization_ids'])
+    authorized_at = previous.get('company_authorized_at') or {}
+    state['company_authorized_at'] = {key: authorized_at.get(key, now) for key in selected}
+    released = not state['pilot_paused']
+    was_released = not previous.get('pilot_paused', True)
+    publication_started = state['auto_internal_note'] and not previous.get('auto_internal_note', False)
+    explicit_release = bool(set(update) & {'pilot_paused','auto_internal_note','pilot_organization_ids'})
+    if released and (not was_released or publication_started or
+                     (explicit_release and not state.get('automation_released_at'))):
+        state['automation_released_at'] = now
     with _lock:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         temp = STATE_FILE.with_suffix(".tmp")
