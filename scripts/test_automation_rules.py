@@ -72,10 +72,10 @@ class AutomationTests(unittest.TestCase):
         self.assertNotIn('private secret', str(result))
         self.assertIn('generation', [x['stage'] for x in result['items'][0]['trace']])
 
-    def test_insufficient_evidence_retains_draft_without_publication(self):
+    def test_insufficient_evidence_does_not_suppress_internal_investigation_note(self):
         self.f.generate.return_value['decision'] = {'state': 'ENCAMINHAR', 'can_propose_procedure': False}
-        self.assertEqual(self.process()['outcome'], 'contexto_insuficiente')
-        self.assertFalse(self.f.api.writes)
+        self.assertEqual(self.process()['outcome'], 'nota_interna_publicada')
+        self.assertEqual(len(self.f.api.writes), 1)
 
     def test_rejected_publication_is_not_blindly_repeated(self):
         from types import SimpleNamespace

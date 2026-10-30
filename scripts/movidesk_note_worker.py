@@ -779,6 +779,14 @@ def claim(settings):
         db.execute('BEGIN IMMEDIATE')
         db.execute("UPDATE webhook_events SET state='retry' WHERE state='processing' AND lease_until<?", (now,))
         db.execute("UPDATE webhook_events SET state='needs_review',outcome='tentativas_esgotadas' WHERE state='retry' AND attempts>=?", (settings.max_attempts,))
+        # Recover only drafts held by the obsolete evidence/publication gate.
+        # Delivery failures and uncertain PATCHes must never be requeued here.
+        # process() rechecks today's authorization, cutoff, pause and status.
+        db.execute("""UPDATE webhook_events SET state='retry',attempts=0,available_at=?,
+            outcome='reavaliacao_contexto',finished_at=NULL
+            WHERE state='needs_review' AND outcome='contexto_insuficiente'
+            AND EXISTS (SELECT 1 FROM internal_note_outbox o
+                WHERE o.ticket_id=webhook_events.ticket_id AND o.state='review')""", (now,))
         # Serialize all jobs even if another worker is accidentally started.
         if db.execute("SELECT 1 FROM webhook_events WHERE state='processing' AND lease_until>? LIMIT 1", (now,)).fetchone():
             return None
@@ -904,7 +912,9 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
     if existing and existing['state'] == 'rejected':
         finish(event, 'failed', 'publicacao_anterior_rejeitada')
         return
-    if not existing:
+    if not existing or existing['state'] == 'review':
+        # A legacy review draft was never sent. Generate again using current
+        # evidence and output guardrails; do not publish its cached HTML blindly.
         trace(event, 'generation')
         import agent_operations
         controls = {k: state.get(k, v) for k, v in {'min_interval_seconds': 5, 'max_per_minute': 10, 'max_concurrent': 2}.items()}
@@ -927,13 +937,12 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
         with _connect() as db:
             db.execute('INSERT OR IGNORE INTO internal_note_outbox VALUES (?,?,?,?,?,?,?,?)',
                        (key, ticket['id'], source_action, marker, content, 'prepared', time.time(), time.time()))
-            decision_quality = result.get('decision') or {}
-            if decision_quality and not (decision_quality.get('can_propose_procedure') or decision_quality.get('can_draft_from_evidence')):
-                db.execute("UPDATE internal_note_outbox SET state='review' WHERE key=?", (key,))
+            db.execute("""UPDATE internal_note_outbox SET content=?,state='prepared',updated_at=?
+                WHERE key=? AND state='review'""", (content, time.time(), key))
+            # Evidence permission controls which procedures build_reply may
+            # suggest, not whether its validated investigation/escalation reply
+            # may be delivered privately to the technician for review.
             existing = db.execute('SELECT * FROM internal_note_outbox WHERE key=?', (key,)).fetchone()
-    if existing['state'] == 'review':
-        finish(event, 'needs_review', 'contexto_insuficiente')
-        return
     if settings.mode == 'dry_run':
         outbox_state(key, 'preview')
         finish(event, 'preview', 'nota_gerada_sem_publicacao')
