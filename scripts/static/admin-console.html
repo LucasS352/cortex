@@ -497,6 +497,10 @@
                     <input type="search" id="pilot-company-search" placeholder="Buscar empresa por nome ou ID do Movidesk">
                     <button type="button" class="button button-quiet" id="pilot-company-search-btn">Buscar</button>
                   </div>
+                  <div class="gov-toolbar" style="margin:10px 0">
+                    <button type="button" class="button button-quiet" id="pilot-company-authorize-all">Autorizar todas as empresas</button>
+                    <span id="pilot-company-bulk-status" class="section-subnote" role="status" aria-live="polite"></span>
+                  </div>
                   <div id="pilot-company-results" class="pilot-company-results"></div>
                 </div>
 
@@ -1030,7 +1034,7 @@
   <script src="/tech-assets/account-settings.js?v=1" defer></script>
   <script src="/tech-assets/technician-workbench.js?v=5" defer></script>
   <script src="/tech-assets/client-inventory.js?v=20261014-1" defer></script>
-  <script src="/tech-assets/agent-center.js?v=20261030-company-search" defer></script>
+  <script src="/tech-assets/agent-center.js?v=20261030-company-bulk" defer></script>
   <script src="/tech-assets/agent-governance.js?v=2" defer></script>
   <dialog class="account-user-modal" id="pin-modal">
     <form id="pin-modal-form" method="dialog">

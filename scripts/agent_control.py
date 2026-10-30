@@ -112,6 +112,20 @@ def selectable_company(organization_id: str) -> dict:
     return {"id": organization_id, "name": row['business_name'] or organization_id}
 
 
+def all_selectable_company_ids() -> list[str]:
+    """Snapshot of active external companies; independent of search and pagination."""
+    with psycopg.connect(POSTGRES_DSN, connect_timeout=5,
+                         options='-c statement_timeout=10000 -c default_transaction_read_only=on') as conn:
+        rows = conn.execute('''SELECT DISTINCT d.company_id FROM movidesk_company_directory d
+            LEFT JOIN LATERAL (
+                SELECT COALESCE((p.payload->>'isActive')::boolean,true) AS active
+                FROM raw_persons p WHERE p.external_id=d.company_id
+                  AND p.person_type=2 AND p.profile_type IN (2,3)
+                ORDER BY p.ingested_at DESC LIMIT 1
+            ) person ON true WHERE COALESCE(person.active,true)''').fetchall()
+    return sorted({str(row[0]) for row in rows if str(row[0]) not in INTERNAL_ORGANIZATION_IDS})
+
+
 def ticket_snapshot(ticket_id: int) -> dict | None:
     with psycopg.connect(POSTGRES_DSN, row_factory=dict_row, connect_timeout=5,
                          options="-c statement_timeout=8000 -c default_transaction_read_only=on") as conn:

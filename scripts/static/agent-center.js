@@ -892,6 +892,24 @@ function initAgentStudio() {
       loadPilotCompanies(e.currentTarget.value.trim());
     }
   });
+  $('pilot-company-authorize-all')?.addEventListener('click', async () => {
+    const button = $('pilot-company-authorize-all');
+    const status = $('pilot-company-bulk-status');
+    button.disabled = true;
+    status.textContent = 'Conferindo empresas ativas…';
+    try {
+      const preview = await api('/api/admin/pilot/companies/authorize-all');
+      if (!preview.new) { status.textContent = 'Todas as empresas ativas já estão autorizadas.'; return; }
+      const confirmed = confirm(`Autorizar todas as ${preview.total} empresas ativas do cadastro atual? Serão adicionadas ${preview.new} empresas.\n\nA ação vale para todo o cadastro, independentemente da busca. Se a automação já estiver ativa, as novas autorizações passam a valer nos eventos elegíveis. As demais políticas e pausas continuam sendo respeitadas. Empresas cadastradas depois exigirão nova autorização.`);
+      if (!confirmed) { status.textContent = 'Autorização em lote cancelada.'; return; }
+      const result = await api('/api/admin/pilot/companies/authorize-all', {
+        method:'POST', body:JSON.stringify({token:preview.token})
+      });
+      renderStudioSettings(await api('/api/admin/settings'));
+      status.textContent = `${result.added} empresa(s) autorizada(s). Total: ${result.selected_count}.`;
+    } catch (e) { status.textContent = e.message; }
+    finally { button.disabled = false; }
+  });
   $('pilot-company-results')?.addEventListener('click', async (e) => {
     const row = e.target.closest('.pilot-company-row');
     if (!row) return;

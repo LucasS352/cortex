@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import csv
 import io
 import base64
@@ -269,7 +270,8 @@ def set_state(update: dict, actor=None):
     for key in ("pilot_person_ids", "pilot_organization_ids"):
         if key in update:
             values = update[key]
-            if not isinstance(values, list) or len(values) > 100 or any(not isinstance(x, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", x) for x in values):
+            maximum = 10000 if key == 'pilot_organization_ids' else 100
+            if not isinstance(values, list) or len(values) > maximum or any(not isinstance(x, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", x) for x in values):
                 raise HTTPException(422, "Identificadores do piloto inválidos.")
             state[key] = sorted(set(values))
     state["human_review_required"] = True
@@ -1001,7 +1003,7 @@ class SettingsUpdate(BaseModel):
     max_per_minute: int | None = Field(default=None, ge=1, le=60)
     max_concurrent: int | None = Field(default=None, ge=1, le=5)
     pilot_person_ids: list[str] | None = Field(default=None, max_length=100)
-    pilot_organization_ids: list[str] | None = Field(default=None, max_length=100)
+    pilot_organization_ids: list[str] | None = Field(default=None, max_length=10000)
     pilot_requester_emails: list[str] | None = Field(default=None, max_length=100)
     pilot_paused: bool | None = None
     sandbox_mode: bool | None = None
@@ -1060,6 +1062,44 @@ def pilot_companies(request: Request, search: str = Query('', max_length=120),
         return agent_control.company_catalog(search, page, limit, get_state()['pilot_organization_ids'])
     except psycopg.Error as exc:
         raise HTTPException(503, 'Cadastro de empresas indisponível.') from exc
+
+
+def _all_company_scope():
+    ids = agent_control.all_selectable_company_ids()
+    token = hashlib.sha256(json.dumps(ids, separators=(',', ':')).encode()).hexdigest()
+    return ids, token
+
+
+class AllCompaniesAuthorization(BaseModel):
+    token: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+
+@router.get('/api/admin/pilot/companies/authorize-all')
+def all_companies_preview(request: Request):
+    _local_only(request)
+    try:
+        ids, token = _all_company_scope()
+    except psycopg.Error:
+        raise HTTPException(503, 'Cadastro de empresas indisponível.') from None
+    selected = set(get_state()['pilot_organization_ids'])
+    return {'total': len(ids), 'new': len(set(ids) - selected), 'token': token}
+
+
+@router.post('/api/admin/pilot/companies/authorize-all')
+def authorize_all_companies(request: Request, body: AllCompaniesAuthorization):
+    _local_only(request)
+    try:
+        ids, token = _all_company_scope()
+    except psycopg.Error:
+        raise HTTPException(503, 'Cadastro de empresas indisponível.') from None
+    if body.token != token:
+        raise HTTPException(409, 'O cadastro mudou. Confira novamente antes de autorizar todas as empresas.')
+    selected = set(get_state()['pilot_organization_ids'])
+    user = getattr(request.state, 'cortex_user_obj', None) or {}
+    settings = set_state({'pilot_organization_ids': sorted(selected | set(ids))},
+                         actor=user.get('id') or getattr(request.state, 'cortex_user', None))
+    return {'added': len(set(ids) - selected), 'selected_count': len(settings['pilot_organization_ids']),
+            'pilot_paused': settings['pilot_paused'], 'auto_internal_note': settings['auto_internal_note']}
 
 
 @router.put('/api/admin/pilot/companies/{organization_id}')
