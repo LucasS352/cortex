@@ -106,6 +106,8 @@ Para verificar: `docker compose --env-file .env.server ps`, logs de `app` e `cad
 
 ## Cuidados operacionais
 
+As antigas telas do simulador `/tecnico` e `/cliente`, seus arquivos HTML e suas APIs de portal foram removidos. Esses endereços retornam 404 inclusive para administradores autenticados. A raiz `/` leva ao painel atual conforme o perfil. O treinamento técnico em `/treinamento/tecnico` mantém o acesso por PIN e suas APIs específicas; a remoção não altera a automação de notas internas do Movidesk.
+
 - Faça backup regular de `pgdata`, `cortex_output` e `manual_media`; os volumes sobrevivem ao redeploy, mas não substituem backup.
 - `CORTEX_AUTONOTE_MODE` no `.env.server` é o teto de permissão do servidor. A lista efetiva do piloto é administrada em **Agente e políticas → Piloto & Sandbox**. A publicação exige, ao mesmo tempo, empresa selecionada, e-mail do solicitante autorizado, piloto ativo e a opção de nota privada marcada. As contas do Playground não autorizam escrita no Movidesk.
 - Não expor PostgreSQL, serviço `app` ou serviço `webhook` diretamente à internet. Só Caddy publica portas.

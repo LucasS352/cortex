@@ -237,6 +237,15 @@ def _database_ready() -> bool:
 
 async def gate(request: Request, call_next):
     path = request.url.path
+    # Retired simulator portals are unavailable even to authenticated users or
+    # installations running without the login gate. Keep training/PIN routes.
+    retired = ('/cliente', '/tecnico', '/api/client', '/api/tickets',
+               '/api/tech/queue', '/api/tech/action', '/api/tech/report', '/api/tech/analyze')
+    if (any(path == prefix or path.startswith(prefix + '/') for prefix in retired) or
+            path in {'/tech-assets/movidesk_cliente.html', '/tech-assets/movidesk_tecnico.html',
+                     '/tech-assets/movidesk_deskcortex.html'}):
+        return JSONResponse({'detail': 'Not Found'}, status_code=404,
+                            headers={'Cache-Control': 'no-store'})
     if request.method in {"GET", "HEAD"} and path == "/favicon.ico":
         response = await call_next(request)
         response.headers["Cache-Control"] = "public, max-age=3600"
