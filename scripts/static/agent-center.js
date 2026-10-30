@@ -98,6 +98,7 @@ function addPilotRequesterEmail(value) {
 }
 
 function renderPilotCompanies() {
+  if (window.renderGovernanceCompanies) return window.renderGovernanceCompanies();
   const container = $('pilot-company-results');
   if (!container) return;
   if (!studioState.pilotCompanies.length) {
@@ -135,6 +136,8 @@ async function togglePilotCompany(companyId, selected) {
 
 // --- Render Studio Settings ---
 function renderStudioSettings(settings) {
+  window.governanceSettings = settings;
+  window.refreshGovernance?.();
   studioState.whitelist = Array.isArray(settings.whitelist) ? [...settings.whitelist] : ['lucas.teste@alternativa.com.br'];
   studioState.pilotRequesterEmails = Array.isArray(settings.pilot_requester_emails) ? [...settings.pilot_requester_emails] : [];
   studioState.specialists = Array.isArray(settings.specialists) ? JSON.parse(JSON.stringify(settings.specialists)) : [];
@@ -154,11 +157,11 @@ function renderStudioSettings(settings) {
   const pill = $('studio-mode-pill');
   if (settings.pilot_paused) {
     badge.className = 'studio-badge-pulse paused';
-    badge.textContent = 'PILOTO PAUSADO';
+    badge.textContent = 'AUTOMAÇÃO PAUSADA';
     pill.textContent = 'Nenhuma nota será publicada';
   } else if (studioState.selectedCompanyIds.length) {
     badge.className = 'studio-badge-pulse';
-    badge.textContent = 'PILOTO CONTROLADO ATIVO';
+    badge.textContent = 'EMPRESAS AUTORIZADAS';
     pill.textContent = studioState.pilotRequesterEmails.length
       ? `Restrito a ${studioState.selectedCompanyIds.length} empresa(s) e ${studioState.pilotRequesterEmails.length} solicitante(s)`
       : `Liberado para todas as pessoas de ${studioState.selectedCompanyIds.length} empresa(s) autorizada(s)`;

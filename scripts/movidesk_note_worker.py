@@ -776,8 +776,23 @@ def claim(settings):
 
 def finish(event, state, outcome='', error=None):
     with _connect() as db:
-        db.execute('''UPDATE webhook_events SET state=?,outcome=?,last_error=?,lease_until=0,available_at=? WHERE digest=?''',
-                   (state, outcome, error, time.time() + 60, event['digest']))
+        db.execute('''UPDATE webhook_events SET state=?,outcome=?,last_error=?,lease_until=0,available_at=?,finished_at=? WHERE digest=?''',
+                   (state, outcome, error, time.time() + 60, time.time(), event['digest']))
+
+
+def trace(event, stage):
+    with _connect() as db:
+        row = db.execute('SELECT trace_json FROM webhook_events WHERE digest=?', (event['digest'],)).fetchone()
+        items = json.loads(row[0] or '[]') if row else []
+        items.append({'stage': stage, 'at': time.time()})
+        db.execute('UPDATE webhook_events SET trace_json=? WHERE digest=?', (json.dumps(items[-80:]), event['digest']))
+
+
+def runtime_state():
+    try:
+        return json.loads(ADMIN_STATE_FILE.read_text(encoding='utf-8'))
+    except (OSError, ValueError, TypeError):
+        return {}
 
 
 def outbox_state(key, state):
@@ -793,6 +808,7 @@ def manual_pull_event(event):
 
 
 def process(event, settings, api, generator=generate_note, sync_only_reason=''):
+    trace(event, 'context')
     ticket = api.ticket(event['ticket_id'])
     payload = json.loads(event['payload_json'])
     expected = max((int(a.get('Id') or 0) for a in payload.get('Actions', []) if isinstance(a, dict)), default=0)
@@ -806,19 +822,46 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
         current = current_actions.get(str(announced.get('Id')))
         if current and re.sub(r'\s+', ' ', plain(announced['Description'])) != re.sub(r'\s+', ' ', plain(current.get('description'))):
             raise RetryJob('Texto da ação na API difere do webhook; aguardando consistência')
-    persist_ticket(ticket)
+    with _connect() as db:
+        old = db.execute('SELECT payload_json FROM ticket_webhook_snapshots WHERE ticket_id=?', (ticket['id'],)).fetchone()
+    previous = json.loads(old[0]) if old else None
     # Make the exact ticket visible to dashboards and retrieval before the AI
     # reasons about it. A database outage retries the event instead of allowing
     # a response based on an older nightly snapshot.
     persist_operational_ticket(ticket)
+    persist_ticket(ticket)
+    from agent_control import organization
+    org_id, org_name, _ = organization(ticket.get('clients'))
+    with _connect() as db:
+        db.execute('UPDATE webhook_events SET context_json=? WHERE digest=?',
+                   (json.dumps({'company_id': org_id, 'company': org_name, 'status': ticket.get('status')}), event['digest']))
     if sync_only_reason:
         finish(event, 'skipped', sync_only_reason)
         return
     ok, reason = eligible(ticket, settings)
+    trace(event, 'authorization')
     if not ok:
         finish(event, 'skipped', reason)
         return
+    from agent_control import organization
+    from automation_rules import evaluate
+    state = runtime_state()
+    decision = evaluate(ticket, payload, previous, state.get('automation_rules', {}), organization(ticket.get('clients'))[0])
+    with _connect() as db:
+        prior = db.execute('SELECT decision_json FROM webhook_events WHERE digest=?', (event['digest'],)).fetchone()
+        # Retries reuse the original transition evaluation, not the refreshed snapshot.
+        if prior and prior[0]:
+            decision = json.loads(prior[0])
+        else:
+            db.execute('UPDATE webhook_events SET decision_json=? WHERE digest=?', (json.dumps(decision), event['digest']))
+    trace(event, 'rules')
+    if not decision['allowed']:
+        finish(event, 'skipped', decision['reason'])
+        return
     key, source_action = identity(ticket, settings)
+    message_key = key
+    if 'status_changed' in decision.get('matched', []) and 'customer_message' not in decision.get('matched', []):
+        key = hashlib.sha256((key + ':status:' + str(ticket.get('status')) + ':' + str(ticket.get('lastUpdate') or payload.get('LastUpdate') or event['digest'])).encode()).hexdigest()
     marker = PREFIX + key
     with _connect() as db:
         existing = db.execute('SELECT * FROM internal_note_outbox WHERE key=?', (key,)).fetchone()
@@ -835,7 +878,17 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
         finish(event, 'failed', 'publicacao_anterior_rejeitada')
         return
     if not existing:
-        result = generator(ticket, settings, api)
+        trace(event, 'generation')
+        import agent_operations
+        controls = {k: state.get(k, v) for k, v in {'min_interval_seconds': 5, 'max_per_minute': 10, 'max_concurrent': 2}.items()}
+        run_id = agent_operations.begin('Nota interna Movidesk', '', [], controls, ticket_id=ticket['id'])
+        try:
+            result = generator(ticket, settings, api)
+        except Exception:
+            agent_operations.finish(run_id, error='Falha na geração de nota interna')
+            raise
+        agent_operations.finish(run_id, draft=result.get('reply'))
+        trace(event, 'validation')
         if not isinstance(result.get('reply'), str) or not result['reply'].strip():
             raise RetryJob('Modelo não gerou texto completo')
         result['feedback_ticket'] = ticket['id']
@@ -847,7 +900,13 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
         with _connect() as db:
             db.execute('INSERT OR IGNORE INTO internal_note_outbox VALUES (?,?,?,?,?,?,?,?)',
                        (key, ticket['id'], source_action, marker, content, 'prepared', time.time(), time.time()))
+            decision_quality = result.get('decision') or {}
+            if decision_quality and not (decision_quality.get('can_propose_procedure') or decision_quality.get('can_draft_from_evidence')):
+                db.execute("UPDATE internal_note_outbox SET state='review' WHERE key=?", (key,))
             existing = db.execute('SELECT * FROM internal_note_outbox WHERE key=?', (key,)).fetchone()
+    if existing['state'] == 'review':
+        finish(event, 'needs_review', 'contexto_insuficiente')
+        return
     if settings.mode == 'dry_run':
         outbox_state(key, 'preview')
         finish(event, 'preview', 'nota_gerada_sem_publicacao')
@@ -857,16 +916,34 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
         return
     # Re-read after generation: don't post an obsolete suggestion after a new reply.
     fresh = api.ticket(ticket['id'])
+    if settings.runtime_control:
+        # Re-read current authorizations before writing, not just at job admission.
+        current = effective_settings(settings)
+        allowed_mode = current.manual_internal_note if manual_pull_event(event) else current.mode == 'internal_note'
+        if not allowed_mode:
+            finish(event, 'skipped', 'politica_alterada_durante_analise')
+            return
+        settings = replace(current, mode='internal_note')
+        current_rules = runtime_state().get('automation_rules', {})
+        current_rule = {**current_rules, **current_rules.get('companies', {}).get(org_id, {})}
+        rule_block = current_rules.get('enabled') and (
+            not current_rule.get('enabled') or
+            bool(current_rule.get('statuses') and fresh.get('status') not in current_rule['statuses']) or
+            not set(decision.get('matched', [])) & set(current_rule.get('events', [])))
+        if rule_block:
+            finish(event, 'skipped', 'politica_alterada_durante_analise')
+            return
     if marker_present(fresh, marker):
         outbox_state(key, 'sent')
         finish(event, 'completed', 'nota_confirmada_no_movidesk')
         return
     ok, reason = eligible(fresh, settings)
-    if not ok or identity(fresh, settings)[0] != key:
+    if not ok or identity(fresh, settings)[0] != message_key or fresh.get('status') != ticket.get('status'):
         finish(event, 'skipped', reason or 'mensagem_alterada_durante_analise')
         return
     # Commit intent before any network write. A crash afterwards requires reconciliation.
     outbox_state(key, 'sending')
+    trace(event, 'publication')
     try:
         response = api.internal_note(ticket['id'], existing['content'])
     except (httpx.HTTPError, OSError):
@@ -888,6 +965,7 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
     if not marker_present(confirmed, marker):
         raise RetryJob('PATCH aceito; aguardando a nota aparecer na consulta do Movidesk')
     outbox_state(key, 'sent')
+    trace(event, 'published')
     persist_ticket(confirmed)
     persist_operational_ticket(confirmed)
     finish(event, 'completed', 'nota_interna_publicada')
@@ -904,23 +982,20 @@ def run_once(settings, api, generator=generate_note):
     if not event:
         return False
     manual = manual_pull_event(event)
-    if ceiling.runtime_control and ceiling.mode == 'internal_note' and not manual and not settings.automatic_enabled:
-        # The AI toggle controls note generation, not operational freshness.
-        # Consume the webhook and upsert this exact ticket without spending
-        # Gemini quota or publishing anything.
-        process(event, settings, api, generator, sync_only_reason='automatico_desativado')
-        return True
     if manual:
         if not settings.manual_internal_note:
             finish(event, 'skipped', 'processamento_manual_indisponivel')
             return True
         settings = replace(settings, mode='internal_note')
     try:
-        process(event, settings, api, generator)
+        sync_reason = 'automatico_desativado' if ceiling.runtime_control and ceiling.mode == 'internal_note' and not manual and not settings.automatic_enabled else ''
+        process(event, settings, api, generator, sync_only_reason=sync_reason)
     except Exception as exc:
-        message = str(exc) if isinstance(exc, RetryJob) else 'Falha no processamento (' + type(exc).__name__ + ')'
+        from fastapi import HTTPException
+        limited = isinstance(exc, HTTPException) and exc.status_code == 429
+        message = 'Limite operacional de geração atingido; nova tentativa agendada' if limited else str(exc) if isinstance(exc, RetryJob) else 'Falha no processamento (' + type(exc).__name__ + ')'
         exhausted = event['attempts'] + 1 >= settings.max_attempts
-        finish(event, 'needs_review' if exhausted else 'retry', 'tentativas_esgotadas' if exhausted else '', message)
+        finish(event, 'needs_review' if exhausted else 'retry', 'tentativas_esgotadas' if exhausted else 'limite_operacional' if limited else '', message)
     return True
 
 

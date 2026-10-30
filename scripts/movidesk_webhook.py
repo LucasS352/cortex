@@ -45,7 +45,9 @@ def _connect():
     for name, definition in {'attempts': 'INTEGER NOT NULL DEFAULT 0',
                              'available_at': 'REAL NOT NULL DEFAULT 0',
                              'lease_until': 'REAL NOT NULL DEFAULT 0',
-                             'outcome': 'TEXT', 'last_error': 'TEXT'}.items():
+                             'outcome': 'TEXT', 'last_error': 'TEXT',
+                             'decision_json': 'TEXT', 'finished_at': 'REAL', 'trace_json': 'TEXT',
+                             'context_json': 'TEXT'}.items():
         if name not in columns:
             db.execute(f'ALTER TABLE webhook_events ADD COLUMN {name} {definition}')
     db.execute('''CREATE TABLE IF NOT EXISTS internal_note_outbox (

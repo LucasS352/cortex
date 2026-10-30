@@ -181,6 +181,9 @@ TOPICS = {
 
 def _local_only(request: Request):
     if getattr(request.state, "cortex_authenticated", False):
+        user = getattr(request.state, 'cortex_user_obj', None) or {}
+        if user.get('role') and user['role'] != 'super_admin':
+            raise HTTPException(403, 'Acesso administrativo necessário.')
         return
     host = request.client.host if request.client else ""
     if host not in {"127.0.0.1", "::1", "testclient", "localhost"}:
@@ -204,17 +207,24 @@ def get_state():
             return dict(DEFAULT_STATE)
 
 
-def set_state(update: dict):
+def set_state(update: dict, actor=None):
     allowed = {
         "draft_generation_enabled", "source_types", "min_interval_seconds",
         "max_per_minute", "max_concurrent", "pilot_person_ids", "pilot_organization_ids",
         "pilot_requester_emails",
-        "pilot_paused", "sandbox_mode", "whitelist", "auto_internal_note", "specialists"
+        "pilot_paused", "sandbox_mode", "whitelist", "auto_internal_note", "specialists", "automation_rules"
     }
     if set(update) - allowed:
         raise HTTPException(422, "Configuração não permitida.")
     state = get_state()
     previous = dict(state)
+    if 'automation_rules' in update:
+        import automation_rules
+        with _conn() as conn:
+            known = {r['status'] for r in conn.execute('SELECT DISTINCT status FROM refined_tickets WHERE status IS NOT NULL').fetchall()}
+        state['automation_rules'] = automation_rules.validate(update['automation_rules'], known)
+        if set(state['automation_rules']['companies']) - set(state['pilot_organization_ids']):
+            raise HTTPException(422, 'Exceções exigem uma empresa previamente autorizada.')
     for key, low, high in [('min_interval_seconds', 0, 300), ('max_per_minute', 1, 60), ('max_concurrent', 1, 5)]:
         if key in update:
             if type(update[key]) is not int or not low <= update[key] <= high:
@@ -269,7 +279,7 @@ def set_state(update: dict):
         temp = STATE_FILE.with_suffix(".tmp")
         temp.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(temp, STATE_FILE)
-    operations.audit('Configuração do agente', {'before': previous, 'after': state})
+    operations.audit('Configuração do agente', {'actor': actor, 'before': previous, 'after': state})
     return state
 
 
@@ -984,6 +994,7 @@ def update_knowledge(request: Request,node_id: int,body: KnowledgeUpdate):
 
 
 class SettingsUpdate(BaseModel):
+    automation_rules: dict | None = None
     draft_generation_enabled: bool | None = None
     source_types: list[str] | None = Field(default=None, max_length=4)
     min_interval_seconds: int | None = Field(default=None, ge=0, le=300)
@@ -1146,7 +1157,43 @@ def read_settings(request: Request):
 @router.put("/api/admin/settings")
 def update_settings(request: Request, update: SettingsUpdate):
     _local_only(request)
-    return set_state({k: v for k, v in update.model_dump().items() if v is not None})
+    user = getattr(request.state, 'cortex_user_obj', None) or {}
+    return set_state({k: v for k, v in update.model_dump().items() if v is not None}, actor=user.get('id') or getattr(request.state, 'cortex_user', None))
+
+
+@router.get('/api/admin/automation/monitor')
+def automation_monitor(request: Request, ticket_id: int | None = Query(None, ge=1)):
+    _local_only(request)
+    import automation_monitor as monitor
+    return monitor.report(get_state(), ticket_id)
+
+
+@router.post('/api/admin/automation/preview/{ticket_id}')
+def automation_preview(request: Request, ticket_id: int):
+    _local_only(request)
+    if ticket_id <= 0:
+        raise HTTPException(422, 'Número inválido.')
+    # Explicitly dry-run: this path has no writer or outbox mutation.
+    settings = movidesk_note_worker.effective_settings(movidesk_note_worker.Settings.load())
+    from dataclasses import replace
+    settings = replace(settings, mode='dry_run')
+    api = movidesk_note_worker.Api(settings)
+    try:
+        ticket = api.ticket(ticket_id)
+        ok, reason = movidesk_note_worker.eligible(ticket, settings)
+        if not ok:
+            raise HTTPException(409, reason)
+        controls = get_state()
+        run = operations.begin('Simulação sem publicação', '', [], controls, ticket_id=ticket_id)
+        try:
+            result = movidesk_note_worker.generate_note(ticket, settings, api)
+            operations.finish(run, draft=result.get('reply'))
+            return {'reply': result.get('reply'), 'published': False}
+        except Exception:
+            operations.finish(run, error='Falha na simulação')
+            raise HTTPException(503, 'Não foi possível gerar a prévia.') from None
+    finally:
+        api.client.close()
 
 
 @router.get("/api/admin/statuses")

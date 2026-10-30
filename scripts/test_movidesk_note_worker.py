@@ -48,6 +48,10 @@ class WorkerTests(unittest.TestCase):
         self.secret_patch = patch.object(receiver, 'MOVIDESK_WEBHOOK_SECRET', 'x' * 40)
         self.db_patch.start()
         self.secret_patch.start()
+        import agent_operations
+        patch.object(agent_operations, 'OPERATIONS_DB', Path(self.tmp.name) / 'operations.sqlite3').start()
+        patch.object(worker, 'ADMIN_STATE_FILE', Path(self.tmp.name) / 'state.json').start()
+        patch.object(worker, 'runtime_state', return_value={'min_interval_seconds': 0, 'max_per_minute': 60, 'max_concurrent': 2}).start()
         self.operational_sync = patch.object(worker, 'persist_operational_ticket').start()
         self.client = TestClient(receiver.app)
         self.settings = worker.Settings('internal_note', 'bot', frozenset({'464'}),

@@ -679,6 +679,7 @@ $('webhook-pull-form')?.addEventListener('submit',async event=>{
   const input=$('webhook-ticket-id'),button=$('webhook-pull'),status=$('webhook-pull-status');
   const ticketId=Number(input?.value);
   if(!Number.isInteger(ticketId)||ticketId<=0){status.textContent='Informe um número de chamado válido.';return;}
+  if(!confirm(`Processar o chamado #${ticketId}? Esta ação pode publicar uma nota interna privada no Movidesk conforme as autorizações vigentes.`))return;
   button.disabled=true;status.textContent=`Buscando o chamado #${ticketId} no Movidesk…`;clearError();
   try{
     const result=await api(`/api/admin/webhooks/pull/${ticketId}`,{method:'POST'});
