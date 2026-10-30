@@ -61,16 +61,25 @@ class LoginExperienceTests(unittest.TestCase):
         self.assertIn('SameSite=lax', cookie)
         self.assertTrue(web_auth._valid(response.cookies[web_auth.COOKIE]))
 
-    def test_checked_and_legacy_login_keep_eight_hour_expiry(self):
-        for extra in ('', '&remember=0&remember=1'):
+    def test_checked_login_persists_for_thirty_days(self):
+        for extra in ('&remember=1', '&remember=0&remember=1'):
             response = self.login(extra)
             self.assertEqual(response.status_code, 303)
             self.assertEqual(response.headers['location'], '/atendimento')
-            self.assertIn('Max-Age=28800', response.headers['set-cookie'])
+            self.assertIn(f'Max-Age={web_auth.REMEMBER_SECONDS}', response.headers['set-cookie'])
             encoded = response.cookies[web_auth.COOKIE].split('.')[0]
             payload = base64.urlsafe_b64decode(encoded + '=' * (-len(encoded) % 4)).decode()
             expiry = int(payload.split(':')[1])
-            self.assertAlmostEqual(expiry - web_auth.time.time(), web_auth.SESSION_SECONDS, delta=2)
+            self.assertAlmostEqual(expiry - web_auth.time.time(), web_auth.REMEMBER_SECONDS, delta=2)
+            with patch('web_auth.time.time', return_value=web_auth.time.time() + web_auth.SESSION_SECONDS + 1):
+                self.assertTrue(web_auth._valid(response.cookies[web_auth.COOKIE]))
+                landing = self.client.get('/login', follow_redirects=False)
+                self.assertEqual(landing.status_code, 303)
+                self.assertEqual(landing.headers['location'], '/atendimento')
+
+    def test_legacy_post_without_checkbox_uses_session_cookie(self):
+        response = self.login()
+        self.assertNotIn('Max-Age', response.headers['set-cookie'])
 
     def test_invalid_login_retains_form_and_error(self):
         response = self.client.post('/login', data={'username': 'tester', 'password': 'wrong'},
@@ -85,7 +94,7 @@ class LoginExperienceTests(unittest.TestCase):
         wrong_origin = self.client.post('/login', data={'username': 'tester', 'password': 'TestPassword123!'},
                                         headers={'origin': 'https://other.example'})
         self.assertEqual(wrong_origin.status_code, 403)
-        self.login('&remember=0&remember=1')
+        self.login('&remember=0')
         token = self.client.cookies[web_auth.COOKIE]
         with patch('web_auth.time.time', return_value=web_auth.time.time() + web_auth.SESSION_SECONDS + 1):
             self.assertFalse(web_auth._valid(token))

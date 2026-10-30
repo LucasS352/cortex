@@ -16,6 +16,7 @@ from starlette.concurrency import run_in_threadpool
 
 COOKIE = "cortex_session"
 SESSION_SECONDS = 8 * 60 * 60
+REMEMBER_SECONDS = 30 * 24 * 60 * 60
 # Only these presentation assets are public. All other tech-assets remain gated.
 LOGIN_ASSETS = frozenset({
     "/tech-assets/login/login.css", "/tech-assets/login/login-form.js",
@@ -85,9 +86,10 @@ def _sign(payload: str) -> str:
     return hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()
 
 
-def _issue(user_id: str | None = None, session_version: int = 0) -> str:
+def _issue(user_id: str | None = None, session_version: int = 0,
+           lifetime: int = SESSION_SECONDS) -> str:
     uid = user_id or "00000000-0000-0000-0000-000000000001"
-    payload = f"{uid}:{int(time.time()) + SESSION_SECONDS}:{session_version}.{secrets.token_hex(12)}"
+    payload = f"{uid}:{int(time.time()) + lifetime}:{session_version}.{secrets.token_hex(12)}"
     return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=") + "." + _sign(payload)
 
 
@@ -259,6 +261,10 @@ async def gate(request: Request, call_next):
         return await call_next(request)
     if path == "/login":
         if request.method == "GET":
+            remembered_user = await run_in_threadpool(_load_user_session, request.cookies.get(COOKIE))
+            if remembered_user:
+                return RedirectResponse(destination_for_user(remembered_user), status_code=303,
+                                        headers={"Cache-Control": "no-store"})
             return login_page()
         if request.method != "POST":
             return JSONResponse({"error": "Method not allowed"}, status_code=405)
@@ -291,10 +297,11 @@ async def gate(request: Request, call_next):
         _failures.pop(ip, None)
         target_path = destination_for_user(user_obj)
         response = RedirectResponse(target_path, status_code=303)
-        # Keep the existing signed eight-hour expiry; unchecked uses a browser-session cookie.
-        # The hidden field precedes the checkbox, so the last submitted value wins.
-        remember = form.get("remember", ["1"])[-1] == "1"
-        response.set_cookie(COOKIE, _issue(str(user_obj["id"]), user_obj.get("session_version", 0)), max_age=SESSION_SECONDS if remember else None, httponly=True,
+        # A remembered session must outlive a browser restart in both the
+        # browser cookie and the signed token. The hidden field precedes the checkbox.
+        remember = form.get("remember", ["0"])[-1] == "1"
+        lifetime = REMEMBER_SECONDS if remember else SESSION_SECONDS
+        response.set_cookie(COOKIE, _issue(str(user_obj["id"]), user_obj.get("session_version", 0), lifetime), max_age=lifetime if remember else None, httponly=True,
                             secure=public_origin().startswith("https://"), samesite="lax", path="/")
         response.headers["Cache-Control"] = "no-store"
         return response

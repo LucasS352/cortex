@@ -83,6 +83,7 @@ class WebAuthTests(unittest.TestCase):
         self.assertEqual(training.headers["content-security-policy"], "frame-ancestors 'self'")
 
         # The login page must never be frameable, including by Cortex itself.
+        self.client.cookies.delete(web_auth.COOKIE)
         login = self.client.get("/login")
         self.assertEqual(login.headers["x-frame-options"], "DENY")
 

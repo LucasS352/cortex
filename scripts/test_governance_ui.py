@@ -53,20 +53,20 @@ if __name__ == '__main__':
         page.goto('http://cortex.test/admin?view=agent')
         page.wait_for_selector('#gov-checks .gov-check')
         page.evaluate("go('agent')")
-        page.locator('[data-tab="tab-operational"]').click()
-        assert page.locator('.studio-tab-btn').count() == 7
+        page.locator('[data-tab="tab-sandbox"]').click()
+        assert page.locator('.studio-tab-btn').count() == 4
         for theme in ['light', 'dark']:
             page.evaluate('(theme) => setTheme(theme)', theme)
-            for tab in ['tab-operational', 'tab-companies', 'tab-triggers']:
-                page.locator(f'[data-tab="{tab}"]').click()
-                page.screenshot(path=str(OUTPUT / f'{theme}-{tab}.png'), full_page=True, animations='disabled')
-        page.locator('[data-tab="tab-companies"]').click()
+            page.locator('[data-tab="tab-sandbox"]').click()
+            page.screenshot(path=str(OUTPUT / f'{theme}-policies.png'), full_page=True, animations='disabled')
+        page.locator('#gov-rules summary').click()
+        assert page.locator('#gov-save-rule').is_visible()
         page.locator('[data-company-detail="464"]').click()
         assert page.locator('#gov-company-dialog').is_visible()
         page.locator('#gov-company-close').click()
         page.set_viewport_size({'width': 390, 'height': 844})
-        page.locator('[data-tab="tab-operational"]').click()
+        page.locator('[data-tab="tab-sandbox"]').click()
         page.screenshot(path=str(OUTPUT / 'mobile.png'), full_page=True)
         browser.close()
         assert not errors, errors
-        print('Browser smoke passed: 7 tabs, themes, companies and dialog. Screenshots:', OUTPUT)
+        print('Browser smoke passed: 4 tabs, themes, policies and company dialog. Screenshots:', OUTPUT)
