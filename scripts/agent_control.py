@@ -60,7 +60,10 @@ def eligibility(ticket: dict | None, settings: dict, *, now: datetime | None = N
     from automation_scope import evaluate
     scope = evaluate(ticket, settings, org_id)
     if not scope['allowed']:
-        scope_messages = {'fora_da_triagem':'O chamado não está em Triagem.',
+        scope_messages = {'fora_da_triagem':'O chamado não está em Novo ou Triagem.',
+            'status_bloqueado_desenvolvimento':'Status ou equipe de Desenvolvimento: agente bloqueado.',
+            'status_bloqueado_comercial':'Status ou equipe Comercial: agente bloqueado.',
+            'chamado_finalizado':'O chamado já foi finalizado.', 'status_indisponivel':'Status do chamado indisponível.',
             'automacao_pausada':'O piloto está pausado.',
             'liberacao_sem_data_registrada':'Confirme a liberação para registrar sua data.',
             'data_de_abertura_indisponivel':'A data de abertura do chamado não está disponível.',

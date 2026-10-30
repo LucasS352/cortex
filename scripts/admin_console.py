@@ -205,7 +205,8 @@ def get_state():
             merged["specialists"] = list(configured) + [
                 item for item in DEFAULT_SPECIALISTS if item.get("id") not in configured_ids
             ]
-            return merged
+            from automation_scope import restore_release_dates
+            return restore_release_dates(merged, STATE_FILE.parent / 'agent_operations.sqlite3')
         except (OSError, ValueError, TypeError):
             return dict(DEFAULT_STATE)
 

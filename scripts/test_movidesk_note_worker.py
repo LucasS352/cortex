@@ -15,7 +15,7 @@ import ticket_agent_control
 
 
 def ticket():
-    return {'id': 42, 'type': 2, 'subject': 'Erro na etiqueta', 'baseStatus': 'New',
+    return {'id': 42, 'type': 2, 'subject': 'Erro na etiqueta', 'baseStatus': 'New', 'status':'Novo',
             'clients': [{'id': 'client', 'email': 'lucas.teste@alternativa.com.br',
                          'organization': {'id': '464', 'businessName': 'Empresa teste'}}],
             'actions': [{'id': 1, 'type': 2, 'description': 'Não consigo emitir a etiqueta.',

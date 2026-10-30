@@ -48,6 +48,12 @@ window.renderGovernanceCompanies = function () {
       })
       .join("") || '<p class="muted">Nenhuma empresa encontrada.</p>';
 };
+function fixedStatusPolicy(select) {
+  select.replaceChildren();
+  select.hidden = true;
+  select.previousElementSibling.textContent = 'Bloqueios de status';
+  select.nextElementSibling.textContent = 'Permitidos os status abertos, exceto Desenvolvimento e Comercial. Chamados finalizados permanecem bloqueados.';
+}
 function govRulesEditor() {
   const s = window.governanceSettings || {},
     r = s.automation_rules || {};
@@ -57,12 +63,7 @@ function govRulesEditor() {
     .forEach(
       (e) => (e.checked = (r.events || ["customer_message"]).includes(e.value)),
     );
-  $("gov-statuses").innerHTML = governanceStatuses
-    .map(
-      (x) =>
-        `<option ${r.statuses?.includes(x.name) ? "selected" : ""}>${esc(x.name)}</option>`,
-    )
-    .join("");
+  fixedStatusPolicy($("gov-statuses"));
 }
 async function govInspect(id) {
   $("gov-inspect-result").textContent = "Consultando histórico local…";
@@ -190,6 +191,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       r = s.automation_rules || {},
       exception = r.companies?.[c.id] || {};
     dialog.innerHTML = `<h2>${esc(c.name)}</h2><p>ID ${esc(c.id)} · ${c.selected ? "Autorizada" : "Não autorizada"}</p><p>Solicitantes: ${esc((s.pilot_requester_emails || []).join(", ") || "Todos os solicitantes da empresa")}</p><p>Status: ${esc((exception.statuses || r.statuses || []).join(", ") || "Todos os status abertos")}</p><p>Eventos: ${esc((exception.events || r.events || ["customer_message"]).map((x) => govEvents[x]).join(", "))}</p><label><input type="checkbox" id="gov-company-enabled" ${exception.enabled !== false ? "checked" : ""} ${c.selected ? "" : "disabled"}> Habilitar automação desta empresa nas regras configuráveis</label><p>A exceção é aplicada quando as regras configuráveis estão habilitadas. Autorizações e filtros globais são obrigatórios.</p><button class="button button-primary" id="gov-company-save" ${c.selected ? "" : "disabled"}>Salvar exceção</button><button class="button button-quiet" id="gov-company-close">Fechar</button><p id="gov-company-message"></p><h3>Últimas execuções no recorte</h3>${govLogs((governanceData?.items || []).filter((x) => x.company_id === c.id))}<p>Histórico de alterações de configuração disponível em Histórico de alterações.</p>`;
+    for (const paragraph of dialog.querySelectorAll('p')) {
+      if (paragraph.textContent.startsWith('Status:')) paragraph.textContent = 'Status: abertos, exceto Desenvolvimento e Comercial.';
+    }
     dialog.showModal();
     $("gov-company-close").onclick = () => dialog.close();
     $("gov-company-save").onclick = async () => {
@@ -235,6 +239,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         "",
       )}</fieldset><fieldset><legend>Status desta empresa</legend><select id="gov-company-statuses" multiple aria-label="Status desta empresa">${governanceStatuses.map((x) => `<option ${(exception.statuses || r.statuses || []).includes(x.name) ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select><p>Sem seleção: todos os status abertos.</p></fieldset>`;
     $("gov-company-save").before(editor);
+    fixedStatusPolicy($("gov-company-statuses"));
     $("gov-company-save").onclick = async () => {
       if (!company.selected) return;
       try {

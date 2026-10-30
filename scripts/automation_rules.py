@@ -29,6 +29,10 @@ def validate(value, known_statuses):
 
 
 def evaluate(ticket, payload, previous, rules, organization_id):
+    from automation_scope import status_block
+    blocked = status_block(ticket)
+    if blocked:
+        return {'allowed':False,'event':'snapshot','reason':blocked,'rule':'escopo_obrigatorio'}
     if not rules.get('enabled'):
         return {'allowed': True, 'event': 'legacy', 'reason': '', 'rule': 'compatibilidade'}
     rule = {**rules, **rules.get('companies', {}).get(organization_id, {})}
@@ -44,7 +48,6 @@ def evaluate(ticket, payload, previous, rules, organization_id):
         observed.add('customer_message')
     matched = sorted(observed & set(rule.get('events', [])))
     reason = ('automacao_empresa_desativada' if not rule.get('enabled') else
-              'status_nao_elegivel' if rule.get('statuses') and status not in rule['statuses'] else
               'evento_nao_elegivel' if not matched else '')
     return {'allowed': not reason, 'event': ', '.join(sorted(observed)) or 'snapshot',
             'reason': reason, 'rule': organization_id if organization_id in rules.get('companies', {}) else 'global',

@@ -807,7 +807,9 @@ def trace(event, stage):
 
 def runtime_state():
     try:
-        return json.loads(ADMIN_STATE_FILE.read_text(encoding='utf-8'))
+        from automation_scope import restore_release_dates
+        state = json.loads(ADMIN_STATE_FILE.read_text(encoding='utf-8'))
+        return restore_release_dates(state, ADMIN_STATE_FILE.parent / 'agent_operations.sqlite3')
     except (OSError, ValueError, TypeError):
         return {}
 
@@ -953,7 +955,6 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
         current_rule = {**current_rules, **current_rules.get('companies', {}).get(org_id, {})}
         rule_block = current_rules.get('enabled') and (
             not current_rule.get('enabled') or
-            bool(current_rule.get('statuses') and fresh.get('status') not in current_rule['statuses']) or
             not set(decision.get('matched', [])) & set(current_rule.get('events', [])))
         if rule_block:
             finish(event, 'skipped', 'politica_alterada_durante_analise')

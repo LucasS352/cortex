@@ -678,6 +678,13 @@ async function loadWebhookReceipts(){
   }catch(e){$('webhook-summary').textContent='Não foi possível consultar o worker.';showError(e.message);}
 }
 $('webhook-refresh')?.addEventListener('click',loadWebhookReceipts);
+let webhookMonitorBusy = false;
+setInterval(async () => {
+  if (document.hidden || !$('view-agent')?.classList.contains('active') || webhookMonitorBusy) return;
+  webhookMonitorBusy = true;
+  try { await loadWebhookReceipts(); await window.refreshGovernance?.(); }
+  finally { webhookMonitorBusy = false; }
+}, 15000);
 $('webhook-pull-form')?.addEventListener('submit',async event=>{
   event.preventDefault();
   const input=$('webhook-ticket-id'),button=$('webhook-pull'),status=$('webhook-pull-status');

@@ -31,8 +31,8 @@ class AutomationTests(unittest.TestCase):
         self.assertEqual(len(self.f.api.writes), 1)
 
     def test_creation_wrong_status_is_logged_without_generation(self):
-        self.f.api.data['status'] = 'Em atendimento'
-        self.assertEqual(self.process()['outcome'], 'status_nao_elegivel')
+        self.f.api.data['status'] = 'DEV - Em coding'
+        self.assertEqual(self.process()['outcome'], 'status_bloqueado_desenvolvimento')
         self.f.generate.assert_not_called()
 
     def test_unauthorized_company_never_generates(self):

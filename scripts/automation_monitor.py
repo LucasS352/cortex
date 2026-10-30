@@ -9,7 +9,10 @@ from agent_control import organization
 from automation_rules import evaluate
 
 LABELS = {
-    'fora_da_triagem':'Chamado fora de Triagem',
+    'status_bloqueado_desenvolvimento':'Chamado de Desenvolvimento: agente bloqueado',
+    'status_bloqueado_comercial':'Chamado Comercial: agente bloqueado',
+    'status_indisponivel':'Status do chamado indisponível',
+    'fora_da_triagem':'Chamado fora de Novo/Triagem',
     'automacao_pausada':'Automação pausada',
     'liberacao_sem_data_registrada':'Liberação ainda não confirmada',
     'data_de_abertura_indisponivel':'Data de abertura indisponível',
