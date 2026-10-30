@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 import knowledge_training as kt
 import web_auth
+import ticket_agent_control
 from technician_workbench import actor
 
 router = APIRouter(prefix='/api/treinamento', tags=['Treinamento da IA'])
@@ -241,9 +242,10 @@ def suggestions(module: str | None = None, limit: int = Query(30, ge=1, le=100))
 
 
 @router.get('/candidatos')
-def candidates(module: str | None = None, subtopic: str | None = None, status: str = 'open'):
+def candidates(module: str | None = None, subtopic: str | None = None, status: str = 'open',
+               limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0)):
     statuses = ('pending', 'conflict') if status == 'open' else (status,)
-    return _guard(kt.list_candidates, statuses, module, subtopic)
+    return _guard(kt.list_candidates, statuses, module, subtopic, limit=limit, offset=offset)
 
 
 @router.post('/candidatos')
@@ -438,7 +440,7 @@ def ticket_answers(ticket_id: int):
 def ticket_technician_answers(ticket_id: int, refresh: bool = False):
     if refresh:
         return _guard(kt.ticket_technician_answers, ticket_id, refresh_live=True)
-    return _guard(kt.ticket_technician_answers, ticket_id)
+    return _guard(kt.ticket_technician_answers, ticket_id, refresh_live=False)
 
 
 @router.get('/tecnico/tickets/{ticket_id}')
@@ -462,8 +464,25 @@ def technician_context(ticket_id: int, request: Request,
         context['saved_reviews'] = kt.ticket_saved_reviews(ticket_id, actor=name)
     except Exception:
         context.setdefault('saved_reviews', [])
-    return {'technician': name, 'context': context,
+    return {'technician': name, 'context': context, 'agent_control': ticket_agent_control.status(ticket_id),
             'taxonomy': [module for module in _guard(kt.taxonomy_options) if module['key'] != 'unclassified']}
+
+
+class TicketAgentState(BaseModel):
+    paused: bool = Field(strict=True)
+
+
+@router.put('/tecnico/tickets/{ticket_id}/agente')
+def technician_agent_state(ticket_id: int, body: TicketAgentState, request: Request,
+                           technician_pin: str = Header(alias='X-Cortex-Technician-Pin', min_length=4, max_length=4)):
+    _technician_origin(request)
+    name = _technician_name(technician_pin, request)
+    if ticket_id <= 0 or ticket_id > 2147483647:
+        raise HTTPException(422, 'Número de chamado inválido.')
+    # Use the same tenant boundary and local ticket validation as the editor.
+    with kt.connect() as conn:
+        _guard(kt.load_ticket, conn, ticket_id)
+    return _guard(ticket_agent_control.set_paused, ticket_id, body.paused, name)
 
 
 @router.get('/tecnico/tickets/{ticket_id}/respostas-tecnicas')

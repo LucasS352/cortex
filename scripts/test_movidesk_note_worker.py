@@ -11,6 +11,7 @@ import httpx
 from fastapi.testclient import TestClient
 import movidesk_webhook as receiver
 import movidesk_note_worker as worker
+import ticket_agent_control
 
 
 def ticket():
@@ -70,6 +71,46 @@ class WorkerTests(unittest.TestCase):
     def retry_now(self):
         with receiver._connect() as db:
             db.execute('UPDATE webhook_events SET available_at=0')
+
+    def test_paused_ticket_keeps_sync_but_never_generates_or_sends(self):
+        ticket_agent_control.set_paused(42, True, 'Técnico QA')
+        self.enqueue(Actions=[{'Id': 1}])
+        worker.run_once(self.settings, self.api, self.generate)
+        self.operational_sync.assert_called()
+        self.generate.assert_not_called()
+        self.assertEqual(self.api.writes, [])
+        self.enqueue(Actions=[{'Id':1}], Status='Em atendimento')
+        worker.run_once(self.settings, self.api, self.generate)
+        self.generate.assert_not_called()
+        self.assertEqual(self.api.writes, [])
+        with receiver._connect() as db:
+            self.assertEqual(db.execute('SELECT outcome FROM webhook_events').fetchone()[0], 'agente_pausado_no_chamado')
+        self.assertTrue(ticket_agent_control.status(42)['paused'])
+        self.assertFalse(ticket_agent_control.status(43)['paused'])
+
+    def test_pause_confirmed_during_generation_prevents_patch(self):
+        def generate(*_):
+            ticket_agent_control.set_paused(42, True, 'Técnico QA')
+            return {'reply': 'Resposta pronta.'}
+        self.enqueue(Actions=[{'Id': 1}])
+        worker.run_once(self.settings, self.api, generate)
+        self.assertEqual(self.api.writes, [])
+        self.assertEqual(self.states(), ['skipped'])
+
+    def test_reactivation_does_not_override_disabled_publication(self):
+        from dataclasses import replace
+        ticket_agent_control.set_paused(42, True, 'Técnico QA')
+        ticket_agent_control.set_paused(42, False, 'Outro técnico QA')
+        self.enqueue(Actions=[{'Id': 1}])
+        worker.run_once(replace(self.settings, mode='dry_run'), self.api, self.generate)
+        self.assertEqual(self.api.writes, [])
+        self.assertEqual(self.states(), ['preview'])
+
+    def test_pause_of_other_ticket_does_not_block_current_ticket(self):
+        ticket_agent_control.set_paused(43, True, 'Técnico QA')
+        self.enqueue(Actions=[{'Id': 1}])
+        worker.run_once(self.settings, self.api, self.generate)
+        self.assertEqual(len(self.api.writes), 1)
 
     def states(self):
         return [r['state'] for r in receiver.receipt_summary()['recent']]
@@ -392,7 +433,7 @@ class WorkerTests(unittest.TestCase):
                 }
             }
         }, 'marker')
-        self.assertIn('<strong>Procedimento oficial:</strong> #1 — relatorio Venda por produto. (v1 · aprovado por alternativa)', result)
+        self.assertIn('Procedimento oficial:</strong> #1 — relatorio Venda por produto. (v1 · aprovado por alternativa)', result)
         self.assertNotIn('{"id":', result)
         self.assertNotIn('canon:1', result)
 

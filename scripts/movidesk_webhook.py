@@ -58,6 +58,11 @@ def _connect():
         id INTEGER PRIMARY KEY CHECK(id=1), heartbeat REAL NOT NULL, mode TEXT NOT NULL)''')
     db.execute('''CREATE TABLE IF NOT EXISTS ticket_webhook_snapshots (
         ticket_id INTEGER PRIMARY KEY, fetched_at REAL NOT NULL, payload_json TEXT NOT NULL)''')
+    db.execute('''CREATE TABLE IF NOT EXISTS ticket_agent_state (
+        ticket_id INTEGER PRIMARY KEY, paused INTEGER NOT NULL, actor TEXT NOT NULL, updated_at REAL NOT NULL)''')
+    db.execute('''CREATE TABLE IF NOT EXISTS ticket_agent_audit (
+        id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL, paused INTEGER NOT NULL,
+        actor TEXT NOT NULL, created_at REAL NOT NULL)''')
     try:
         with db:
             yield db

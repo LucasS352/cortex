@@ -803,7 +803,7 @@ def save_candidate_prepared_image_redaction(candidate_id, file_name, data_url, n
             'url': '/training-media/' + saved['file']}
 
 
-def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, limit=100):
+def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, limit=100, offset=0):
     ensure_schema()
     with connect() as conn:
         return conn.execute('''SELECT id,ticket_external_id,status,usefulness_score,suggested_module,suggested_subtopic,
@@ -811,8 +811,8 @@ def list_candidates(status=('pending', 'conflict'), module=None, subtopic=None, 
                    extractor, created_by, created_at
             FROM cortex_kb.candidates WHERE status = ANY(%s) AND (%s::text IS NULL OR suggested_module=%s)
               AND (%s::text IS NULL OR suggested_subtopic=%s OR suggested_subtopic LIKE (%s || ':%%'))
-            ORDER BY (status='conflict') DESC, usefulness_score DESC, created_at LIMIT %s''',
-            (list(status), module, module, subtopic, subtopic, subtopic, limit)).fetchall()
+            ORDER BY (status='conflict') DESC, usefulness_score DESC, created_at, id LIMIT %s OFFSET %s''',
+            (list(status), module, module, subtopic, subtopic, subtopic, limit, offset)).fetchall()
 
 
 def suggest_tickets(limit=30, module=None):

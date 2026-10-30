@@ -689,6 +689,7 @@ def render_note(result, marker):
         if url and re.fullmatch(r'https://youtu\.be/[A-Za-z0-9_-]{11}', url):
             lines.append('<p>Tutorial: <a href="' + html.escape(url, quote=True) + '">' +
                          html.escape(str(video.get('title') or 'Vídeo')) + '</a></p>')
+    internal_start = len(lines)
     if similar:
         lines.append('<p><strong>Observação interna — Tickets semelhantes:</strong></p><ul>')
         for case in similar:
@@ -753,7 +754,22 @@ def render_note(result, marker):
         link_text = 'Sugerir ajuste ou melhoria neste procedimento' if is_confirmed else 'Preparar resolução técnica e enviar à curadoria'
         lines.append(f'<p><a href="{html.escape(review_url, quote=True)}">{html.escape(link_text)}</a> (uso interno)</p>')
     lines.append('<p><small>Confira a orientação antes de responder ao cliente. ' + marker + '</small></p>')
-    return ''.join(lines)
+    # Presentation only: the customer suggestion and its sources above stay byte-for-byte unchanged.
+    footer = ''.join(lines[internal_start:])
+    def compact_tag(match):
+        tag, attrs = match.group(1), match.group(2)
+        spacing = {'p': 'margin:0 0 6px;', 'ul': 'margin:4px 0 10px;padding-left:18px;',
+                   'li': 'margin:0 0 4px;'}.get(tag, '')
+        style = 'font-size:9pt;line-height:1.4;' + spacing
+        if re.search(r'\bstyle="', attrs):
+            attrs = re.sub(r'\bstyle="', 'style="' + style, attrs, count=1)
+        else:
+            attrs += ' style="' + style + '"'
+        return '<' + tag + attrs + '>'
+    footer = re.sub(r'<(p|ul|li|strong|small|a)(\s[^>]*|)>', compact_tag, footer)
+    return ''.join(lines[:internal_start]) + (
+        '<div style="border-top:1px solid #dbe2ea;margin-top:14px;padding-top:10px;font-size:9pt;line-height:1.4">'
+        + footer + '</div>')
 
 
 def claim(settings):
@@ -837,6 +853,10 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
                    (json.dumps({'company_id': org_id, 'company': org_name, 'status': ticket.get('status')}), event['digest']))
     if sync_only_reason:
         finish(event, 'skipped', sync_only_reason)
+        return
+    import ticket_agent_control
+    if ticket_agent_control.status(ticket['id'])['paused']:
+        finish(event, 'skipped', 'agente_pausado_no_chamado')
         return
     ok, reason = eligible(ticket, settings)
     trace(event, 'authorization')
@@ -941,11 +961,15 @@ def process(event, settings, api, generator=generate_note, sync_only_reason=''):
     if not ok or identity(fresh, settings)[0] != message_key or fresh.get('status') != ticket.get('status'):
         finish(event, 'skipped', reason or 'mensagem_alterada_durante_analise')
         return
-    # Commit intent before any network write. A crash afterwards requires reconciliation.
-    outbox_state(key, 'sending')
-    trace(event, 'publication')
     try:
-        response = api.internal_note(ticket['id'], existing['content'])
+        with ticket_agent_control.publication_guard(ticket['id']) as allowed:
+            if not allowed:
+                finish(event, 'skipped', 'agente_pausado_no_chamado')
+                return
+            # Commit intent before any network write. A crash requires reconciliation.
+            outbox_state(key, 'sending')
+            trace(event, 'publication')
+            response = api.internal_note(ticket['id'], existing['content'])
     except (httpx.HTTPError, OSError):
         outbox_state(key, 'uncertain')
         raise RetryJob('Entrega incerta: falha de conexão durante PATCH') from None
