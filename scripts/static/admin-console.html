@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -7,6 +7,8 @@
   <meta name="apple-mobile-web-app-title" content="Cortex">
   <title>Cortex · Central de Inteligência</title>
   <script>try{document.documentElement.dataset.theme=localStorage.getItem('cortex-theme')==='light'?'light':'dark'}catch(_){document.documentElement.dataset.theme='dark'}</script>
+  <script>try{if(sessionStorage.getItem('cortex-from-login')==='1'){sessionStorage.removeItem('cortex-from-login');if(!matchMedia('(prefers-reduced-motion: reduce)').matches)document.documentElement.classList.add('cortex-entering')}}catch(_){}</script>
+  <style>html{background:#061225}html[data-theme="light"]:not(.cortex-entering){background:#edf2f7}@keyframes cortex-enter{from{opacity:0}to{opacity:1}}html.cortex-entering body{animation:cortex-enter .22s ease-out both}</style>
   <link rel="icon" type="image/png" href="/tech-assets/cortex-favicon.png?v=3">
   <link rel="apple-touch-icon" href="/tech-assets/cortex-favicon.png?v=3">
   <link rel="manifest" href="/tech-assets/cortex.webmanifest" crossorigin="use-credentials">

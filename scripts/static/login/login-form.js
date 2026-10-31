@@ -5,10 +5,14 @@
   const username = document.getElementById('user');
   const password = document.getElementById('pass');
   const remember = form.querySelector('input[type="checkbox"][name="remember"]');
+  const panel = document.querySelector('.login-panel');
+  const scene = document.querySelector('.neural-scene');
+  const error = document.getElementById('login-error');
+  let pending = false, controller, timeout, slowNotice, transitionTimer, navigating = false;
   const rememberedUsernameKey = 'cortex-remembered-username';
   try {
     const savedUsername = localStorage.getItem(rememberedUsernameKey);
-    if (savedUsername) username.value = savedUsername;
+    if (savedUsername && !username.value) username.value = savedUsername;
   } catch (_) { /* Storage may be disabled by the browser. */ }
   const toggle = document.querySelector('.password-toggle');
   const recovery = document.querySelector('.recovery-link');
@@ -26,7 +30,27 @@
     help.hidden = !help.hidden;
     recovery.setAttribute('aria-expanded', String(!help.hidden));
   });
-  form.addEventListener('submit', () => {
+  function clearTimers() {
+    clearTimeout(timeout);
+    clearTimeout(slowNotice);
+    clearTimeout(transitionTimer);
+  }
+  function reset(message = '') {
+    clearTimers();
+    controller?.abort();
+    pending = false;
+    navigating = false;
+    document.body.classList.remove('login-pending', 'login-slow', 'login-entering', 'login-zooming');
+    panel.inert = false;
+    submit.disabled = false;
+    submit.querySelector('span').textContent = 'Entrar';
+    form.removeAttribute('aria-busy');
+    status.textContent = '';
+    error.textContent = message;
+    error.hidden = !message;
+    if (message) error.focus();
+  }
+  function saveUsername() {
     try {
       if (remember.checked && username.value.trim()) {
         localStorage.setItem(rememberedUsernameKey, username.value.trim());
@@ -34,20 +58,89 @@
         localStorage.removeItem(rememberedUsernameKey);
       }
     } catch (_) { /* Login continues if storage is unavailable. */ }
+  }
+  form.addEventListener('submit', async event => {
+    // Keep the native POST fallback for older browsers / disabled JavaScript.
+    if (!window.fetch || !window.AbortController) return;
+    event.preventDefault();
+    if (pending) return;
+    const body = new URLSearchParams(new FormData(form));
+    pending = true;
+    controller = new AbortController();
+    const attempt = controller;
+    error.hidden = true;
     submit.disabled = true;
-    submit.querySelector('span').textContent = 'Entrando…';
+    panel.inert = true;
     form.setAttribute('aria-busy', 'true');
-    status.textContent = 'Verificando suas credenciais.';
+    document.body.classList.add('login-pending');
+    status.textContent = 'Entrando no Cortex…';
+    slowNotice = setTimeout(() => {
+      document.body.classList.add('login-slow');
+      status.textContent = 'A conexão está demorando um pouco. Aguarde…';
+    }, 4000);
+    timeout = setTimeout(() => attempt.abort(), 15000);
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST', body, credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'application/json' }, signal: attempt.signal,
+      });
+      const result = await response.json();
+      if (!pending || attempt.signal.aborted) return;
+      if (!response.ok) throw new Error(result.error || 'Não foi possível entrar. Tente novamente.');
+      // Only destinations issued by our login gate are accepted.
+      if (!['/admin', '/atendimento', '/em-breve', '/senha'].includes(result.redirect)) {
+        throw new Error('Não foi possível abrir o painel. Tente novamente.');
+      }
+      clearTimeout(timeout);
+      clearTimeout(slowNotice);
+      document.body.classList.remove('login-slow');
+      saveUsername();
+      const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const navigate = () => {
+        if (!pending || navigating || attempt.signal.aborted) return;
+        navigating = true;
+        status.textContent = 'Abrindo seu painel…';
+        try { sessionStorage.setItem('cortex-from-login', '1'); } catch (_) {}
+        // A stalled document navigation must not leave a permanently hidden form.
+        timeout = setTimeout(() => {
+          if (navigating) window.stop();
+          reset('O painel demorou para abrir. Tente entrar novamente.');
+        }, 20000);
+        window.location.replace(result.redirect);
+      };
+      if (reducedMotion) {
+        navigate();
+        return;
+      }
+      status.textContent = 'Entrando no universo Cortex…';
+      document.body.classList.add('login-zooming');
+      void scene?.offsetWidth;
+      document.body.classList.add('login-entering');
+      // Navigate at 2000ms while the 4.2s CSS camera glide is still smoothly advancing,
+      // so the camera never stops before the destination document paints.
+      transitionTimer = setTimeout(navigate, 2000);
+    } catch (failure) {
+      if (!pending || controller !== attempt) return;
+      const message = failure.name === 'AbortError'
+        ? 'A conexão demorou para responder. Tente entrar novamente.'
+        : failure instanceof TypeError || failure instanceof SyntaxError
+          ? 'Não foi possível conectar ao Cortex. Verifique sua conexão e tente novamente.'
+          : failure.message;
+      reset(message);
+    }
   });
   remember.addEventListener('change', () => {
     if (!remember.checked) {
       try { localStorage.removeItem(rememberedUsernameKey); } catch (_) {}
     }
   });
-  window.addEventListener('pageshow', () => {
-    submit.disabled = false;
-    submit.querySelector('span').textContent = 'Entrar';
-    form.removeAttribute('aria-busy');
-    status.textContent = '';
+  window.addEventListener('pagehide', () => {
+    clearTimers();
+    controller?.abort();
+    pending = false;
+    document.body.classList.remove('login-zooming');
   });
+  // Initial pageshow may arrive after a fast submit while images are loading.
+  // Only a back/forward cache restoration should reset an active attempt.
+  window.addEventListener('pageshow', event => { if (event.persisted) reset(); });
 })();

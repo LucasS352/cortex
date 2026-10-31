@@ -1,0 +1,6 @@
+# Local image override; combine with the existing diagnostic environment/ports.
+services:
+  app:
+    build:
+      context: .
+    image: cortex-login:local

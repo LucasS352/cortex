@@ -81,6 +81,46 @@ class LoginExperienceTests(unittest.TestCase):
         response = self.login()
         self.assertNotIn('Max-Age', response.headers['set-cookie'])
 
+    def test_enhanced_login_sets_cookie_without_fetching_destination(self):
+        for role, target in [('super_admin', '/admin'), ('support_analyst', '/atendimento'),
+                             ('director', '/em-breve')]:
+            self.user['role'] = role
+            response = self.client.post('/login', data={
+                'username': 'tester', 'password': 'TestPassword123!', 'remember': '1'},
+                headers={'origin': 'https://testserver', 'accept': 'application/json'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {'redirect': target})
+            self.assertIn(f'Max-Age={web_auth.REMEMBER_SECONDS}', response.headers['set-cookie'])
+            self.assertEqual(response.headers['cache-control'], 'no-store')
+            self.assertTrue(web_auth._valid(response.cookies[web_auth.COOKIE]))
+        self.user['must_change_password'] = True
+        response = self.client.post('/login', data={'username': 'tester', 'password': 'TestPassword123!'},
+                                    headers={'origin': 'https://testserver', 'accept': 'application/json'})
+        self.assertEqual(response.json(), {'redirect': '/senha'})
+        self.assertNotIn('Max-Age', response.headers['set-cookie'])
+
+    def test_enhanced_login_errors_and_rate_limit_do_not_issue_cookie(self):
+        headers = {'origin': 'https://testserver', 'accept': 'application/json'}
+        for _ in range(8):
+            response = self.client.post('/login', data={'username': 'tester', 'password': 'wrong'}, headers=headers)
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.json()['error'], 'Usuário ou senha inválidos.')
+            self.assertNotIn('set-cookie', response.headers)
+        response = self.client.post('/login', data={}, headers=headers)
+        self.assertEqual(response.status_code, 429)
+        self.assertIn('15 minutos', response.json()['error'])
+        self.assertEqual(response.headers['cache-control'], 'no-store')
+        response = self.client.post('/login', data={}, headers={**headers, 'origin': 'https://other.example'})
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn('set-cookie', response.headers)
+
+    def test_remembered_session_is_revoked_after_session_version_changes(self):
+        response = self.login('&remember=1')
+        token = response.cookies[web_auth.COOKIE]
+        self.user['session_version'] = 1
+        self.assertFalse(web_auth._valid(token))
+        self.assertEqual(self.client.get('/login', follow_redirects=False).status_code, 200)
+
     def test_invalid_login_retains_form_and_error(self):
         response = self.client.post('/login', data={'username': 'tester', 'password': 'wrong'},
                                     headers={'origin': 'https://testserver'})

@@ -167,6 +167,7 @@
     random() { this.seed = (this.seed * 1664525 + 1013904223) >>> 0; return this.seed / 4294967296; }
     still() { return this.motion.matches; }
     resize(force = false) {
+      if (document.body.classList.contains('login-entering') || document.body.classList.contains('login-zooming')) return;
       // ResizeObserver and window.resize may report the same layout repeatedly.
       if (!force && this.width === innerWidth && this.height === innerHeight && this.deviceDpr === devicePixelRatio) return;
       this.width = innerWidth; this.height = innerHeight;
@@ -289,15 +290,17 @@
         else this.moduleLayout[signal.index].until = this.time + .8;
         return false;
       });
+      const approaching = document.body.classList.contains('login-entering');
       if (this.time > this.nextActivity && this.nodes.length) {
         this.activate(Math.floor(this.random() * this.nodes.length));
-        this.nextActivity = this.time + CONFIG.spontaneousInterval * (.7 + this.random());
+        const interval = approaching ? CONFIG.spontaneousInterval * .55 : CONFIG.spontaneousInterval;
+        this.nextActivity = this.time + interval * (.7 + this.random());
       }
       if (this.time > this.nextModule) {
         this.sendModule(Math.floor(this.random() * 4), this.random() > .5);
-        this.nextModule = this.time + 2.6 + this.random() * 2.2;
+        this.nextModule = this.time + (approaching ? 1.4 : 2.6) + this.random() * (approaching ? 1.2 : 2.2);
       }
-      if (!this.mobile && this.time - this.lastPointer > .38) {
+      if (!this.mobile && !approaching && this.time - this.lastPointer > .38) {
         let nearest = -1, distance = CONFIG.interactionRadius;
         this.nodes.forEach((node, i) => {
           const d = Math.hypot(node.x - this.pointer.x, node.y - this.pointer.y);
@@ -418,7 +421,7 @@
     bezier(points, t) {
       const s = 1 - t;
       return { x: s ** 3 * points[0].x + 3 * s * s * t * points[1].x + 3 * s * t * t * points[2].x + t ** 3 * points[3].x,
-        y: s ** 3 * points[0].y + 3 * s * s * t * points[1].y + 3 * s * t * t * points[2].y + t ** 3 * points[3].y };
+        y: s ** 3 * points[0].y + 3 * s * s * t * points[1].y + 3 * s * t * t * points[2].x + t ** 3 * points[3].y };
     }
     drawConnections(time) {
       const ctx = this.ctx;
@@ -452,7 +455,23 @@
     try { scene = new NeuralScene(); scene.init(); }
     catch (error) { scene?.destroy(); console.warn('Cortex: exibindo cenário estático.', error); }
   }
-  mount();
-  window.addEventListener('pagehide', () => { scene?.destroy(); scene = null; });
-  window.addEventListener('pageshow', mount);
+  // Decoration must not block parsing, first paint, or the login form handlers.
+  let scheduled = false, idle, frame, timer;
+  function scheduleMount() {
+    if (scene || scheduled) return;
+    scheduled = true;
+    frame = requestAnimationFrame(() => {
+      const start = () => { scheduled = false; mount(); };
+      if (window.requestIdleCallback) idle = window.requestIdleCallback(start, { timeout: 1500 });
+      else timer = setTimeout(start, 100);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scheduleMount, { once: true });
+  else scheduleMount();
+  window.addEventListener('pagehide', () => {
+    cancelAnimationFrame(frame); clearTimeout(timer);
+    if (idle !== undefined) window.cancelIdleCallback?.(idle);
+    scheduled = false; scene?.destroy(); scene = null;
+  });
+  window.addEventListener('pageshow', scheduleMount);
 })();

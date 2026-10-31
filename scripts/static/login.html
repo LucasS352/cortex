@@ -7,9 +7,9 @@
   <title>Entrar · Cortex | Alternativa Sistemas</title>
   <link rel="icon" type="image/png" href="/tech-assets/cortex-favicon.png?v=3">
   <link rel="apple-touch-icon" href="/tech-assets/cortex-favicon.png?v=3">
-  <link rel="stylesheet" href="/tech-assets/login/login.css?v=3">
-  <script src="/tech-assets/login/login-form.js?v=3" defer></script>
-  <script src="/tech-assets/login/neural-scene.js?v=5" defer></script>
+  <link rel="stylesheet" href="/tech-assets/login/login.css?v=6">
+  <script src="/tech-assets/login/login-form.js?v=6" defer></script>
+  <script src="/tech-assets/login/neural-scene.js?v=7" async></script>
 </head>
 <body>
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -24,7 +24,7 @@
   </defs></svg>
   <header class="institutional-brand"><img src="/tech-assets/login/alternativa.svg" alt="Alternativa Sistemas" width="1000" height="220"></header>
   <div class="neural-scene" aria-hidden="true">
-    <div class="brain-region"><img class="brain-structure" src="/tech-assets/login/neural-brain.png" alt="" width="1392" height="1120" fetchpriority="high"></div>
+    <div class="brain-region"><img class="brain-structure" src="/tech-assets/login/neural-brain.webp" alt="" width="1392" height="1120" decoding="async" fetchpriority="low"></div>
     <canvas id="neural-static"></canvas>
     <canvas id="neural-canvas"></canvas>
     <canvas id="neural-wave"></canvas>
@@ -36,10 +36,11 @@
     </div>
   </div>
   <main class="login-panel" aria-labelledby="login-title">
-    <img class="cortex-brand" src="/tech-assets/login/cortex-logo.png?v=2" alt="Cortex Business Intelligence" width="2138" height="735">
+    <img class="cortex-brand" src="/tech-assets/login/cortex-logo.webp" alt="Cortex Business Intelligence" width="2138" height="735" decoding="async">
     <h1 id="login-title">Bem-vindo ao <span>Cortex</span></h1>
     <p class="intro">Acesse sua central de inteligência.</p>
     <!-- LOGIN_ERROR -->
+    <p class="error" id="login-error" role="alert" tabindex="-1" hidden></p>
     <form method="post" action="/login" id="login-form">
       <label for="user">Usuário</label>
       <div class="input-wrap"><svg aria-hidden="true"><use href="#i-user"/></svg><input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="80" placeholder="Digite seu usuário" required></div>
@@ -51,9 +52,9 @@
       </div>
       <p id="recovery-help" class="recovery-help" hidden>Para redefinir sua senha, entre em contato com o administrador da Alternativa Sistemas.</p>
       <button class="submit-button" type="submit"><span>Entrar</span><svg aria-hidden="true"><use href="#i-arrow"/></svg></button>
-      <span class="sr-only" id="login-status" role="status" aria-live="polite"></span>
     </form>
     <footer>Acesso restrito <span aria-hidden="true">•</span> Alternativa Sistemas</footer>
   </main>
+  <p class="login-progress" id="login-status" role="status" aria-live="polite"></p>
 </body>
 </html>

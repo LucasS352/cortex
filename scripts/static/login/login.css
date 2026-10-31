@@ -10,6 +10,20 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important}.neural-module{will-change:auto}}
 
 /* Independent paint layers; background blur is rasterized once by Canvas. */
+.login-panel{transition:opacity .4s ease,transform .4s ease}
+.login-pending .login-panel{opacity:0;transform:translateY(-12px) scale(.985);pointer-events:none}
+.institutional-brand{transition:opacity 1.15s cubic-bezier(.32,0,.2,1);pointer-events:none}
+.login-entering .institutional-brand{opacity:0}
+/* Continuous camera approach: curve stays in smooth forward motion at 2s and keeps gliding while destination opens. */
+.neural-scene{transform-origin:78% 52%;transition:transform 4.2s cubic-bezier(.25,.02,.22,1)}
+.login-zooming .neural-scene{will-change:transform}
+.login-entering .neural-scene{transform:scale(1.24)}
+@media(max-width:1199px){.neural-scene{transform-origin:76% 52%}}
+@media(max-width:980px){.neural-scene{transform-origin:72% 50%}.login-entering .neural-scene{transform:scale(1.20)}}
+@media(max-width:600px){.neural-scene{transform-origin:68% 42%}.login-entering .neural-scene{transform:scale(1.17)}}
+.login-progress{position:fixed;bottom:24px;left:20px;right:20px;z-index:4;margin:0;text-align:center;color:#bed2e9;font-size:14px;opacity:0;transition:opacity .3s ease;pointer-events:none}
+.login-slow .login-progress{opacity:1}
+@media(prefers-reduced-motion:reduce){.login-panel,.login-progress,.institutional-brand,.neural-scene{transition:none}.login-pending .login-panel,.login-entering .neural-scene{transform:none}.login-zooming .neural-scene{will-change:auto}}
 #neural-static{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #neural-wave{position:absolute;left:0;bottom:0;width:100%;height:190px;pointer-events:none}
 #neural-canvas,#neural-wave{contain:strict;transform:translateZ(0)}

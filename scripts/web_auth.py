@@ -22,6 +22,7 @@ LOGIN_ASSETS = frozenset({
     "/tech-assets/login/login.css", "/tech-assets/login/login-form.js",
     "/tech-assets/login/neural-scene.js", "/tech-assets/login/alternativa.svg",
     "/tech-assets/login/cortex-logo.png", "/tech-assets/login/neural-brain.png",
+    "/tech-assets/login/cortex-logo.webp", "/tech-assets/login/neural-brain.webp",
     "/tech-assets/cortex-favicon.png",
 })
 _failures: dict[str, list[float]] = {}
@@ -283,18 +284,28 @@ async def gate(request: Request, call_next):
             return login_page()
         if request.method != "POST":
             return JSONResponse({"error": "Method not allowed"}, status_code=405)
+        wants_json = "application/json" in request.headers.get("accept", "")
+
+        def login_error(message: str, status: int):
+            if wants_json:
+                return JSONResponse({"error": message}, status_code=status,
+                                    headers={"Cache-Control": "no-store"})
+            response = login_page(True, message)
+            response.status_code = status
+            return response
+
         origin = request.headers.get("origin")
         if not origin or origin.rstrip("/") != public_origin():
-            return JSONResponse({"error": "Origin inválida"}, status_code=403)
+            return login_error("Origem inválida. Abra o Cortex pelo endereço oficial e tente novamente.", 403)
         data = await request.body()
         if len(data) > 4096:
-            return HTMLResponse("Formulário muito grande", status_code=413)
+            return login_error("Formulário muito grande.", 413)
         ip = request.client.host if request.client else "unknown"
         now = time.time()
         attempts = [stamp for stamp in _failures.get(ip, []) if now - stamp < 900]
         _failures[ip] = attempts
         if len(attempts) >= 8:
-            return HTMLResponse("Muitas tentativas. Tente mais tarde.", status_code=429)
+            return login_error("Muitas tentativas. Aguarde 15 minutos antes de tentar novamente.", 429)
         attempts.append(now)
         form = parse_qs(data.decode("utf-8", errors="replace"))
         user_input = form.get("username", [""])[0]
@@ -307,11 +318,14 @@ async def gate(request: Request, call_next):
             valid_pass = await run_in_threadpool(verify_password, password, user_obj["password_hash"])
 
         if not (valid_user and valid_pass and user_obj):
-            return login_page(True)
+            return login_error("Usuário ou senha inválidos.", 401)
 
         _failures.pop(ip, None)
         target_path = destination_for_user(user_obj)
-        response = RedirectResponse(target_path, status_code=303)
+        # Enhanced login receives the destination without fetching the dashboard
+        # twice. Native forms keep the same redirect and cookie contract.
+        response = (JSONResponse({"redirect": target_path}) if wants_json
+                    else RedirectResponse(target_path, status_code=303))
         # A remembered session must outlive a browser restart in both the
         # browser cookie and the signed token. The hidden field precedes the checkbox.
         remember = form.get("remember", ["0"])[-1] == "1"
