@@ -9,6 +9,8 @@ import re
 import secrets
 import time
 from urllib.parse import parse_qs, urlsplit
+from uuid import UUID
+from login_assets import preload_assets, presentation_paths
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -102,29 +104,23 @@ def get_user_by_id_or_username(identifier: str) -> dict | None:
         import psycopg
         from psycopg.rows import dict_row
         from config import POSTGRES_DSN
+        try:
+            user_id = UUID(identifier)
+        except ValueError:
+            user_id = None
         with psycopg.connect(POSTGRES_DSN, connect_timeout=2, options="-c statement_timeout=2000") as db:
-            has_table = db.execute("SELECT to_regclass('public.cortex_users') IS NOT NULL").fetchone()[0]
-            if not has_table:
-                return _fallback_user(identifier)
             with db.cursor(row_factory=dict_row) as cur:
                 cur.execute(
                     "SELECT id::text, username, name, email, password_hash, role, movidesk_person_id, is_active, must_change_password, session_version "
-                    "FROM cortex_users WHERE username = %s OR id::text = %s",
-                    (identifier, identifier)
+                    "FROM cortex_users WHERE username = %s OR id = %s",
+                    (identifier, user_id)
                 )
                 row = cur.fetchone()
                 if row:
                     return dict(row)
-                admin_name = os.getenv("CORTEX_ADMIN_USERNAME")
-                if admin_name and identifier == admin_name:
-                    ensure_bootstrap_admin()
-                    cur.execute(
-                        "SELECT id::text, username, name, email, password_hash, role, movidesk_person_id, is_active, must_change_password, session_version "
-                        "FROM cortex_users WHERE username = %s",
-                        (identifier,)
-                    )
-                    r = cur.fetchone()
-                    return dict(r) if r else None
+                # Schema/bootstrap runs at startup, never while a login SELECT
+                # holds a table lock: ALTER TABLE on a second connection can wait
+                # indefinitely for this transaction to finish.
                 return None
     except Exception:
         # Fallback to env-configured admin when database is unavailable (e.g. offline unit testing)
@@ -155,7 +151,8 @@ def ensure_bootstrap_admin() -> None:
         from pathlib import Path
         from config import POSTGRES_DSN
         infra_dir = Path(__file__).resolve().parent.parent / "infra"
-        with psycopg.connect(POSTGRES_DSN, connect_timeout=3) as db:
+        with psycopg.connect(POSTGRES_DSN, connect_timeout=3,
+                             options="-c lock_timeout=2000 -c statement_timeout=5000") as db:
             for sql_name in ("008_cortex_workforce.sql", "009_account_sessions.sql", "010_technician_pins.sql"):
                 sql_file = infra_dir / sql_name
                 if sql_file.is_file():
@@ -163,13 +160,11 @@ def ensure_bootstrap_admin() -> None:
             admin_user = os.getenv("CORTEX_ADMIN_USERNAME")
             admin_hash = os.getenv("CORTEX_ADMIN_PASSWORD_HASH")
             if admin_user and admin_hash:
-                has_admin = db.execute("SELECT 1 FROM cortex_users WHERE role = 'super_admin' AND is_active = true LIMIT 1").fetchone()
-                if not has_admin:
-                    db.execute(
-                        "INSERT INTO cortex_users (username, name, password_hash, role, is_active, must_change_password) "
-                        "VALUES (%s, %s, %s, 'super_admin', true, false) ON CONFLICT (username) DO NOTHING",
-                        (admin_user, "Lucas Souza", admin_hash)
-                    )
+                db.execute(
+                    "INSERT INTO cortex_users (username, name, password_hash, role, is_active, must_change_password) "
+                    "VALUES (%s, %s, %s, 'super_admin', true, false) ON CONFLICT (username) DO NOTHING",
+                    (admin_user, "Lucas Souza", admin_hash)
+                )
             db.commit()
     except Exception:
         pass
@@ -188,7 +183,7 @@ def destination_for_user(user: dict) -> str:
     return "/admin"
 
 
-def _load_user_session(cookie: str | None) -> dict | None:
+def _session_claims(cookie: str | None) -> tuple[str, int] | None:
     if not cookie or len(cookie) > 512:
         return None
     try:
@@ -199,10 +194,21 @@ def _load_user_session(cookie: str | None) -> dict | None:
             return None
         if not hmac.compare_digest(signature, _sign(payload)):
             return None
+        token_version = int(_nonce.split(".", 1)[0]) if "." in _nonce else 0
+        return user_identifier, token_version
+    except Exception:
+        return None
+
+
+def _load_user_session(cookie: str | None) -> dict | None:
+    claims = _session_claims(cookie)
+    if claims is None:
+        return None
+    try:
+        user_identifier, token_version = claims
         user = get_user_by_id_or_username(user_identifier)
         if not user or not user.get("is_active"):
             return None
-        token_version = int(_nonce.split(".", 1)[0]) if "." in _nonce else 0
         if token_version != user.get("session_version", 0):
             return None
         return user
@@ -275,6 +281,18 @@ async def gate(request: Request, call_next):
         return response
     if not enabled():
         return await call_next(request)
+    if request.method in {"GET", "HEAD"} and path in presentation_paths():
+        # These are fixed CSS/JS/logos, with no account or ticket data. Validate
+        # the signed session without opening a database connection for each file.
+        # Every document and API still checks active user, role and session_version.
+        if _session_claims(request.cookies.get(COOKIE)) is None:
+            return JSONResponse({"error": "Autenticação necessária"}, status_code=401,
+                                headers={"Cache-Control": "no-store"})
+        response = await call_next(request)
+        response.headers["Cache-Control"] = ("private, max-age=3600" if request.query_params.get('v')
+                                             else "private, no-cache")
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
     if path == "/login":
         if request.method == "GET":
             remembered_user = await run_in_threadpool(_load_user_session, request.cookies.get(COOKIE))
@@ -311,7 +329,9 @@ async def gate(request: Request, call_next):
         user_input = form.get("username", [""])[0]
         password = form.get("password", [""])[0]
 
+        lookup_started = time.perf_counter()
         user_obj = await run_in_threadpool(get_user_by_id_or_username, user_input)
+        lookup_ms = (time.perf_counter() - lookup_started) * 1000
         valid_user = user_obj is not None and user_obj.get("is_active")
         valid_pass = False
         if valid_user:
@@ -324,7 +344,7 @@ async def gate(request: Request, call_next):
         target_path = destination_for_user(user_obj)
         # Enhanced login receives the destination without fetching the dashboard
         # twice. Native forms keep the same redirect and cookie contract.
-        response = (JSONResponse({"redirect": target_path}) if wants_json
+        response = (JSONResponse({"redirect": target_path, "preload": preload_assets(target_path)}) if wants_json
                     else RedirectResponse(target_path, status_code=303))
         # A remembered session must outlive a browser restart in both the
         # browser cookie and the signed token. The hidden field precedes the checkbox.
@@ -333,6 +353,7 @@ async def gate(request: Request, call_next):
         response.set_cookie(COOKIE, _issue(str(user_obj["id"]), user_obj.get("session_version", 0), lifetime), max_age=lifetime if remember else None, httponly=True,
                             secure=public_origin().startswith("https://"), samesite="lax", path="/")
         response.headers["Cache-Control"] = "no-store"
+        response.headers["Server-Timing"] = f"identity;dur={lookup_ms:.1f}"
         return response
 
     user = await run_in_threadpool(_load_user_session, request.cookies.get(COOKIE))

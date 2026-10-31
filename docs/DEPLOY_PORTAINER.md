@@ -41,6 +41,22 @@ Para gerar um único arquivo pronto para a opção **Load variables from .env fi
 
 Depois que a imagem corrigida estiver publicada, use **Pull and redeploy**, solicitando nova busca da imagem se usar `latest`. Preserve os volumes e o nome da Stack. Abra `https://desk.cortexalter.tech/admin`: deve redirecionar ao login. Não use a porta 9443, que pertence ao Portainer.
 
+### Entrada no painel e desempenho
+
+A versão de 31/10/2026 antecipa o download dos arquivos fixos do painel durante os
+dois segundos da aproximação de câmera. O login entrega uma lista de CSS, scripts
+e logos; o navegador baixa os arquivos, sem executar scripts antes de abrir o painel.
+Esses arquivos verificam a assinatura e a expiração do cookie sem consultar o banco
+por arquivo. HTML, APIs, contas, chamados e mídias privadas continuam verificando
+usuário ativo, perfil e revogação da sessão no banco. Os arquivos versionados usam
+cache privado; páginas autenticadas e APIs permanecem com `no-store`.
+
+No teste local com contexto novo do navegador, a entrada passou de 4,41 s para
+2,99 s. O tempo em produção depende também do servidor e da rede e deve ser medido
+após o redeploy. O POST `/login` inclui `Server-Timing: identity;dur=...` para ajudar
+a identificar demora na consulta de identidade. Migrações/bootstrap não são mais
+executados durante tentativas de login; continuam na inicialização do serviço.
+
 As duas falhas corrigidas eram: `/healthz` retornava 404 quando a autenticação estava desativada, e o Compose interpolava a variável do Caddy antes de iniciar o container. O YAML agora usa `{$$CORTEX_DOMAIN}`; dentro do Caddyfile o resultado correto é `{$CORTEX_DOMAIN}`.
 
 ## Atualização de banco existente

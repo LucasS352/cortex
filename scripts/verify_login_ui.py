@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 
 from playwright.sync_api import sync_playwright, expect
+from login_assets import preload_assets
 
 STATIC = Path(__file__).parent / 'static'
 OUTPUT = Path(__file__).parent / 'output' / 'login-qa'
@@ -52,7 +53,8 @@ def run():
                 elif behavior == 'server':
                     request.fulfill(status=502, body='Bad Gateway', content_type='text/html')
                 else:
-                    request.fulfill(json={'redirect': mode['redirect']})
+                    request.fulfill(json={'redirect': mode['redirect'],
+                                          'preload': list(preload_assets(mode['redirect']))})
             elif path == '/login':
                 request.fulfill(path=str(STATIC / 'login.html'), content_type='text/html')
             elif path in ('/admin', '/atendimento', '/em-breve', '/senha'):

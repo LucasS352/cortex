@@ -19,6 +19,19 @@
   const help = document.getElementById('recovery-help');
   const submit = form.querySelector('[type=submit]');
   const status = document.getElementById('login-status');
+  function preloadDestination(assets) {
+    if (!Array.isArray(assets)) return;
+    for (const asset of assets.slice(0, 32)) {
+      if (!asset || typeof asset.href !== 'string' || !['style', 'script', 'image'].includes(asset.as)) continue;
+      const url = new URL(asset.href, location.origin);
+      if (url.origin !== location.origin || !url.pathname.startsWith('/tech-assets/')) continue;
+      if ([...document.querySelectorAll('link[rel="preload"]')].some(link => link.href === url.href)) continue;
+      const link = document.createElement('link');
+      link.rel = 'preload'; link.as = asset.as; link.href = url.href;
+      // Download only; scripts execute once, in the destination document.
+      document.head.appendChild(link);
+    }
+  }
   toggle.hidden = recovery.hidden = false;
   toggle.addEventListener('click', () => {
     const showing = password.type === 'password';
@@ -95,6 +108,9 @@
       clearTimeout(slowNotice);
       document.body.classList.remove('login-slow');
       saveUsername();
+      // Reuse the 2-second camera glide to download the destination's fixed UI.
+      // A failed preload must never prevent a successful login from navigating.
+      try { preloadDestination(result.preload); } catch (_) {}
       const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
       const navigate = () => {
         if (!pending || navigating || attempt.signal.aborted) return;
