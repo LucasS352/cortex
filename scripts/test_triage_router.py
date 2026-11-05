@@ -26,6 +26,21 @@ class TriageRouterTest(unittest.TestCase):
         self.assertEqual(result['modules'], ['unclassified'])
         self.assertTrue(result['needs_review'])
 
+    def test_reports_require_current_intent_even_for_approved_sources(self):
+        from triage_router import report_evidence_for_ticket
+        rows = [{'title': 'Relatório', 'evidence_status': 'human_approved_procedure'},
+                {'title': 'Consulta', 'modules': ['Relatórios']},
+                {'subject': 'Caso anterior', 'service_full': 'Dúvidas de Relatórios'},
+                {'title': 'Navegação', 'solution': 'Para acessar o relatório, abra Vendas.'}]
+        scope = ('Solicitação de Serviço', 'Comercial > Contratar Módulo Novo', 'Relatório')
+        for q in ('Solicitar token para a Stockfy', 'Não quero relatório, preciso de integração.',
+                  'Preciso da API/token para alimentar o relatório.', 'Como acesso?',
+                  'Falha no sincronizador. Segue o relatório de vendas por produto em anexo.'):
+            with self.subTest(q=q):
+                self.assertEqual(report_evidence_for_ticket(rows, q, *scope), [])
+        self.assertEqual(report_evidence_for_ticket(rows, 'Quanto vendi de cada produto?', *scope), rows)
+        self.assertEqual(report_evidence_for_ticket(rows, 'Como acesso?', 'Dúvida', 'Relatórios', 'Relatório'), rows)
+
     def test_short_api_signal_requires_whole_word(self):
         result = route('Atendimento rápido no caixa', 'Uma dúvida simples.')
         self.assertNotIn('integrations', result['modules'])

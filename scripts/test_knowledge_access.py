@@ -16,6 +16,26 @@ class AccessTests(unittest.TestCase):
         approved.start()
         self.addCleanup(approved.stop)
 
+    def test_curated_procedure_matches_customer_problem(self):
+        source = dict(title='Relatorio', problem='Localizar relatório de vendas por produto',
+                      solution='Olá, Tudo bem? Para acessar o relatório, visualize sua venda.',
+                      evidence_status='human_approved_procedure')
+        request = ('Bom dia Marcus. Tudo bem? Conforme sua orientação ao Vini da Stockfy '
+                   'estamos abrindo o ticket para solicitar os acessos a API/TOKEN '
+                   'para início do projeto e implantação. Att')
+        from support_policy import decide
+        def decision(query):
+            gate = applicability(source, query)
+            return decide(query, [{**source, **gate, 'answer_use': 'procedure_reference'}])['state']
+        self.assertEqual(decision(request), 'INVESTIGAR')
+        self.assertEqual(decision('Quanto vendi de cada produto?'), 'PROCEDIMENTO_CONFIRMADO')
+        self.assertEqual(decision('O Master bloqueia vendas com produtos de estoque negativo?'), 'INVESTIGAR')
+        source.update(title='API Stockfy', problem='Token inválido na autenticação')
+        self.assertEqual(decision(request), 'INVESTIGAR')
+        source.update(problem='Solicitar acesso à API/token para implantação')
+        self.assertEqual(decision(request), 'PROCEDIMENTO_CONFIRMADO')
+        self.assertNotEqual(decision(request.replace('Stockfy', 'AnyMarket')), 'PROCEDIMENTO_CONFIRMADO')
+
     def test_current_approved_lane_precedes_historical_search(self):
         connection = MagicMock()
         connection.execute.return_value.fetchall.return_value = [{'id':'tenant'}]

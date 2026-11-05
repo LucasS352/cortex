@@ -56,6 +56,49 @@ class NotePublicationTests(unittest.TestCase):
         self.assertEqual(len(self.f.api.writes), 1)
         self.model.assert_called_once()
 
+    def test_api_token_opening_does_not_publish_unrelated_curated_report(self):
+        from knowledge_access import applicability
+        ticket = self.f.api.data
+        ticket['subject'] = 'API/Token Alternativa e Stockfy'
+        ticket['actions'][0]['description'] = (
+            'Bom dia Marcus. Tudo bem? Conforme sua orientação ao Vini da Stockfy '
+            'estamos abrindo o ticket para solicitar os acessos a API/TOKEN para início do projeto e implantação.')
+        source = dict(id=5, title='Relatorio', problem='Localizar relatório de vendas por produto',
+                      solution='Olá, tudo bem? Para visualizar sua venda, acesse Venda e Gerenciamento.',
+                      evidence_status='human_approved_procedure', answer_use='procedure_reference')
+        def approved(_conn, query):
+            result = {**source, **applicability(source, query)}
+            return [result] if result['applicable'] else []
+        self.model.return_value['text'] = 'Olá! Vamos verificar a solicitação de acesso à API da Stockfy.'
+        with patch('knowledge_access.approved_procedures', side_effect=approved) as retrieval:
+            self.assertEqual(self.run_note()['outcome'], 'nota_interna_publicada')
+        retrieval.assert_called()
+        content = self.f.api.writes[0][1]
+        self.assertIn('INVESTIGAR', content)
+        self.assertNotIn('Venda e Gerenciamento', content)
+        self.assertNotIn('PROCEDIMENTO_CONFIRMADO', content)
+
+    def test_commercial_access_request_is_triaged_before_retrieval(self):
+        self.f.api.data.update(subject='API/Token Alternativa e Stockfy',
+                               category='Solicitação de Serviço',
+                               serviceFull=['Comercial', 'Contratar Módulo Novo'])
+        self.f.api.data['actions'][0]['description'] = 'Solicitar os acessos a API/TOKEN para início da implantação.'
+        with patch('knowledge_access.approved_procedures') as retrieval:
+            self.assertEqual(self.run_note()['outcome'], 'nota_interna_publicada')
+        retrieval.assert_not_called()
+        self.model.assert_not_called()
+        note = self.f.api.writes[0][1]
+        self.assertIn('validar a liberação', note)
+        self.assertIn('INVESTIGAR', note)
+        self.assertNotIn('relatório', note.casefold())
+
+    def test_model_cannot_introduce_unrequested_report(self):
+        self.model.return_value['text'] = 'Olá! Para acessar o relatório de vendas por produto, abra o menu Vendas.'
+        self.assertEqual(self.run_note()['outcome'], 'nota_interna_publicada')
+        note = self.f.api.writes[0][1]
+        self.assertNotIn('relatório de vendas', note.casefold())
+        self.assertIn('ENCAMINHAR', note)
+
     def test_unsupported_model_steps_are_replaced_before_private_publication(self):
         unsafe = 'Abra o menu inventado e clique no botão Apagar. DROP TABLE notas;'
         self.model.return_value['text'] = unsafe

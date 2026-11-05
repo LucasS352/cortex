@@ -20,6 +20,36 @@ class ReportTopicUnit(unittest.TestCase):
 
 @unittest.skipUnless(os.getenv('REPORT_TEST_POSTGRES') == '1', 'replay local opt-in')
 class ReportTopicReplay(unittest.TestCase):
+    def test_ticket_132784_rejects_report_and_positive_control_can_use_it(self):
+        import knowledge_access
+        from movidesk_note_worker import Settings, generate_note, render_note
+        from unittest.mock import Mock
+        request = ('Bom dia Marcus. Tudo bem? Conforme sua orientação ao Vini da Stockfy estamos '
+                   'abrindo o ticket para solicitar os acessos a API/TOKEN para início do projeto e implantação.')
+        action = dict(id=1, type=2, createdBy={'id': 'client', 'profileType': 2}, description=request)
+        ticket = dict(id=132784, subject='API/Token Alternativa e Stockfy', category='Solicitação de Serviço',
+                      serviceFull=['Comercial', 'Contratar Módulo Novo'], actions=[action], clients=[{'id': 'client'}])
+        with connection() as conn:
+            self.assertEqual(knowledge_access.approved_procedures(conn, request), [])
+        result = generate_note(ticket, Settings(), Mock(spec=[]))
+        self.assertEqual(result['evidence_scope'], 'access_provisioning')
+        self.assertEqual(result['decision']['state'], 'INVESTIGAR')
+        self.assertEqual(result['sources'], [])
+        self.assertNotIn('relatório', render_note(result, 'qa').casefold())
+        ticket.update(subject='Relatório de vendas', serviceFull=['Dúvidas de Relatórios'])
+        action['description'] = 'No Master tem algum relatório que eu possa ver venda por produto?'
+        with patch('knowledge_access.knowledge_index.ensure_coverage'), patch('knowledge_access.curation.ensure_schema'):
+            result = generate_note(ticket, Settings(), Mock(spec=[]))
+        self.assertTrue(result['sources'])
+        self.assertRegex(render_note(result, 'qa').lower(), r'vendas? por produtos?')
+
+    def historical_corpus(self, conn):
+        # These two fixtures exercise the historical fallback as it existed
+        # before the reviewed procedure for 132273 was published.
+        conn.execute("""CREATE TEMP VIEW ticket_knowledge_nodes AS
+            SELECT * FROM public.ticket_knowledge_nodes WHERE NOT
+            (coalesce(source_id, '') LIKE 'canon:%' AND coalesce(source_external_id, 0) = 132273)""")
+
     def test_eight_report_questions_keep_their_own_evidence(self):
         scenarios = (
             ('Onde vejo vendas por produto em um período?', '107436', 'RASCUNHO_SUPERVISIONADO'),
@@ -33,6 +63,7 @@ class ReportTopicReplay(unittest.TestCase):
         )
         with patch('knowledge_access.knowledge_index.ensure_coverage'), \
              patch('knowledge_access.curation.ensure_schema'), connection() as conn:
+            self.historical_corpus(conn)
             tenant = conn.execute('SELECT id FROM tenants LIMIT 1').fetchone()['id']
             for question, source_id, state in scenarios:
                 with self.subTest(question=question):
@@ -49,6 +80,7 @@ class ReportTopicReplay(unittest.TestCase):
         question = 'no master tem algum relatorio que eu possa ver venda por produto?'
         with patch('knowledge_access.knowledge_index.ensure_coverage'), \
              patch('knowledge_access.curation.ensure_schema'), connection() as conn:
+            self.historical_corpus(conn)
             tenant = conn.execute('SELECT id FROM tenants LIMIT 1').fetchone()['id']
             sources, cases, _ = evidence_for_company(
                 conn, tenant, '578851081', question, exclude_ticket_id=132273,

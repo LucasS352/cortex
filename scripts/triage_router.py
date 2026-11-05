@@ -138,6 +138,45 @@ def resolve_specialist(subject: str, problem: str, specialists: list[dict] | Non
     return None, route_info
 
 
+def requests_report(query, category='', service='', subject=''):
+    """A curated report, tutorial or resolved case needs a current report request."""
+    from knowledge_access import query_plan
+    text = curation.normalize(str(query))
+    report_words = r'\brelatorios?\b'
+    # Attachments supplied as evidence do not change an integration incident
+    # into a request for instructions on consulting a business report.
+    text = re.sub(r'\b(?:segue|anexei|enviei) (?:em anexo )?(?:o |um )?relatorio\b[^.!?\n]*|'
+                  r'\brelatorio (?:em anexo|anexado)\b', '', text)
+    named = any(_has_signal(text, term) for term in REPORT_SIGNALS[2:])
+    quantitative = re.search(r'\b(?:quanto|quantos|quantidade)\b.{0,45}\b(?:vendi|vendid[oa]s?|vendas?)\b', text)
+    denied = re.search(r'\bnao (?:quero|preciso|solicitei|e sobre|estou pedindo)\b.{0,25}\brelatorios?\b', text)
+    credentials = re.search(r'\b(?:token|credenciais|api key)\b', text)
+    requested = bool(query_plan(text)['report'] or named or quantitative)
+    # A short follow-up may take its topic from the ticket, unless its own
+    # classification points elsewhere. A service label alone cannot authorize it.
+    classification = curation.normalize(f'{category} {service}')
+    if not requested and re.fullmatch(r'(?:como|onde) (?:acesso|consulto|visualizo)[?!. ]*', text.strip()):
+        requested = bool(re.search(report_words, curation.normalize(subject)) and
+                         re.search(report_words, classification))
+    return bool(requested and not denied and not credentials)
+
+
+def report_evidence_for_ticket(items, query, category='', service='', subject=''):
+    if requests_report(query, category, service, subject):
+        return list(items)
+    report_words = r'\brelatorios?\b'
+    def is_report(item):
+        title = curation.normalize(str(item.get('title') or item.get('subject') or ''))
+        procedure = curation.normalize(str(item.get('solution') or item.get('solution_statement') or ''))
+        teaches_report = re.search(r'\b(?:acesse|acessar|abra|abrir|consultar|gerar) (?:o |um )?relatorio\b', procedure)
+        modules = {_canonical_module(m) for m in item.get('modules') or []}
+        return (teaches_report or 'reports' in modules or re.search(report_words, title) or
+                any(_has_signal(title, term) for term in REPORT_SIGNALS[2:]) or
+                item.get('match') == 'report_topic' or
+                re.search(report_words, curation.normalize(str(item.get('service_full') or ''))))
+    return [item for item in items if not is_report(item)]
+
+
 def filter_by_specialist(items: list[dict], specialist: dict | None, route_info: dict | None = None) -> list[dict]:
     """Keep sources and resolved tickets scoped to the active specialist's ERP domain."""
     if not items or (not specialist and not route_info):

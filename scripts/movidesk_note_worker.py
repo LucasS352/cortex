@@ -396,7 +396,7 @@ def generate_note(ticket, settings, api):
         ticket.get('serviceSecondLevel'), ticket.get('serviceThirdLevel')]
     service_hint = ' > '.join(str(part) for part in service_parts if part) if isinstance(service_parts, list) else str(service_parts or '')
     from support_triage import intake
-    triage = intake(question, query, active_history)
+    triage = intake(question, query, active_history, ticket.get('category'), service_hint)
     if triage:
         triage['attachments'].extend(attachment_notices)
         triage['decision'] = decide(query, [])
@@ -458,12 +458,18 @@ def generate_note(ticket, settings, api):
                 sources = [documented] + sources
     import triage_router
     specialist, route_info = triage_router.resolve_specialist(str(ticket.get('subject') or ''), str(query))
+    report_context = (query, ticket.get('category'), service_hint, ticket.get('subject'))
+    sources = triage_router.report_evidence_for_ticket(sources, *report_context)
+    cases = triage_router.report_evidence_for_ticket(cases, *report_context)
+    capability_leads = triage_router.report_evidence_for_ticket(capability_leads, *report_context)
+    related_cases = triage_router.report_evidence_for_ticket(related_cases, *report_context)
+    company_cases = triage_router.report_evidence_for_ticket(company_cases, *report_context)
     sources = triage_router.filter_by_specialist(sources, specialist, route_info)
     cases = triage_router.filter_by_specialist(cases, specialist, route_info)
     decision = decide(query, sources, company_cases)
     context = '\n'.join(f"{m['role']}: {m['content'][:1000]}" for m in active_history)
     row = {'movidesk_company_id': org_id, 'company_name': org_name,
-           'subject': ticket.get('subject'), 'service_full': service_hint,
+           'subject': ticket.get('subject'), 'service_full': service_hint, 'category': ticket.get('category'),
            'contact_name': (latest.get('createdBy') or {}).get('businessName')}
     cases = cases_for_selected_evidence(cases, sources[0] if sources else None)
     active_company = []

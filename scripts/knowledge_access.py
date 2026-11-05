@@ -18,7 +18,7 @@ ALIASES = {
     'sincroniza': ('sincronizar','integracao','sincronizador'),
     'sincronizacao': ('sincronizacao','integracao','sincronizador'),
     'boleto': ('boleto','cnab','cobranca'),
-    'venda': ('venda','vendas'), 'vendas': ('vendas','venda'),
+    'vendi': ('venda','vendas'), 'venda': ('venda','vendas'), 'vendas': ('vendas','venda'),
     'produto': ('produto','produtos'), 'produtos': ('produtos','produto'),
     'emitir': ('emitir','emissao','gerar'), 'gerar': ('gerar','emitir','emissao'),
     'cancelar': ('cancelar','cancelamento'), 'cancelamento': ('cancelamento','cancelar'),
@@ -237,7 +237,7 @@ def quality(row):
 
 
 INTEGRATORS = ('loja integrada','anymarket','mercado livre','mercadolivre','shopee',
-               'vtex','tray','magalu','amazon','nuvemshop','skyhub','uappi','well','wehub','wbuy')
+               'stockfy','vtex','tray','magalu','amazon','nuvemshop','skyhub','uappi','well','wehub','wbuy')
 
 
 def integrator_names(text):
@@ -272,6 +272,39 @@ def mapping_failure_entities(query):
             if _RELATION_FAILURE.search(clause[end:stop][:100]):
                 targets.add(entity)
     return targets
+
+
+# The approved answer can contain greetings, footers and unrelated instructions.
+# Only its description of the supported problem establishes topical relevance.
+_CANONICAL_NOISE = set('tudo bem conforme sua seu att orientacao estamos abrindo solicitar usuario localizar acessar utilizar disponivel cada'.split())
+
+
+def canonical_subject_matches(row, query):
+    purpose = normalize(' '.join(str(row.get(k) or '') for k in ('title', 'problem')))
+    if re.search(r'\bvendas? por produtos?\b', purpose) and 'relatorio' in purpose:
+        sales_report = (r'\bvendas? por produtos?\b|\b(?:quanto|quantos|quantidade)\b.{0,45}'
+                        r'\b(?:vendi|vendid[oa]s?|vendas?)\b.{0,40}\bprodutos?\b')
+        if not re.search(sales_report, normalize(query)) and not report_topic_match(query_plan(query), purpose):
+            return False
+    words = set(re.findall(r'[a-z0-9]+', purpose))
+    terms = set(re.findall(r'[a-z][a-z0-9]+', normalize(query))) - STOP - _CANONICAL_NOISE
+    terms = {term for term in terms if len(term) >= 3}
+    matched = set()
+    for term in terms:
+        variants = set(ALIASES.get(term, ())) | {term}
+        if term in ('vendi', 'vendido', 'vendidos'):
+            variants.update(('venda', 'vendas'))
+        if any(v in words or v + 's' in words or (v.endswith('s') and v[:-1] in words)
+               for v in variants):
+            matched.add(term.rstrip('s'))
+    if terms & {'api', 'token'}:
+        if not words & {'api', 'token'}:
+            return False
+        provisioning = r'\b(?:solicitar|liberar|obter|fornecer|gerar|criar)\b.{0,60}\b(?:acessos?|credenciais|token|chave)\b'
+        auth_failure = r'\b(?:401|403|unauthorized|forbidden|expirad[oa]|invalid[oa]|falha|negado)\b'
+        if re.search(provisioning, normalize(query)) and re.search(auth_failure, purpose) and not re.search(auth_failure, normalize(query)):
+            return False
+    return len(matched) >= 2 or (len(terms) == 1 and bool(matched) and not terms & BROAD_TERMS)
 
 
 def applicability(row, query, context=None):
@@ -334,6 +367,9 @@ def applicability(row, query, context=None):
     # they could retrieve the exact ticket but were then discarded as generic.
     matched_identifiers=[item for item in plan['identifiers'] if item in compact]
     if diagnostic and not (signatures or codes or objects or matched_identifiers): reasons.append('generic_error_only')
+    if not diagnostic and row.get('evidence_status') == 'human_approved_procedure':
+        if not canonical_subject_matches(row, query):
+            reasons.append('canonical_subject_not_matched')
     if not diagnostic:
         terms=plan['terms']
         matched=[t for t in terms if t in compact or

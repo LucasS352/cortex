@@ -1010,7 +1010,10 @@ def build_reply(row, history, facts, envs, sources, question, cases=(), audience
     spec_meta = ({'id': specialist.get('id'), 'name': specialist.get('name'),
                   'icon': specialist.get('icon', '🧠'), 'modules': specialist.get('modules', [])}
                  if isinstance(specialist, dict) and specialist.get('name') else None)
-    sources = list(sources or [])
+    report_context = (active_query, row.get('category'), row.get('service_full'), row.get('subject'))
+    sources = triage_router.report_evidence_for_ticket(sources or [], *report_context)
+    cases = triage_router.report_evidence_for_ticket(cases or [], *report_context)
+    capability_leads = triage_router.report_evidence_for_ticket(capability_leads or [], *report_context)
     cases = triage_router.filter_by_specialist(list(cases or []), specialist, route_info)
 
     primary = sources[0] if sources else None
@@ -1170,6 +1173,10 @@ Evidências internas de existência/capacidade, úteis para responder sem invent
         {'applicable': True, 'answer_use': 'procedure_reference', 'evidence_status': 'documented_resolved_case'}
         if has_resolved_reference else primary)
     violations = response_violations(result['text'], guardrail_source)
+    if (not triage_router.requests_report(*report_context)
+            and re.search(r'\b(?:relatorios?|vendas? por produtos?|estatistica de vendas)\b',
+                          knowledge_access.normalize(result['text']))):
+        violations.append('unrequested_report')
     if violations:
         decision = {**decision, 'state': 'ENCAMINHAR', 'confidence': 'BAIXA',
                     'can_propose_procedure': False, 'procedure': None,
@@ -1224,6 +1231,9 @@ def add_message(cid: uuid.UUID, body: NewMessage):
                     if documented:
                         sources = [documented] + sources
                 capability_leads = capability_evidence_cases(conn, tenant, search_query)
+            import triage_router
+            sources = triage_router.report_evidence_for_ticket(
+                sources, search_query, row.get('category'), row.get('service_full'), row.get('subject'))
             history = "\n".join(f"{m['role']}: {m['content'][:800]}" for m in active_history)
             reply, model = build_reply({**row, "company_name": prof["company_name"]}, history, prof["facts"], envs,
                                        sources, question, cases, capability_leads=capability_leads, decision_query=search_query)

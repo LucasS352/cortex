@@ -27,8 +27,17 @@ def has_explicit_mapping_evidence(text):
     return evidence(text)['concrete_error']
 
 
-def intake(question, contextual_query, history):
+def intake(question, contextual_query, history, category="", service=""):
     text = mapped_replies.normalized(question)
+    classification = mapped_replies.normalized(f'{category} {service}')
+    commercial = re.search(r'\b(?:comercial|contratar modulo novo)\b', classification)
+    credentials = re.search(r'\b(?:api|token)\b', text)
+    provisioning = re.search(r'\b(?:solicitar|solicito|liberar|obter|fornecer|gerar|criar)\b.{0,65}\b(?:acessos?|credenciais|token|chave)\b', text)
+    failure = re.search(r'\b(?:erro|falha|timeout|expirad[oa]|invalid[oa]|401|403|negado)\b', text)
+    if commercial and credentials and provisioning and not failure and not concrete_evidence(contextual_query):
+        return {'reply': 'Olá! Recebemos a solicitação de acesso para a integração. '
+                         'A equipe responsável pela implantação precisa validar a liberação da API e do token.',
+                'mode': 'triage', 'sources': [], 'attachments': [], 'evidence_scope': 'access_provisioning'}
     if (mapped_replies.match(contextual_query) or concrete_evidence(contextual_query)
             or has_explicit_mapping_evidence(contextual_query)):
         return None
